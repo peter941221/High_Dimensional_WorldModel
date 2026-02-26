@@ -1,0 +1,3 @@
+model: gru
+hidden_dim: 256
+learning_rate: 0.0003

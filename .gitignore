@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build / test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Artifacts
+checkpoints/*
+!checkpoints/.gitkeep
+results/*
+!results/.gitkeep
+figures/*
+!figures/.gitkeep
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

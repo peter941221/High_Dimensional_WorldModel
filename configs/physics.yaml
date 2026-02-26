@@ -1,0 +1,5 @@
+dim: 4
+gravity_axis: 1
+gravity_strength: -9.8
+dt: 0.01
+boundary: 10.0
