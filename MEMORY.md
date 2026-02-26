@@ -12,3 +12,4 @@
 - Replaced placeholder tests with behavior tests and reached `pytest` full pass (`17 passed`).
 - Implemented experiment scripts (`run_baseline`, `run_transfer`, `run_robustness`, `run_ablation`) and visualization.
 - Generated `results/*.json` and `figures/*.png` artifacts for baseline, transfer, robustness, and ablation.
+- Added assessment report at `report/technical_report.md` with coverage, metrics snapshot, and gap analysis.
