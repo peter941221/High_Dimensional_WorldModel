@@ -53,8 +53,26 @@ def ensure_repo(project_dir: Path, repo_url: str, branch: str) -> None:
     if (project_dir / ".git").exists():
         log("Repository already exists, pulling latest changes.")
         run_cmd(["git", "fetch", "origin"], cwd=project_dir)
-        run_cmd(["git", "checkout", branch], cwd=project_dir)
-        run_cmd(["git", "pull", "--ff-only", "origin", branch], cwd=project_dir)
+        try:
+            run_cmd(["git", "checkout", branch], cwd=project_dir)
+        except subprocess.CalledProcessError:
+            # Recover from detached head or missing local branch in Colab runtime.
+            run_cmd(["git", "checkout", "-B", branch, f"origin/{branch}"], cwd=project_dir)
+
+        pull_proc = subprocess.run(
+            ["git", "pull", "--ff-only", "origin", branch],
+            cwd=str(project_dir),
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if pull_proc.returncode != 0:
+            if pull_proc.stdout:
+                print(pull_proc.stdout, end="")
+            if pull_proc.stderr:
+                print(pull_proc.stderr, end="", file=sys.stderr)
+            log("Fast-forward pull failed; force-reset local branch to remote for Colab reproducibility.")
+            run_cmd(["git", "reset", "--hard", f"origin/{branch}"], cwd=project_dir)
     else:
         project_dir.parent.mkdir(parents=True, exist_ok=True)
         run_cmd(["git", "clone", "--branch", branch, repo_url, str(project_dir)])

@@ -54,3 +54,6 @@
   - `pytest -q` passed (`21 passed`).
   - `colab_push_results.py --check-token-only` validated both pass/fail paths.
   - `colab_autorun.py` minimal smoke run completed successfully.
+- Fixed Colab repo sync failure (`git pull --ff-only` exit 128) for refresh-and-run usage:
+  - `colab_autorun.py::ensure_repo` now auto-recovers checkout issues and force-resets to `origin/<branch>` when ff-only pull is blocked.
+  - Updated both notebooks (`05_colab_step_by_step.ipynb`, `06_colab_auto_push_results.ipynb`) clone/pull cell with the same fallback reset behavior and explicit log message.
