@@ -34,3 +34,6 @@
 - Added `colab_push_results.py` for automated result commit/push from Colab to GitHub branch (`colab-results` by default).
 - Extended `colab_autorun.py` with push flags (`--push-results-to-github`, `--push-branch`, `--token-env`, etc.).
 - Added detailed notebook `notebooks/06_colab_auto_push_results.ipynb` (multi-cell Chinese walkthrough for token setup + auto push workflow).
+- Refined Colab automation to GitHub-only workflow (removed Drive dependency from primary autorun path).
+- Added Colab Secrets native token retrieval (`google.colab.userdata`) via `--token-secret-name`.
+- Rewrote `06_colab_auto_push_results.ipynb` with more plain-language project principle explanation and GitHub-only step-by-step cells.

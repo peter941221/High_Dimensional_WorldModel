@@ -3,9 +3,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import json
-import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 
@@ -27,18 +25,6 @@ def now_tag() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def maybe_mount_drive(enable: bool) -> None:
-    if not enable:
-        return
-    try:
-        from google.colab import drive  # type: ignore
-
-        log("Mounting Google Drive at /content/drive ...")
-        drive.mount("/content/drive", force_remount=False)
-    except Exception as exc:  # pragma: no cover - only on Colab runtime
-        log(f"Drive mount skipped: {exc}")
-
-
 def ensure_repo(project_dir: Path, repo_url: str, branch: str) -> None:
     if (project_dir / ".git").exists():
         log("Repository already exists, pulling latest changes.")
@@ -55,20 +41,6 @@ def install_dependencies(project_dir: Path) -> None:
     run_cmd([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], cwd=project_dir)
 
 
-def sync_artifacts(project_dir: Path, sync_root: Path, run_id: str) -> None:
-    sync_root.mkdir(parents=True, exist_ok=True)
-    run_root = sync_root / run_id
-    run_root.mkdir(parents=True, exist_ok=True)
-
-    targets = ["results", "checkpoints", "figures", "report"]
-    for name in targets:
-        src = project_dir / name
-        dst = run_root / name
-        if src.exists():
-            shutil.copytree(src, dst, dirs_exist_ok=True)
-    log(f"Artifacts synced to: {run_root}")
-
-
 def save_run_manifest(project_dir: Path, run_id: str, manifest: dict) -> Path:
     manifest_dir = project_dir / "results" / "automation_runs"
     manifest_dir.mkdir(parents=True, exist_ok=True)
@@ -83,13 +55,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo-url", type=str, default=DEFAULT_REPO_URL)
     parser.add_argument("--branch", type=str, default="main")
     parser.add_argument("--project-dir", type=str, default="/content/High_Dimensional_WorldModel")
-    parser.add_argument("--mount-drive", action="store_true", help="Mount Google Drive at /content/drive")
-    parser.add_argument(
-        "--drive-sync-dir",
-        type=str,
-        default="/content/drive/MyDrive/High_Dimensional_WorldModel_runs",
-        help="Destination root for syncing artifacts",
-    )
 
     parser.add_argument("--run-id", type=str, default=None)
     parser.add_argument("--resume", action="store_true")
@@ -111,13 +76,18 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--save-every", type=int, default=5)
     parser.add_argument("--keep-last", type=int, default=5)
-    parser.add_argument("--sync-to-drive", action="store_true")
     parser.add_argument("--push-results-to-github", action="store_true", help="Auto commit/push this run's results to GitHub.")
     parser.add_argument("--push-branch", type=str, default="colab-results")
     parser.add_argument("--base-branch", type=str, default="main")
     parser.add_argument("--github-user", type=str, default="peter941221")
     parser.add_argument("--repo-name", type=str, default="High_Dimensional_WorldModel")
     parser.add_argument("--token-env", type=str, default="GITHUB_TOKEN")
+    parser.add_argument(
+        "--token-secret-name",
+        type=str,
+        default="GITHUB_TOKEN",
+        help="Colab Secrets key name for token fallback.",
+    )
     parser.add_argument("--include-checkpoints-in-push", action="store_true")
     return parser.parse_args()
 
@@ -126,7 +96,6 @@ def main() -> None:
     args = parse_args()
     run_id = args.run_id or now_tag()
     project_dir = Path(args.project_dir).resolve()
-    drive_sync_dir = Path(args.drive_sync_dir).resolve()
 
     manifest: dict = {
         "run_id": run_id,
@@ -136,7 +105,6 @@ def main() -> None:
         "status": "running",
     }
 
-    maybe_mount_drive(args.mount_drive)
     ensure_repo(project_dir=project_dir, repo_url=args.repo_url, branch=args.branch)
     install_dependencies(project_dir=project_dir)
 
@@ -202,9 +170,6 @@ def main() -> None:
         run_cmd(cmd, cwd=project_dir)
         manifest["commands"].append(" ".join(cmd))
 
-    if args.sync_to_drive:
-        sync_artifacts(project_dir=project_dir, sync_root=drive_sync_dir, run_id=run_id)
-
     if args.push_results_to_github:
         push_cmd = [
             sys.executable,
@@ -223,6 +188,8 @@ def main() -> None:
             args.repo_name,
             "--token-env",
             args.token_env,
+            "--token-secret-name",
+            args.token_secret_name,
         ]
         if args.include_checkpoints_in_push:
             push_cmd.append("--include-checkpoints")

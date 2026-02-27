@@ -35,8 +35,6 @@ python experiments/run_baseline.py --run-id demo_run --resume --epochs 30 --save
 
 ```bash
 python colab_autorun.py \
-  --mount-drive \
-  --sync-to-drive \
   --run-tests \
   --run-id colab_first_run \
   --baseline-epochs 5 \
@@ -48,8 +46,8 @@ python colab_autorun.py \
 ## Colab Auto Push To GitHub
 
 ```bash
-# In Colab first set token:
-export GITHUB_TOKEN=your_pat
+# 推荐：在 Colab Secrets 新建 key（例如 GITHUB_T），然后脚本自动读取
+# 也可手动 export GITHUB_TOKEN=your_pat
 
 python colab_autorun.py \
   --run-id colab_push_demo \
@@ -58,5 +56,6 @@ python colab_autorun.py \
   --push-branch colab-results \
   --github-user peter941221 \
   --repo-name High_Dimensional_WorldModel \
-  --token-env GITHUB_TOKEN
+  --token-env GITHUB_TOKEN \
+  --token-secret-name GITHUB_T
 ```

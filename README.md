@@ -35,3 +35,5 @@ Checkpoint files include:
 
 - `colab_autorun.py` now supports pushing result artifacts to GitHub branch automatically.
 - Use `--push-results-to-github` and provide token via environment variable (default: `GITHUB_TOKEN`).
+- For Colab Secrets workflow, set `--token-secret-name <your_secret_key>` (for example: `GITHUB_T`).
+- GitHub-only pipeline is supported (no Drive dependency required).

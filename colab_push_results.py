@@ -32,11 +32,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--github-user", type=str, default="peter941221")
     parser.add_argument("--repo-name", type=str, default="High_Dimensional_WorldModel")
     parser.add_argument("--token-env", type=str, default="GITHUB_TOKEN", help="Environment variable holding PAT.")
+    parser.add_argument(
+        "--token-secret-name",
+        type=str,
+        default=None,
+        help="Colab Secrets key name. If token-env is empty, try google.colab.userdata.get(secret-name).",
+    )
     parser.add_argument("--git-user-name", type=str, default="colab-bot")
     parser.add_argument("--git-user-email", type=str, default="colab-bot@users.noreply.github.com")
     parser.add_argument("--include-checkpoints", action="store_true", help="Also push checkpoints for this run.")
     parser.add_argument("--allow-empty", action="store_true", help="Create commit even if no file changes.")
     return parser.parse_args()
+
+
+def resolve_token(token_env: str, token_secret_name: str | None) -> str:
+    token = os.environ.get(token_env, "").strip()
+    if token:
+        return token
+
+    if token_secret_name:
+        try:
+            from google.colab import userdata  # type: ignore
+
+            secret = userdata.get(token_secret_name)
+            if secret:
+                token = str(secret).strip()
+                if token:
+                    os.environ[token_env] = token
+                    return token
+        except Exception as exc:
+            log(f"Secret lookup skipped ({token_secret_name}): {exc}")
+
+    raise EnvironmentError(
+        f"Missing token. Provide env `{token_env}` or set Colab Secret `{token_secret_name}`."
+    )
 
 
 def ensure_repo(repo_dir: Path) -> None:
@@ -119,9 +148,7 @@ def main() -> None:
     repo_dir = Path(args.repo_dir).resolve()
     ensure_repo(repo_dir)
 
-    token = os.environ.get(args.token_env, "").strip()
-    if not token:
-        raise EnvironmentError(f"Missing GitHub token in env var: {args.token_env}")
+    token = resolve_token(token_env=args.token_env, token_secret_name=args.token_secret_name)
 
     run_cmd(["git", "config", "user.name", args.git_user_name], cwd=repo_dir)
     run_cmd(["git", "config", "user.email", args.git_user_email], cwd=repo_dir)
