@@ -50,21 +50,45 @@ def resolve_token(token_env: str, token_secret_name: str | None) -> str:
     if token:
         return token
 
-    if token_secret_name:
+    # Try Colab Secrets fallbacks to minimize notebook-side manual edits.
+    secret_candidates = []
+    if token_secret_name and token_secret_name.strip():
+        secret_candidates.append(token_secret_name.strip())
+    secret_candidates.extend(
+        [
+            token_env,
+            "GITHUB_TOKEN",
+            "GITHUB_1",
+            "GITHUB_T",
+            "GH_TOKEN",
+        ]
+    )
+
+    # de-dup while preserving order
+    seen = set()
+    secret_candidates = [s for s in secret_candidates if not (s in seen or seen.add(s))]
+
+    if secret_candidates:
         try:
             from google.colab import userdata  # type: ignore
 
-            secret = userdata.get(token_secret_name)
-            if secret:
-                token = str(secret).strip()
-                if token:
-                    os.environ[token_env] = token
-                    return token
+            for candidate in secret_candidates:
+                try:
+                    secret = userdata.get(candidate)
+                except Exception:
+                    continue
+                if secret:
+                    token = str(secret).strip()
+                    if token:
+                        os.environ[token_env] = token
+                        log(f"Token resolved from Colab Secret: {candidate}")
+                        return token
         except Exception as exc:
-            log(f"Secret lookup skipped ({token_secret_name}): {exc}")
+            log(f"Secret lookup skipped: {exc}")
 
     raise EnvironmentError(
-        f"Missing token. Provide env `{token_env}` or set Colab Secret `{token_secret_name}`."
+        "Missing token. Provide env "
+        f"`{token_env}` or set one of Colab Secrets: {', '.join(secret_candidates)}."
     )
 
 

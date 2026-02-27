@@ -40,3 +40,8 @@
 - Updated `06_colab_auto_push_results.ipynb` default secret key to `GITHUB_TOKEN` for consistency with Colab best practice.
 - Hardened `colab_push_results.py` push flow to avoid branch checkout conflicts after training: push current HEAD to target results branch directly (`HEAD:refs/heads/<branch>`).
 - Fixed result push failure caused by `.gitignore` exclusions: `colab_push_results.py` now uses forced add (`git add -f`) for selected result artifacts.
+
+## 2026-02-27
+- Improved Colab token robustness for refresh-and-run workflow:
+  - `colab_push_results.py` now auto-detects token from multiple Colab Secret keys (`token-secret-name`, `GITHUB_TOKEN`, `GITHUB_1`, `GITHUB_T`, `GH_TOKEN`) and injects into `token-env`.
+  - `notebooks/06_colab_auto_push_results.ipynb` now mirrors the same fallback strategy in its secret-loading cell, reducing manual edits after Colab runtime reset.
