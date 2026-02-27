@@ -48,6 +48,7 @@ python kaggle_job_manager.py run --owner <your_kaggle_username>
 
 It supports:
 - kernel bundle preparation
+- code dataset packaging/versioning (for network-independent source loading)
 - push to Kaggle
 - status polling
 - output download

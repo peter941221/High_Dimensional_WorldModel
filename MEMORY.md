@@ -105,3 +105,8 @@
   - Kernel `peter941221/high-dimensional-worldmodel-aggressive` pushed successfully (version 2).
   - Latest run ended with network blocker in Kaggle runtime: `Could not resolve host: github.com` during git clone.
   - Added runtime strategy to clone and execute from `/kaggle/working/High_Dimensional_WorldModel` when internet is available.
+- Kaggle no-internet stable path completed:
+  - `kaggle_job_manager.py` now defaults to code-dataset workflow (`--use-code-dataset`): package source into `project_bundle.zip`, upload to dataset, and mount from `/kaggle/input/<dataset>/`.
+  - `kaggle/run_kaggle_job.py` now prefers dataset-mounted source extraction before fallback git clone/pull.
+  - `kaggle_job_manager.py` now supports transient network retry on `status`/`output`, plus filtered output download (`--output-file-pattern`) to avoid large checkpoint download failures.
+  - Verified complete run on Kaggle kernel `peter941221/high-dimensional-worldmodel-aggressive` with run id `kaggle_20260227_090002`; artifacts downloaded under `kaggle_outputs/`.

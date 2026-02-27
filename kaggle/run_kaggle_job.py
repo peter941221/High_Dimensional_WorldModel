@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import zipfile
 
 
 REPO_URL = "https://github.com/peter941221/High_Dimensional_WorldModel.git"
@@ -50,12 +52,53 @@ def load_config() -> dict:
         "token_env": "GITHUB_TOKEN",
         "token_secret_name": "GITHUB_TOKEN",
         "include_checkpoints_in_push": False,
+        "use_code_dataset": True,
+        "code_dataset_slug": "high-dimensional-worldmodel-src",
+        "code_bundle_filename": "project_bundle.zip",
     }
 
     if CONFIG_PATH.exists():
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         defaults.update(data)
     return defaults
+
+
+def dataset_mount_path(dataset_slug: str) -> Path:
+    return Path("/kaggle/input") / dataset_slug
+
+
+def prepare_from_dataset(cfg: dict) -> Path | None:
+    if not to_bool(cfg.get("use_code_dataset", True)):
+        return None
+
+    slug = str(cfg.get("code_dataset_slug", "")).strip()
+    if not slug:
+        return None
+
+    mount_dir = dataset_mount_path(slug)
+    bundle_name = str(cfg.get("code_bundle_filename", "project_bundle.zip"))
+    bundle_path = mount_dir / bundle_name
+    if not mount_dir.exists():
+        log(f"Dataset mount not found: {mount_dir}")
+        return None
+
+    if PROJECT_DIR.exists():
+        shutil.rmtree(PROJECT_DIR)
+    PROJECT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if bundle_path.exists():
+        log(f"Extracting code bundle from dataset: {bundle_path}")
+        with zipfile.ZipFile(bundle_path, "r") as zf:
+            zf.extractall(PROJECT_DIR)
+        return PROJECT_DIR
+
+    if (mount_dir / "colab_autorun.py").exists():
+        log(f"Copying source tree from dataset mount: {mount_dir}")
+        shutil.copytree(mount_dir, PROJECT_DIR, dirs_exist_ok=True)
+        return PROJECT_DIR
+
+    log("Dataset mount exists but no code bundle/source file found.")
+    return None
 
 
 def ensure_repo() -> Path:
@@ -135,7 +178,7 @@ def build_cmd(cfg: dict, root: Path) -> list[str]:
 
 def main() -> None:
     cfg = load_config()
-    root = ensure_repo()
+    root = prepare_from_dataset(cfg) or ensure_repo()
     cmd = build_cmd(cfg, root=root)
     log("Running command:")
     log(" ".join(cmd))

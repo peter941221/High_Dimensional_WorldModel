@@ -21,5 +21,8 @@
   "repo_name": "High_Dimensional_WorldModel",
   "token_env": "GITHUB_TOKEN",
   "token_secret_name": "GITHUB_TOKEN",
-  "include_checkpoints_in_push": false
+  "include_checkpoints_in_push": false,
+  "use_code_dataset": true,
+  "code_dataset_slug": "high-dimensional-worldmodel-src",
+  "code_bundle_filename": "project_bundle.zip"
 }

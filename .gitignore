@@ -31,5 +31,7 @@ Thumbs.db
 
 # Kaggle local bundles
 .kaggle_kernel_build/
+.kaggle_code_dataset_build/
 kaggle_outputs/
 kaggle.json
+tmp_kaggle_*

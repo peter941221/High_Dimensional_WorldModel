@@ -9,10 +9,12 @@ import shutil
 import subprocess
 import sys
 import time
+import zipfile
 
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_BUILD_DIR = ROOT / ".kaggle_kernel_build"
+DEFAULT_DATASET_BUILD_DIR = ROOT / ".kaggle_code_dataset_build"
 
 INCLUDE_DIRS = [
     "configs",
@@ -85,6 +87,8 @@ def ensure_auth() -> None:
             "Kaggle 认证失败（401 Unauthorized）。\n"
             "请在 Kaggle 网站重新生成 API key，更新 ~/.kaggle/kaggle.json 后重试。"
         )
+    if is_transient_network_error(text):
+        raise RuntimeError("Kaggle 网络暂时不可用（SSL/连接波动）。请稍后重试。")
     raise RuntimeError(
         "Kaggle 未登录或认证不可用。请先完成任一方式：\n"
         "1) 放置 ~/.kaggle/kaggle.json\n"
@@ -124,6 +128,9 @@ def to_run_config(args: argparse.Namespace) -> dict:
         "token_env": args.token_env,
         "token_secret_name": args.token_secret_name,
         "include_checkpoints_in_push": args.include_checkpoints_in_push,
+        "use_code_dataset": args.use_code_dataset,
+        "code_dataset_slug": slugify(args.code_dataset_slug),
+        "code_bundle_filename": args.code_bundle_filename,
     }
 
 
@@ -139,6 +146,10 @@ def write_metadata(args: argparse.Namespace, build_dir: Path) -> dict:
         log(f"title 与 slug 不一致，已自动对齐 title='{slug}' 以避免 Kaggle slug 偏移")
         title = slug
 
+    dataset_sources = []
+    if args.use_code_dataset:
+        dataset_sources.append(f"{owner}/{slugify(args.code_dataset_slug)}")
+
     metadata = {
         "id": f"{owner}/{slug}",
         "title": title,
@@ -148,7 +159,7 @@ def write_metadata(args: argparse.Namespace, build_dir: Path) -> dict:
         "is_private": args.is_private,
         "enable_gpu": args.enable_gpu,
         "enable_internet": args.enable_internet,
-        "dataset_sources": [],
+        "dataset_sources": dataset_sources,
         "competition_sources": [],
         "kernel_sources": [],
     }
@@ -186,15 +197,86 @@ def copy_project(build_dir: Path) -> None:
         keep.write_text("", encoding="utf-8")
 
 
-def prepare(args: argparse.Namespace) -> tuple[Path, dict]:
+def build_project_bundle_zip(zip_path: Path) -> None:
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for rel in INCLUDE_DIRS:
+            src = ROOT / rel
+            if not src.exists():
+                continue
+            for file in src.rglob("*"):
+                if file.is_dir():
+                    continue
+                if "__pycache__" in file.parts or file.suffix == ".pyc":
+                    continue
+                arcname = file.relative_to(ROOT).as_posix()
+                zf.write(file, arcname=arcname)
+
+        for rel in INCLUDE_FILES:
+            src = ROOT / rel
+            if src.exists() and src.is_file():
+                zf.write(src, arcname=src.relative_to(ROOT).as_posix())
+
+
+def prepare_code_dataset_bundle(args: argparse.Namespace) -> Path:
+    dataset_dir = Path(args.code_dataset_build_dir).resolve()
+    if dataset_dir.exists():
+        shutil.rmtree(dataset_dir)
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+
+    dataset_slug = slugify(args.code_dataset_slug)
+    metadata = {
+        "title": dataset_slug,
+        "id": f"{args.owner}/{dataset_slug}",
+        "licenses": [{"name": "CC0-1.0"}],
+    }
+    (dataset_dir / "dataset-metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    bundle_name = args.code_bundle_filename
+    build_project_bundle_zip(dataset_dir / bundle_name)
+    log(f"Prepared code dataset bundle: {dataset_dir}")
+    return dataset_dir
+
+
+def push_code_dataset(args: argparse.Namespace, dataset_dir: Path) -> None:
+    ensure_auth()
+    kaggle = resolve_kaggle_cmd()
+
+    message = f"auto-update {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    version_cmd = [*kaggle, "datasets", "version", "-p", str(dataset_dir), "-m", message, "-r", "skip"]
+    version_proc = run_cmd(version_cmd, capture=True, check=False)
+    if version_proc.returncode == 0:
+        log("Code dataset version updated.")
+        return
+
+    create_cmd = [*kaggle, "datasets", "create", "-p", str(dataset_dir), "-r", "skip"]
+    create_proc = run_cmd(create_cmd, capture=True, check=False)
+    if create_proc.returncode == 0:
+        log("Code dataset created.")
+        return
+
+    create_msg = ((create_proc.stdout or "") + "\n" + (create_proc.stderr or "")).lower()
+    if "already exists" in create_msg:
+        retry_proc = run_cmd(version_cmd, capture=True, check=False)
+        if retry_proc.returncode == 0:
+            log("Code dataset version updated (after create conflict fallback).")
+            return
+
+    raise RuntimeError("Code dataset push failed. See logs above.")
+
+
+def prepare(args: argparse.Namespace) -> tuple[Path, dict, Path | None]:
     build_dir = Path(args.build_dir).resolve()
     copy_project(build_dir)
     run_config = to_run_config(args)
     (build_dir / "kaggle" / "run_config.json").write_text(json.dumps(run_config, indent=2, ensure_ascii=False), encoding="utf-8")
     metadata = write_metadata(args, build_dir)
+    dataset_dir = None
+    if args.use_code_dataset:
+        dataset_dir = prepare_code_dataset_bundle(args)
     log(f"Prepared kernel bundle: {build_dir}")
     log(f"Kernel id: {metadata['id']}")
-    return build_dir, metadata
+    return build_dir, metadata, dataset_dir
 
 
 def parse_status_text(text: str) -> str:
@@ -205,20 +287,51 @@ def parse_status_text(text: str) -> str:
     return "unknown"
 
 
-def kernels_push(build_dir: Path) -> None:
-    ensure_auth()
+def is_transient_network_error(text: str) -> bool:
+    low = text.lower()
+    patterns = [
+        "max retries exceeded",
+        "ssl",
+        "unexpected eof",
+        "eof occurred",
+        "connection reset",
+        "timed out",
+        "temporary failure",
+    ]
+    return any(p in low for p in patterns)
+
+
+def kernels_push(args: argparse.Namespace, build_dir: Path, dataset_dir: Path | None = None) -> None:
     kaggle = resolve_kaggle_cmd()
+    if args.use_code_dataset:
+        if dataset_dir is None:
+            dataset_dir = Path(args.code_dataset_build_dir).resolve()
+            if not (dataset_dir / "dataset-metadata.json").exists():
+                dataset_dir = prepare_code_dataset_bundle(args)
+        push_code_dataset(args, dataset_dir)
+    ensure_auth()
     run_cmd([*kaggle, "kernels", "push", "-p", str(build_dir)], capture=True)
 
 
 def kernels_status(kernel_id: str) -> str:
-    ensure_auth()
     kaggle = resolve_kaggle_cmd()
-    proc = run_cmd([*kaggle, "kernels", "status", kernel_id], capture=True)
-    return parse_status_text((proc.stdout or "") + "\n" + (proc.stderr or ""))
+    last_text = ""
+    for attempt in range(4):
+        proc = run_cmd([*kaggle, "kernels", "status", kernel_id], capture=True, check=False)
+        text = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        last_text = text
+        if proc.returncode == 0:
+            return parse_status_text(text)
+        if attempt < 3 and is_transient_network_error(text):
+            log(f"Transient network error on status; retry {attempt + 1}/3")
+            time.sleep(3)
+            continue
+        raise subprocess.CalledProcessError(proc.returncode, [*kaggle, "kernels", "status", kernel_id], output=proc.stdout, stderr=proc.stderr)
+    return parse_status_text(last_text)
 
 
 def kernels_watch(kernel_id: str, interval: int, timeout_minutes: int) -> str:
+    ensure_auth()
     deadline = time.time() + timeout_minutes * 60
     while True:
         status = kernels_status(kernel_id)
@@ -230,11 +343,31 @@ def kernels_watch(kernel_id: str, interval: int, timeout_minutes: int) -> str:
         time.sleep(max(interval, 10))
 
 
-def kernels_output(kernel_id: str, out_dir: Path) -> None:
-    ensure_auth()
+def kernels_output(kernel_id: str, out_dir: Path, file_pattern: str | None = None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     kaggle = resolve_kaggle_cmd()
-    run_cmd([*kaggle, "kernels", "output", kernel_id, "-p", str(out_dir), "--force"], capture=True)
+    base_cmd = [*kaggle, "kernels", "output", kernel_id, "-p", str(out_dir), "--force"]
+    if file_pattern:
+        base_cmd.extend(["--file-pattern", file_pattern])
+    last_error = None
+    for attempt in range(4):
+        proc = run_cmd(base_cmd, capture=True, check=False)
+        if proc.returncode == 0:
+            return
+        text = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        last_error = subprocess.CalledProcessError(
+            proc.returncode,
+            base_cmd,
+            output=proc.stdout,
+            stderr=proc.stderr,
+        )
+        if attempt < 3 and is_transient_network_error(text):
+            log(f"Transient network error on output; retry {attempt + 1}/3")
+            time.sleep(3)
+            continue
+        raise last_error
+    if last_error is not None:
+        raise last_error
 
 
 def add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
@@ -270,8 +403,14 @@ def add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Kaggle kernel automation for HyperDream.")
     parser.add_argument("--build-dir", type=str, default=str(DEFAULT_BUILD_DIR))
+    parser.add_argument("--code-dataset-build-dir", type=str, default=str(DEFAULT_DATASET_BUILD_DIR))
     parser.add_argument("--owner", type=str, default="")
     parser.add_argument("--slug", type=str, default="high-dimensional-worldmodel-aggressive")
+    parser.add_argument("--code-dataset-slug", type=str, default="high-dimensional-worldmodel-src")
+    parser.add_argument("--code-bundle-filename", type=str, default="project_bundle.zip")
+    parser.add_argument("--use-code-dataset", dest="use_code_dataset", action="store_true")
+    parser.add_argument("--no-code-dataset", dest="use_code_dataset", action="store_false")
+    parser.set_defaults(use_code_dataset=True)
     parser.add_argument("--title", type=str, default="")
     parser.add_argument("--private", dest="is_private", action="store_true")
     parser.add_argument("--public", dest="is_private", action="store_false")
@@ -283,6 +422,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--disable-internet", dest="enable_internet", action="store_false")
     parser.set_defaults(enable_internet=True)
     parser.add_argument("--output-dir", type=str, default=str(ROOT / "kaggle_outputs"))
+    parser.add_argument(
+        "--output-file-pattern",
+        type=str,
+        default=r"High_Dimensional_WorldModel/(results|figures|report)/.*|.*\.log|.*summary\.json",
+        help="Regex passed to `kaggle kernels output --file-pattern` to limit downloads.",
+    )
 
     add_common_runtime_args(parser)
     parser.add_argument("--watch-interval", type=int, default=60)
@@ -309,14 +454,16 @@ def main() -> None:
         return
 
     if args.command == "push":
+        dataset_dir = None
         if not (build_dir / "kernel-metadata.json").exists():
-            prepare(args)
-        kernels_push(build_dir)
+            build_dir, _, dataset_dir = prepare(args)
+        kernels_push(args, build_dir, dataset_dir=dataset_dir)
         return
 
     if args.command == "status":
         if not kernel_id:
             raise ValueError("--owner is required for status")
+        ensure_auth()
         status = kernels_status(kernel_id)
         log(f"status={status}")
         return
@@ -331,16 +478,17 @@ def main() -> None:
     if args.command == "output":
         if not kernel_id:
             raise ValueError("--owner is required for output")
-        kernels_output(kernel_id, output_dir)
+        ensure_auth()
+        kernels_output(kernel_id, output_dir, file_pattern=args.output_file_pattern)
         return
 
     if args.command == "run":
-        build_dir, metadata = prepare(args)
-        kernels_push(build_dir)
+        build_dir, metadata, dataset_dir = prepare(args)
+        kernels_push(args, build_dir, dataset_dir=dataset_dir)
         status = kernels_watch(metadata["id"], interval=args.watch_interval, timeout_minutes=args.watch_timeout_minutes)
         if status != "complete":
             raise RuntimeError(f"Kaggle kernel ended with status={status}")
-        kernels_output(metadata["id"], output_dir)
+        kernels_output(metadata["id"], output_dir, file_pattern=args.output_file_pattern)
         return
 
     raise ValueError(f"unknown command: {args.command}")

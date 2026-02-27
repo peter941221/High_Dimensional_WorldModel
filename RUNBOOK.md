@@ -85,6 +85,7 @@ set KAGGLE_KEY=your_api_key
 python kaggle_job_manager.py run \
   --owner your_kaggle_username \
   --slug high-dimensional-worldmodel-aggressive \
+  --code-dataset-slug high-dimensional-worldmodel-src \
   --title "HyperDream Aggressive Runner" \
   --baseline-epochs 12 \
   --transfer-pretrain-epochs 8 \
@@ -96,3 +97,6 @@ python kaggle_job_manager.py run \
 ```
 
 输出会自动下载到 `kaggle_outputs/`。
+
+说明：
+- 默认启用 `--use-code-dataset`，会先把项目源码上传为 Kaggle Dataset，再由 Kernel 从 `/kaggle/input/...` 读取，避免运行时依赖 GitHub 网络解析。

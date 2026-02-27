@@ -4,6 +4,11 @@
 - `run_config.example.json`: configuration template for batch runs.
 - `kernel-metadata.template.json`: metadata template reference.
 
+Default flow uses a code dataset bundle:
+- manager uploads `project_bundle.zip` to Kaggle Dataset
+- kernel extracts it from `/kaggle/input/<code-dataset-slug>/project_bundle.zip`
+- avoids runtime `git clone` dependency
+
 The generated build bundle writes a runtime config to:
 
 ```text
