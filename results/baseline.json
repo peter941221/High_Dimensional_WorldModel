@@ -1,0 +1,49 @@
+{
+  "experiment": "baseline",
+  "run_id": "colab_aggressive_20260227_075620",
+  "results": [
+    {
+      "dim": 2,
+      "success_rate": 0.3,
+      "trained_epochs": 12,
+      "gradient_steps": 120
+    },
+    {
+      "dim": 3,
+      "success_rate": 0.3,
+      "trained_epochs": 12,
+      "gradient_steps": 120
+    },
+    {
+      "dim": 4,
+      "success_rate": 0.1,
+      "trained_epochs": 12,
+      "gradient_steps": 120
+    },
+    {
+      "dim": 5,
+      "success_rate": 0.025,
+      "trained_epochs": 12,
+      "gradient_steps": 120
+    },
+    {
+      "dim": 6,
+      "success_rate": 0.0,
+      "trained_epochs": 12,
+      "gradient_steps": 120
+    },
+    {
+      "dim": 8,
+      "success_rate": 0.0,
+      "trained_epochs": 12,
+      "gradient_steps": 120
+    }
+  ],
+  "meta": {
+    "epochs": 12,
+    "max_steps": 120,
+    "eval_episodes": 40,
+    "save_every": 4,
+    "keep_last": 6
+  }
+}
