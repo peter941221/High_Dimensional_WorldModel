@@ -30,3 +30,4 @@
   - auto clone/pull, dependency install, optional tests, experiment pipeline, optional Drive sync
   - supports run configuration flags and resume-compatible run IDs
 - Updated `RUNBOOK.md` with direct Colab launch command.
+- Added step-by-step Colab notebook `notebooks/05_colab_step_by_step.ipynb` with detailed Chinese explanations per cell and resume workflow guidance.
