@@ -134,3 +134,13 @@
   - Transfer to 3D (source 2/3/4/5/6/8D): `0.650/0.650/0.550/0.650/0.650/0.625`.
   - Ablation (gru/mlp/rssm): `0.650/0.700/0.750`.
   - Robustness (easy/medium/hard): `0.733/0.000/0.000`.
+- Rebalanced physics difficulty to avoid near-unreachable gravity regime:
+  - `envs/push_ball.py` difficulty config extended with explicit `gravity_strength`, `success_radius`, and `wind_strength`.
+  - Medium/Hard no longer use fixed `-9.8` gravity; switched to configurable values for learnability while keeping gravity/wind characteristics.
+  - Added validation run `local_robustness_gravity_fix`: `easy=0.750`, `medium=0.040`, `hard=0.030`.
+- New Kaggle run after physics rebalance:
+  - Run id `kaggle_20260227_112846` completed (kernel version 7) with transient network retries handled automatically.
+  - Baseline (2/3/4/5/6/8D): `0.775/0.700/0.700/0.600/0.450/0.375`.
+  - Transfer to 3D (source 2/3/4/5/6/8D): `0.650/0.700/0.675/0.600/0.675/0.700`.
+  - Ablation (gru/mlp/rssm): `0.725/0.675/0.700`.
+  - Robustness (easy/medium/hard): `0.733/0.042/0.025`.

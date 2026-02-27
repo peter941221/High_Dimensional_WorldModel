@@ -15,12 +15,39 @@ class DifficultyConfig:
     target_range: float
     gravity: bool
     wind: bool = False
+    gravity_strength: float = 0.0
+    success_radius: float = 0.8
+    wind_strength: float = 0.0
 
 
 DIFFICULTY_CONFIGS = {
-    "easy": DifficultyConfig(init_range=1.5, target_range=2.0, gravity=False, wind=False),
-    "medium": DifficultyConfig(init_range=4.0, target_range=5.0, gravity=True, wind=False),
-    "hard": DifficultyConfig(init_range=6.0, target_range=8.0, gravity=True, wind=True),
+    "easy": DifficultyConfig(
+        init_range=1.5,
+        target_range=2.0,
+        gravity=False,
+        wind=False,
+        gravity_strength=0.0,
+        success_radius=0.8,
+        wind_strength=0.0,
+    ),
+    "medium": DifficultyConfig(
+        init_range=2.8,
+        target_range=3.5,
+        gravity=True,
+        wind=False,
+        gravity_strength=-4.5,
+        success_radius=1.0,
+        wind_strength=0.0,
+    ),
+    "hard": DifficultyConfig(
+        init_range=4.0,
+        target_range=5.0,
+        gravity=True,
+        wind=True,
+        gravity_strength=-5.5,
+        success_radius=1.15,
+        wind_strength=0.03,
+    ),
 }
 
 
@@ -38,10 +65,10 @@ class PushBallNDEnv:
         self.difficulty = difficulty
         self.config = DIFFICULTY_CONFIGS[difficulty]
         self.dt = float(dt)
-        self.success_radius = 0.8
+        self.success_radius = float(self.config.success_radius)
 
         boundary = self.config.target_range * 2.0 + 2.0
-        gravity_strength = -9.8 if self.config.gravity else 0.0
+        gravity_strength = float(self.config.gravity_strength) if self.config.gravity else 0.0
         self.physics = Physics4D(
             dim=self.dim,
             gravity_axis=1 if self.dim > 1 else 0,
@@ -115,7 +142,7 @@ class PushBallNDEnv:
         # Deterministic pseudo-random wind based on step index for reproducibility.
         phase = self.steps * 0.1
         components = [math.sin(phase + i * 0.7) for i in range(self.dim)]
-        return 0.05 * torch.tensor(components, dtype=torch.float32)
+        return float(self.config.wind_strength) * torch.tensor(components, dtype=torch.float32)
 
     def step(self, action):
         self._ensure_ready()
