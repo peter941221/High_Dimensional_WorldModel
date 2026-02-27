@@ -1,0 +1,22 @@
+{
+  "experiment": "robustness",
+  "run_id": "colab_aggressive_20260227_075620",
+  "results": [
+    {
+      "difficulty": "easy",
+      "success_rate": 0.20833333333333334
+    },
+    {
+      "difficulty": "medium",
+      "success_rate": 0.0
+    },
+    {
+      "difficulty": "hard",
+      "success_rate": 0.0
+    }
+  ],
+  "meta": {
+    "episodes": 120,
+    "dim": 3
+  }
+}
