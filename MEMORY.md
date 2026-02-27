@@ -81,3 +81,5 @@
     - `run_ablation.py`: per-model per-epoch metrics
     - `run_robustness.py`: running success-rate by episode progress
   - Updated notebooks (`06`, `07`) autorun command cells to include `--heartbeat-every 1` and `--push-after-each-stage`.
+- Fixed notebook command-cell indentation regression:
+  - In `06_colab_auto_push_results.ipynb` and `07_colab_aggressive_oneclick.ipynb`, `--heartbeat-every` and `--push-after-each-stage` are now correctly inside the `cmd` list (no `IndentationError`).
