@@ -56,12 +56,37 @@ def run_cmd(cmd: list[str], cwd: Path | None = None, capture: bool = False, chec
     return proc
 
 
+def resolve_kaggle_cmd() -> list[str]:
+    kaggle_exe = shutil.which("kaggle")
+    if kaggle_exe:
+        return [kaggle_exe]
+
+    scripts_dir = Path(sys.executable).resolve().parent / "Scripts"
+    candidate = scripts_dir / "kaggle.exe"
+    if candidate.exists():
+        return [str(candidate)]
+
+    raise FileNotFoundError(
+        "未找到 kaggle CLI。请先安装：python -m pip install -U kaggle"
+    )
+
+
 def ensure_auth() -> None:
-    proc = run_cmd(["kaggle", "whoami"], capture=True, check=False)
-    if proc.returncode == 0:
+    kaggle = resolve_kaggle_cmd()
+    run_cmd([*kaggle, "config", "view"], capture=True, check=False)
+
+    probe = run_cmd([*kaggle, "kernels", "list", "--mine", "--page-size", "1"], capture=True, check=False)
+    if probe.returncode == 0:
         return
+
+    text = ((probe.stdout or "") + "\n" + (probe.stderr or "")).lower()
+    if "401" in text or "unauthorized" in text:
+        raise RuntimeError(
+            "Kaggle 认证失败（401 Unauthorized）。\n"
+            "请在 Kaggle 网站重新生成 API key，更新 ~/.kaggle/kaggle.json 后重试。"
+        )
     raise RuntimeError(
-        "Kaggle 未登录。请先完成任一方式：\n"
+        "Kaggle 未登录或认证不可用。请先完成任一方式：\n"
         "1) 放置 ~/.kaggle/kaggle.json\n"
         "2) 设置环境变量 KAGGLE_USERNAME / KAGGLE_KEY\n"
         "然后再执行 push/status/watch/output。"
@@ -176,12 +201,14 @@ def parse_status_text(text: str) -> str:
 
 def kernels_push(build_dir: Path) -> None:
     ensure_auth()
-    run_cmd(["kaggle", "kernels", "push", "-p", str(build_dir)], capture=True)
+    kaggle = resolve_kaggle_cmd()
+    run_cmd([*kaggle, "kernels", "push", "-p", str(build_dir)], capture=True)
 
 
 def kernels_status(kernel_id: str) -> str:
     ensure_auth()
-    proc = run_cmd(["kaggle", "kernels", "status", kernel_id], capture=True)
+    kaggle = resolve_kaggle_cmd()
+    proc = run_cmd([*kaggle, "kernels", "status", kernel_id], capture=True)
     return parse_status_text((proc.stdout or "") + "\n" + (proc.stderr or ""))
 
 
@@ -200,7 +227,8 @@ def kernels_watch(kernel_id: str, interval: int, timeout_minutes: int) -> str:
 def kernels_output(kernel_id: str, out_dir: Path) -> None:
     ensure_auth()
     out_dir.mkdir(parents=True, exist_ok=True)
-    run_cmd(["kaggle", "kernels", "output", kernel_id, "-p", str(out_dir), "--force"], capture=True)
+    kaggle = resolve_kaggle_cmd()
+    run_cmd([*kaggle, "kernels", "output", kernel_id, "-p", str(out_dir), "--force"], capture=True)
 
 
 def add_common_runtime_args(parser: argparse.ArgumentParser) -> None:

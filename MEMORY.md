@@ -93,3 +93,7 @@
   - Updated `RUNBOOK.md` with Kaggle login timing and one-command batch run example.
   - Updated `README.md` with Kaggle batch runner overview.
   - Updated `.gitignore` to ignore local Kaggle build/output folders.
+- Kaggle CLI compatibility hardening:
+  - `kaggle_job_manager.py` now detects Kaggle CLI executable robustly (`PATH` or Python Scripts directory).
+  - Replaced deprecated `whoami` check with Kaggle v2-compatible auth probe (`kaggle config view` + `kaggle kernels list --mine --page-size 1`).
+  - Added explicit 401 guidance for invalid/expired API keys.
