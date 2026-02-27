@@ -144,3 +144,11 @@
   - Transfer to 3D (source 2/3/4/5/6/8D): `0.650/0.700/0.675/0.600/0.675/0.700`.
   - Ablation (gru/mlp/rssm): `0.725/0.675/0.700`.
   - Robustness (easy/medium/hard): `0.733/0.042/0.025`.
+- Further robustness tuning (difficulty rebalance v2):
+  - Updated `envs/push_ball.py` medium/hard presets using random-search-selected parameters with constraint to avoid trivial random-policy success.
+  - Local robustness check (`local_robustness_tuned_v2`, 120 episodes): `easy=0.733`, `medium=0.242`, `hard=0.167`.
+  - New Kaggle run id `kaggle_20260227_123301` completed (kernel version 8).
+  - Kaggle baseline (2/3/4/5/6/8D): `0.850/0.725/0.675/0.600/0.450/0.300`.
+  - Kaggle transfer to 3D (source 2/3/4/5/6/8D): `0.625/0.675/0.675/0.700/0.675/0.650`.
+  - Kaggle ablation (gru/mlp/rssm): `0.675/0.725/0.650`.
+  - Kaggle robustness (easy/medium/hard): `0.733/0.242/0.167`.
