@@ -66,3 +66,6 @@
 - Added new Colab aggressive one-click notebook:
   - `notebooks/07_colab_aggressive_oneclick.ipynb` created for refresh-and-run workflow.
   - Includes robust clone/pull fallback, token loading from Colab Secrets, push-access preflight, aggressive training params, and full stdout/stderr capture.
+- Hardened aggressive notebook preflight cell:
+  - Uses absolute script path (`/content/High_Dimensional_WorldModel/colab_push_results.py`) and `SECRET_NAME` variable (no hardcoded secret key).
+  - Adds full `RETURN CODE` + `STDOUT/STDERR` diagnostics for fast token-permission troubleshooting.
