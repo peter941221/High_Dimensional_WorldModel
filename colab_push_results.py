@@ -73,18 +73,6 @@ def ensure_repo(repo_dir: Path) -> None:
         raise FileNotFoundError(f"Not a git repo: {repo_dir}")
 
 
-def ensure_branch(repo_dir: Path, branch: str, base_branch: str) -> None:
-    run_cmd(["git", "fetch", "origin"], cwd=repo_dir)
-    remote_heads = run_cmd_output(["git", "ls-remote", "--heads", "origin", branch], cwd=repo_dir)
-    if remote_heads:
-        run_cmd(["git", "checkout", branch], cwd=repo_dir)
-        run_cmd(["git", "pull", "--ff-only", "origin", branch], cwd=repo_dir)
-    else:
-        run_cmd(["git", "checkout", base_branch], cwd=repo_dir)
-        run_cmd(["git", "pull", "--ff-only", "origin", base_branch], cwd=repo_dir)
-        run_cmd(["git", "checkout", "-b", branch], cwd=repo_dir)
-
-
 def stage_run_files(repo_dir: Path, run_id: str, include_checkpoints: bool) -> list[str]:
     candidates = []
     for exp in ["baseline", "transfer", "ablation", "robustness"]:
@@ -152,7 +140,7 @@ def main() -> None:
 
     run_cmd(["git", "config", "user.name", args.git_user_name], cwd=repo_dir)
     run_cmd(["git", "config", "user.email", args.git_user_email], cwd=repo_dir)
-    ensure_branch(repo_dir, args.branch, args.base_branch)
+    run_cmd(["git", "fetch", "origin"], cwd=repo_dir)
 
     staged = stage_run_files(repo_dir, run_id=args.run_id, include_checkpoints=args.include_checkpoints)
     changed = has_staged_changes(repo_dir)
@@ -168,7 +156,8 @@ def main() -> None:
 
     set_authenticated_remote(repo_dir, args.github_user, args.repo_name, token)
     try:
-        run_cmd(["git", "push", "-u", "origin", args.branch], cwd=repo_dir)
+        # Push current HEAD commit to target result branch directly; avoids branch checkout conflicts.
+        run_cmd(["git", "push", "-u", "origin", f"HEAD:refs/heads/{args.branch}", "--force-with-lease"], cwd=repo_dir)
     finally:
         restore_public_remote(repo_dir, args.github_user, args.repo_name)
 
