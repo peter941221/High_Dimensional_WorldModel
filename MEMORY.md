@@ -26,3 +26,7 @@
 - Smoke-validated resume flow on baseline/transfer/ablation with epoch continuation logs.
 - Added automatic checkpoint rotation (`latest` + `best` + periodic `epochXXXX`) with retention control (`--save-every`, `--keep-last`).
 - Added `experiments/tests/test_common.py` for checkpoint rotation behavior; full test suite now `21 passed`.
+- Added Colab one-click automation file `colab_autorun.py`:
+  - auto clone/pull, dependency install, optional tests, experiment pipeline, optional Drive sync
+  - supports run configuration flags and resume-compatible run IDs
+- Updated `RUNBOOK.md` with direct Colab launch command.
