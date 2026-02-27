@@ -111,7 +111,9 @@ def stage_run_files(repo_dir: Path, run_id: str, include_checkpoints: bool) -> l
     if not unique:
         raise FileNotFoundError(f"No result artifacts found for run_id={run_id}")
 
-    run_cmd(["git", "add", *unique], cwd=repo_dir)
+    # Result artifacts are intentionally ignored in project .gitignore.
+    # Force-add only the selected run outputs for result branch publishing.
+    run_cmd(["git", "add", "-f", *unique], cwd=repo_dir)
     return unique
 
 

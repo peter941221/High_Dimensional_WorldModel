@@ -39,3 +39,4 @@
 - Rewrote `06_colab_auto_push_results.ipynb` with more plain-language project principle explanation and GitHub-only step-by-step cells.
 - Updated `06_colab_auto_push_results.ipynb` default secret key to `GITHUB_TOKEN` for consistency with Colab best practice.
 - Hardened `colab_push_results.py` push flow to avoid branch checkout conflicts after training: push current HEAD to target results branch directly (`HEAD:refs/heads/<branch>`).
+- Fixed result push failure caused by `.gitignore` exclusions: `colab_push_results.py` now uses forced add (`git add -f`) for selected result artifacts.
