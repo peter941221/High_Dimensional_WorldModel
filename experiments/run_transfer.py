@@ -71,6 +71,7 @@ def parse_args():
     parser.add_argument("--eval-episodes", type=int, default=20)
     parser.add_argument("--save-every", type=int, default=5, help="Archive checkpoint every N epochs (0 disables).")
     parser.add_argument("--keep-last", type=int, default=5, help="How many archive checkpoints to keep.")
+    parser.add_argument("--heartbeat-every", type=int, default=1, help="Print training heartbeat every N epochs.")
     return parser.parse_args()
 
 
@@ -125,6 +126,13 @@ def run():
             save_every=args.save_every,
             keep_last=args.keep_last,
         )
+        if args.heartbeat_every > 0 and ((epoch + 1) % args.heartbeat_every == 0):
+            print(
+                f"[transfer][scratch] epoch={epoch + 1}/{args.pretrain_epochs} "
+                f"wm_loss={stats.world_model_loss:.4f} actor_loss={stats.actor_loss:.4f} "
+                f"value_loss={stats.value_loss:.4f} grad_steps={scratch_trainer.gradient_steps}",
+                flush=True,
+            )
     baseline_success = evaluate(scratch_env, scratch_policy, episodes=args.eval_episodes)
 
     for src_dim in source_dims:
@@ -149,6 +157,13 @@ def run():
                 save_every=args.save_every,
                 keep_last=args.keep_last,
             )
+            if args.heartbeat_every > 0 and ((epoch + 1) % args.heartbeat_every == 0):
+                print(
+                    f"[transfer][source] src_dim={src_dim} epoch={epoch + 1}/{args.pretrain_epochs} "
+                    f"wm_loss={stats.world_model_loss:.4f} actor_loss={stats.actor_loss:.4f} "
+                    f"value_loss={stats.value_loss:.4f} grad_steps={src_trainer.gradient_steps}",
+                    flush=True,
+                )
 
         tgt_env, tgt_wm, tgt_policy, tgt_trainer = make_trainer(dim=target_dim, max_steps=args.max_steps)
         tgt_ckpt = checkpoint_dir / f"transfer_{src_dim}_to_{target_dim}.pt"
@@ -182,6 +197,14 @@ def run():
                 save_every=args.save_every,
                 keep_last=args.keep_last,
             )
+            if args.heartbeat_every > 0 and ((epoch + 1) % args.heartbeat_every == 0):
+                print(
+                    f"[transfer][finetune] src_dim={src_dim}->tgt_dim={target_dim} "
+                    f"epoch={epoch + 1}/{args.finetune_epochs} wm_loss={stats.world_model_loss:.4f} "
+                    f"actor_loss={stats.actor_loss:.4f} value_loss={stats.value_loss:.4f} "
+                    f"grad_steps={tgt_trainer.gradient_steps}",
+                    flush=True,
+                )
 
         transfer_success = evaluate(tgt_env, tgt_policy, episodes=args.eval_episodes)
         results_by_src[src_dim] = {

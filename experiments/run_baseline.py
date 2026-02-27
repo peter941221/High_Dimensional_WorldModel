@@ -69,6 +69,7 @@ def parse_args():
     parser.add_argument("--eval-episodes", type=int, default=20, help="Evaluation episodes per dimension.")
     parser.add_argument("--save-every", type=int, default=5, help="Archive checkpoint every N epochs (0 disables).")
     parser.add_argument("--keep-last", type=int, default=5, help="How many archive checkpoints to keep per worker.")
+    parser.add_argument("--heartbeat-every", type=int, default=1, help="Print training heartbeat every N epochs.")
     return parser.parse_args()
 
 
@@ -127,6 +128,13 @@ def run():
                 save_every=args.save_every,
                 keep_last=args.keep_last,
             )
+            if args.heartbeat_every > 0 and ((epoch + 1) % args.heartbeat_every == 0):
+                print(
+                    f"[baseline][train] dim={dim} epoch={epoch + 1}/{args.epochs} "
+                    f"wm_loss={stats.world_model_loss:.4f} actor_loss={stats.actor_loss:.4f} "
+                    f"value_loss={stats.value_loss:.4f} grad_steps={trainer.gradient_steps}",
+                    flush=True,
+                )
 
         success_rate = evaluate_policy(env, policy, episodes=args.eval_episodes)
         result = {

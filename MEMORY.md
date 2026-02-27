@@ -72,3 +72,12 @@
 - Fixed push preflight false negative on existing `colab-results` history:
   - `colab_push_results.py::ensure_push_access` now uses `git push --dry-run --force-with-lease` (aligned with real push command).
   - Added clearer error branch for branch-protection policy rejections.
+- Added meaningful heartbeat logging and staged auto-push workflow:
+  - `colab_autorun.py` now logs stage-level heartbeat (`start/done + elapsed`) and supports `--heartbeat-every`.
+  - `colab_autorun.py` now supports staged pushing (default on): `--push-after-each-stage` / `--no-push-after-each-stage`.
+  - Experiment scripts now emit content-rich heartbeat logs:
+    - `run_baseline.py`: per-epoch `wm_loss/actor_loss/value_loss/grad_steps`
+    - `run_transfer.py`: scratch/source/finetune per-epoch metrics
+    - `run_ablation.py`: per-model per-epoch metrics
+    - `run_robustness.py`: running success-rate by episode progress
+  - Updated notebooks (`06`, `07`) autorun command cells to include `--heartbeat-every 1` and `--push-after-each-stage`.

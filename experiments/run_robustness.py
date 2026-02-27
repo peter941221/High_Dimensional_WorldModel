@@ -23,7 +23,7 @@ def heuristic_policy(state: torch.Tensor, dim: int):
     return (0.2 * to_ball + 0.8 * to_target).clamp(-1, 1)
 
 
-def eval_under_condition(dim: int, difficulty: str, episodes: int = 40):
+def eval_under_condition(dim: int, difficulty: str, episodes: int = 40, heartbeat_every: int = 10):
     env = PushBallNDEnv(dim=dim, difficulty=difficulty, max_steps=100)
     success = 0
     for ep in range(episodes):
@@ -34,6 +34,13 @@ def eval_under_condition(dim: int, difficulty: str, episodes: int = 40):
             action = heuristic_policy(state, dim)
             state, _, done, info = env.step(action)
         success += int(info["success"])
+        if heartbeat_every > 0 and ((ep + 1) % heartbeat_every == 0 or (ep + 1) == episodes):
+            running_rate = success / (ep + 1)
+            print(
+                f"[robustness][eval] difficulty={difficulty} episode={ep + 1}/{episodes} "
+                f"running_success_rate={running_rate:.3f}",
+                flush=True,
+            )
     return success / episodes
 
 
@@ -53,6 +60,7 @@ def parse_args():
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--episodes", type=int, default=50)
     parser.add_argument("--dim", type=int, default=3)
+    parser.add_argument("--heartbeat-every", type=int, default=10, help="Print eval heartbeat every N episodes.")
     return parser.parse_args()
 
 
@@ -67,7 +75,12 @@ def run():
         rows.append(
             {
                 "difficulty": difficulty,
-                "success_rate": eval_under_condition(dim=args.dim, difficulty=difficulty, episodes=args.episodes),
+                "success_rate": eval_under_condition(
+                    dim=args.dim,
+                    difficulty=difficulty,
+                    episodes=args.episodes,
+                    heartbeat_every=args.heartbeat_every,
+                ),
             }
         )
 
