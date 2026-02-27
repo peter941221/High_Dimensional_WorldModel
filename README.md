@@ -30,3 +30,8 @@ Checkpoint files include:
 - `*_latest.pt`: last epoch snapshot
 - `*_best.pt`: best world-model-loss snapshot
 - `*_epochXXXX.pt`: periodic archives (controlled by `--save-every` and `--keep-last`)
+
+## Colab Auto Push
+
+- `colab_autorun.py` now supports pushing result artifacts to GitHub branch automatically.
+- Use `--push-results-to-github` and provide token via environment variable (default: `GITHUB_TOKEN`).

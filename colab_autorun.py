@@ -112,6 +112,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save-every", type=int, default=5)
     parser.add_argument("--keep-last", type=int, default=5)
     parser.add_argument("--sync-to-drive", action="store_true")
+    parser.add_argument("--push-results-to-github", action="store_true", help="Auto commit/push this run's results to GitHub.")
+    parser.add_argument("--push-branch", type=str, default="colab-results")
+    parser.add_argument("--base-branch", type=str, default="main")
+    parser.add_argument("--github-user", type=str, default="peter941221")
+    parser.add_argument("--repo-name", type=str, default="High_Dimensional_WorldModel")
+    parser.add_argument("--token-env", type=str, default="GITHUB_TOKEN")
+    parser.add_argument("--include-checkpoints-in-push", action="store_true")
     return parser.parse_args()
 
 
@@ -197,6 +204,30 @@ def main() -> None:
 
     if args.sync_to_drive:
         sync_artifacts(project_dir=project_dir, sync_root=drive_sync_dir, run_id=run_id)
+
+    if args.push_results_to_github:
+        push_cmd = [
+            sys.executable,
+            "colab_push_results.py",
+            "--repo-dir",
+            str(project_dir),
+            "--run-id",
+            run_id,
+            "--branch",
+            args.push_branch,
+            "--base-branch",
+            args.base_branch,
+            "--github-user",
+            args.github_user,
+            "--repo-name",
+            args.repo_name,
+            "--token-env",
+            args.token_env,
+        ]
+        if args.include_checkpoints_in_push:
+            push_cmd.append("--include-checkpoints")
+        run_cmd(push_cmd, cwd=project_dir)
+        manifest["commands"].append(" ".join(push_cmd))
 
     manifest["status"] = "completed"
     manifest["finished_at"] = datetime.now().isoformat()

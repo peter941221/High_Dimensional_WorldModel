@@ -44,3 +44,19 @@ python colab_autorun.py \
   --transfer-finetune-epochs 3 \
   --ablation-epochs 4
 ```
+
+## Colab Auto Push To GitHub
+
+```bash
+# In Colab first set token:
+export GITHUB_TOKEN=your_pat
+
+python colab_autorun.py \
+  --run-id colab_push_demo \
+  --run-tests \
+  --push-results-to-github \
+  --push-branch colab-results \
+  --github-user peter941221 \
+  --repo-name High_Dimensional_WorldModel \
+  --token-env GITHUB_TOKEN
+```
