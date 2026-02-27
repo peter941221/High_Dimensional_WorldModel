@@ -47,6 +47,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Only validate token resolution and exit without git add/commit/push.",
     )
+    parser.add_argument(
+        "--check-push-access-only",
+        action="store_true",
+        help="Validate token + remote write permission (git push --dry-run) and exit.",
+    )
     return parser.parse_args()
 
 
@@ -152,7 +157,7 @@ def has_staged_changes(repo_dir: Path) -> bool:
 
 
 def set_authenticated_remote(repo_dir: Path, github_user: str, repo_name: str, token: str) -> None:
-    auth_url = f"https://{github_user}:{token}@github.com/{github_user}/{repo_name}.git"
+    auth_url = f"https://x-access-token:{token}@github.com/{github_user}/{repo_name}.git"
     # quiet to avoid leaking token in logs
     subprocess.run(["git", "remote", "set-url", "origin", auth_url], cwd=str(repo_dir), check=True, text=True, capture_output=True)
 
@@ -160,6 +165,36 @@ def set_authenticated_remote(repo_dir: Path, github_user: str, repo_name: str, t
 def restore_public_remote(repo_dir: Path, github_user: str, repo_name: str) -> None:
     public_url = f"https://github.com/{github_user}/{repo_name}.git"
     subprocess.run(["git", "remote", "set-url", "origin", public_url], cwd=str(repo_dir), check=True, text=True, capture_output=True)
+
+
+def ensure_push_access(repo_dir: Path, branch: str) -> None:
+    probe = subprocess.run(
+        ["git", "push", "--dry-run", "origin", f"HEAD:refs/heads/{branch}"],
+        cwd=str(repo_dir),
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if probe.stdout:
+        print(probe.stdout, end="")
+    if probe.stderr:
+        print(probe.stderr, end="", file=sys.stderr)
+    if probe.returncode != 0:
+        msg = (probe.stderr or probe.stdout or "").lower()
+        if (
+            "403" in msg
+            or "permission" in msg
+            or "denied" in msg
+            or "authentication failed" in msg
+            or "invalid username or token" in msg
+        ):
+            raise PermissionError(
+                "GitHub push denied (403). Check token scope/access:\n"
+                "- Fine-grained PAT: Repository access includes target repo + Contents=Read and write.\n"
+                "- Classic PAT: include `repo` scope.\n"
+                "- Confirm Colab Secret value is the token itself (not username).\n"
+            )
+        raise RuntimeError("Git push dry-run failed. See logs above for details.")
 
 
 def main() -> None:
@@ -177,6 +212,16 @@ def main() -> None:
     run_cmd(["git", "config", "user.email", args.git_user_email], cwd=repo_dir)
     run_cmd(["git", "fetch", "origin"], cwd=repo_dir)
 
+    set_authenticated_remote(repo_dir, args.github_user, args.repo_name, token)
+    try:
+        ensure_push_access(repo_dir, branch=args.branch)
+    finally:
+        restore_public_remote(repo_dir, args.github_user, args.repo_name)
+
+    if args.check_push_access_only:
+        log("Push-access preflight passed.")
+        return
+
     staged = stage_run_files(repo_dir, run_id=args.run_id, include_checkpoints=args.include_checkpoints)
     changed = has_staged_changes(repo_dir)
 
@@ -192,7 +237,35 @@ def main() -> None:
     set_authenticated_remote(repo_dir, args.github_user, args.repo_name, token)
     try:
         # Push current HEAD commit to target result branch directly; avoids branch checkout conflicts.
-        run_cmd(["git", "push", "-u", "origin", f"HEAD:refs/heads/{args.branch}", "--force-with-lease"], cwd=repo_dir)
+        push = subprocess.run(
+            ["git", "push", "-u", "origin", f"HEAD:refs/heads/{args.branch}", "--force-with-lease"],
+            cwd=str(repo_dir),
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if push.stdout:
+            print(push.stdout, end="")
+        if push.stderr:
+            print(push.stderr, end="", file=sys.stderr)
+        if push.returncode != 0:
+            msg = (push.stderr or push.stdout or "").lower()
+            if (
+                "403" in msg
+                or "permission" in msg
+                or "denied" in msg
+                or "authentication failed" in msg
+                or "invalid username or token" in msg
+            ):
+                raise PermissionError(
+                    "GitHub push denied (403). Verify PAT permissions and repository access in Colab Secret."
+                )
+            raise subprocess.CalledProcessError(
+                push.returncode,
+                ["git", "push", "-u", "origin", f"HEAD:refs/heads/{args.branch}", "--force-with-lease"],
+                output=push.stdout,
+                stderr=push.stderr,
+            )
     finally:
         restore_public_remote(repo_dir, args.github_user, args.repo_name)
 

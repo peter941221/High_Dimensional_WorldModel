@@ -57,3 +57,9 @@
 - Fixed Colab repo sync failure (`git pull --ff-only` exit 128) for refresh-and-run usage:
   - `colab_autorun.py::ensure_repo` now auto-recovers checkout issues and force-resets to `origin/<branch>` when ff-only pull is blocked.
   - Updated both notebooks (`05_colab_step_by_step.ipynb`, `06_colab_auto_push_results.ipynb`) clone/pull cell with the same fallback reset behavior and explicit log message.
+- Added GitHub push-permission preflight before long experiments:
+  - `colab_push_results.py` now supports `--check-push-access-only` and runs `git push --dry-run` to validate write access early.
+  - `colab_autorun.py` preflight now uses `--check-push-access-only` (not just token presence), preventing late-stage failures after training.
+- Improved auth compatibility and diagnostics:
+  - Auth remote now uses `x-access-token` format.
+  - Permission/auth failures now surface explicit guidance for PAT scope/repo access (`403`, `authentication failed`, `invalid username or token`).

@@ -170,7 +170,7 @@ def main() -> None:
             args.token_env,
             "--token-secret-name",
             args.token_secret_name,
-            "--check-token-only",
+            "--check-push-access-only",
         ]
         run_cmd_capture(preflight_cmd, cwd=project_dir)
         manifest["commands"].append(" ".join(preflight_cmd))
