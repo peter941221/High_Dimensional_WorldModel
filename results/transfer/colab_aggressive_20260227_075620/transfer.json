@@ -1,0 +1,88 @@
+{
+  "experiment": "transfer",
+  "run_id": "colab_aggressive_20260227_075620",
+  "target_dim": 3,
+  "results": [
+    {
+      "source_dim": 2,
+      "target_dim": 3,
+      "baseline_success": 0.05,
+      "transfer_success": 0.1,
+      "transfer_stats": {
+        "transferred": 6,
+        "skipped": 4
+      },
+      "trained_epochs": 8,
+      "gradient_steps": 64
+    },
+    {
+      "source_dim": 3,
+      "target_dim": 3,
+      "baseline_success": 0.05,
+      "transfer_success": 0.075,
+      "transfer_stats": {
+        "transferred": 10,
+        "skipped": 0
+      },
+      "trained_epochs": 8,
+      "gradient_steps": 64
+    },
+    {
+      "source_dim": 4,
+      "target_dim": 3,
+      "baseline_success": 0.05,
+      "transfer_success": 0.05,
+      "transfer_stats": {
+        "transferred": 6,
+        "skipped": 4
+      },
+      "trained_epochs": 8,
+      "gradient_steps": 64
+    },
+    {
+      "source_dim": 5,
+      "target_dim": 3,
+      "baseline_success": 0.05,
+      "transfer_success": 0.075,
+      "transfer_stats": {
+        "transferred": 6,
+        "skipped": 4
+      },
+      "trained_epochs": 8,
+      "gradient_steps": 64
+    },
+    {
+      "source_dim": 6,
+      "target_dim": 3,
+      "baseline_success": 0.05,
+      "transfer_success": 0.05,
+      "transfer_stats": {
+        "transferred": 6,
+        "skipped": 4
+      },
+      "trained_epochs": 8,
+      "gradient_steps": 64
+    },
+    {
+      "source_dim": 8,
+      "target_dim": 3,
+      "baseline_success": 0.05,
+      "transfer_success": 0.125,
+      "transfer_stats": {
+        "transferred": 6,
+        "skipped": 4
+      },
+      "trained_epochs": 8,
+      "gradient_steps": 64
+    }
+  ],
+  "meta": {
+    "pretrain_epochs": 8,
+    "finetune_epochs": 8,
+    "max_steps": 120,
+    "eval_episodes": 40,
+    "target_dim": 3,
+    "save_every": 4,
+    "keep_last": 6
+  }
+}
