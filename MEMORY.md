@@ -63,3 +63,6 @@
 - Improved auth compatibility and diagnostics:
   - Auth remote now uses `x-access-token` format.
   - Permission/auth failures now surface explicit guidance for PAT scope/repo access (`403`, `authentication failed`, `invalid username or token`).
+- Added new Colab aggressive one-click notebook:
+  - `notebooks/07_colab_aggressive_oneclick.ipynb` created for refresh-and-run workflow.
+  - Includes robust clone/pull fallback, token loading from Colab Secrets, push-access preflight, aggressive training params, and full stdout/stderr capture.
