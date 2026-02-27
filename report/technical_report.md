@@ -10,12 +10,13 @@ This report summarizes the current MVP implementation status against `技术文�
 - Push-ball RL environment implemented (`envs/push_ball.py`)
 - World models implemented: MLP / GRU / RSSM (`models/`)
 - Training stack implemented: replay buffer, transfer utility, dream trainer (`training/`)
+- Policy optimization upgraded to imagination-based actor-critic (actor + value + target value)
 - Experiment runners implemented (`experiments/run_*.py`)
 - Visualization pipeline implemented (`experiments/visualize.py`)
 
 ## 2. Validation Results
 
-- Full test suite: `17 passed`
+- Full test suite: `18 passed`
 - Command: `pytest -q`
 
 Key validated areas:
@@ -24,6 +25,7 @@ Key validated areas:
 - Model forward/gradient/prediction tests
 - Buffer and transfer tests
 - Trainer epoch smoke test
+- Actor/critic parameter update regression test
 
 ## 3. Experiment Outputs (Current MVP)
 

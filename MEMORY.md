@@ -13,3 +13,5 @@
 - Implemented experiment scripts (`run_baseline`, `run_transfer`, `run_robustness`, `run_ablation`) and visualization.
 - Generated `results/*.json` and `figures/*.png` artifacts for baseline, transfer, robustness, and ablation.
 - Added assessment report at `report/technical_report.md` with coverage, metrics snapshot, and gap analysis.
+- Upgraded `DreamTrainer` from imitation-only policy updates to imagination-based actor-critic with `ValueNetwork` and target value soft update.
+- Added actor-critic parameter-update regression test and restored full suite pass (`18 passed`).
