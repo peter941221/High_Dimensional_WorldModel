@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 import subprocess
 import sys
 
 
-ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = ROOT / "kaggle" / "run_config.json"
+REPO_URL = "https://github.com/peter941221/High_Dimensional_WorldModel.git"
+PROJECT_DIR = Path("/kaggle/working/High_Dimensional_WorldModel")
+CONFIG_PATH = Path("/kaggle/src/kaggle/run_config.json")
 OUTPUT_SUMMARY = Path("/kaggle/working") / "hyperdream_kaggle_summary.json"
 
 
@@ -30,7 +30,7 @@ def load_config() -> dict:
         "run_id": f"kaggle_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
         "resume": False,
         "run_tests": False,
-        "skip_install_deps": True,
+        "skip_install_deps": False,
         "heartbeat_every": 1,
         "push_after_each_stage": True,
         "baseline_epochs": 12,
@@ -58,12 +58,22 @@ def load_config() -> dict:
     return defaults
 
 
-def build_cmd(cfg: dict) -> list[str]:
+def ensure_repo() -> Path:
+    if (PROJECT_DIR / ".git").exists():
+        subprocess.run(["git", "-C", str(PROJECT_DIR), "fetch", "origin"], check=True)
+        subprocess.run(["git", "-C", str(PROJECT_DIR), "checkout", "main"], check=True)
+        subprocess.run(["git", "-C", str(PROJECT_DIR), "reset", "--hard", "origin/main"], check=True)
+    else:
+        subprocess.run(["git", "clone", "--branch", "main", REPO_URL, str(PROJECT_DIR)], check=True)
+    return PROJECT_DIR
+
+
+def build_cmd(cfg: dict, root: Path) -> list[str]:
     cmd = [
         sys.executable,
         "colab_autorun.py",
         "--project-dir",
-        str(ROOT),
+        str(root),
         "--run-id",
         str(cfg["run_id"]),
         "--skip-repo-sync",
@@ -125,17 +135,18 @@ def build_cmd(cfg: dict) -> list[str]:
 
 def main() -> None:
     cfg = load_config()
-    cmd = build_cmd(cfg)
+    root = ensure_repo()
+    cmd = build_cmd(cfg, root=root)
     log("Running command:")
     log(" ".join(cmd))
-    subprocess.run(cmd, cwd=str(ROOT), check=True)
+    subprocess.run(cmd, cwd=str(root), check=True)
 
     summary = {
         "run_id": cfg["run_id"],
         "finished_at": datetime.now().isoformat(),
-        "results_dir": str(ROOT / "results"),
-        "figures_dir": str(ROOT / "figures"),
-        "checkpoints_dir": str(ROOT / "checkpoints"),
+        "results_dir": str(root / "results"),
+        "figures_dir": str(root / "figures"),
+        "checkpoints_dir": str(root / "checkpoints"),
     }
     OUTPUT_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_SUMMARY.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")

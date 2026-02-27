@@ -97,3 +97,11 @@
   - `kaggle_job_manager.py` now detects Kaggle CLI executable robustly (`PATH` or Python Scripts directory).
   - Replaced deprecated `whoami` check with Kaggle v2-compatible auth probe (`kaggle config view` + `kaggle kernels list --mine --page-size 1`).
   - Added explicit 401 guidance for invalid/expired API keys.
+- Kaggle execution-path and slug stability fixes:
+  - `kaggle/run_kaggle_job.py` now clones/pulls project repo into `/kaggle/working/High_Dimensional_WorldModel` at runtime, avoiding missing-file failures in Kaggle script mode.
+  - `kaggle_job_manager.py` now auto-aligns kernel `title` with `slug` when mismatched to prevent unexpected Kaggle slug rewrites.
+- Live validation with user credentials:
+  - Auth probe succeeded after key refresh (`kernels list --mine` reachable).
+  - Kernel `peter941221/high-dimensional-worldmodel-aggressive` pushed successfully (version 2).
+  - Latest run ended with network blocker in Kaggle runtime: `Could not resolve host: github.com` during git clone.
+  - Added runtime strategy to clone and execute from `/kaggle/working/High_Dimensional_WorldModel` when internet is available.

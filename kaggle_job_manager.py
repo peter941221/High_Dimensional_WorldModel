@@ -133,9 +133,15 @@ def write_metadata(args: argparse.Namespace, build_dir: Path) -> dict:
     if not owner:
         raise ValueError("缺少 --owner（你的 Kaggle 用户名）")
 
+    requested_title = (args.title or "").strip()
+    title = requested_title or slug
+    if slugify(title) != slug:
+        log(f"title 与 slug 不一致，已自动对齐 title='{slug}' 以避免 Kaggle slug 偏移")
+        title = slug
+
     metadata = {
         "id": f"{owner}/{slug}",
-        "title": args.title,
+        "title": title,
         "code_file": "kaggle/run_kaggle_job.py",
         "language": "python",
         "kernel_type": "script",
@@ -266,7 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build-dir", type=str, default=str(DEFAULT_BUILD_DIR))
     parser.add_argument("--owner", type=str, default="")
     parser.add_argument("--slug", type=str, default="high-dimensional-worldmodel-aggressive")
-    parser.add_argument("--title", type=str, default="HyperDream Aggressive Runner")
+    parser.add_argument("--title", type=str, default="")
     parser.add_argument("--private", dest="is_private", action="store_true")
     parser.add_argument("--public", dest="is_private", action="store_false")
     parser.set_defaults(is_private=True)
