@@ -1,16 +1,15 @@
 from pathlib import Path
+import argparse
 import sys
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import json
-from pathlib import Path
-
 import torch
 
 from envs.push_ball import PushBallNDEnv
-from models.policy import PolicyNetwork
+from experiments.common import default_run_id, find_latest_run, prepare_run_dirs, save_json
 
 
 def heuristic_policy(state: torch.Tensor, dim: int):
@@ -38,25 +37,51 @@ def eval_under_condition(dim: int, difficulty: str, episodes: int = 40):
     return success / episodes
 
 
+def resolve_run_id(exp_name: str, run_id: str | None, resume: bool) -> str:
+    if run_id:
+        return run_id
+    if resume:
+        latest = find_latest_run(exp_name)
+        if latest is not None:
+            return latest
+    return default_run_id()
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Robustness evaluation with persistent run outputs.")
+    parser.add_argument("--run-id", type=str, default=None)
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--episodes", type=int, default=50)
+    parser.add_argument("--dim", type=int, default=3)
+    return parser.parse_args()
+
+
 def run():
+    args = parse_args()
+    exp_name = "robustness"
+    run_id = resolve_run_id(exp_name, args.run_id, args.resume)
+    result_dir, _ = prepare_run_dirs(exp_name, run_id)
+
     rows = []
     for difficulty in ["easy", "medium", "hard"]:
         rows.append(
             {
                 "difficulty": difficulty,
-                "success_rate": eval_under_condition(dim=3, difficulty=difficulty, episodes=50),
+                "success_rate": eval_under_condition(dim=args.dim, difficulty=difficulty, episodes=args.episodes),
             }
         )
 
-    out = {"experiment": "robustness", "results": rows}
-    Path("results").mkdir(exist_ok=True)
-    with open("results/robustness.json", "w", encoding="utf-8") as f:
-        json.dump(out, f, indent=2, ensure_ascii=False)
+    out = {
+        "experiment": exp_name,
+        "run_id": run_id,
+        "results": rows,
+        "meta": {"episodes": args.episodes, "dim": args.dim},
+    }
+    save_json(result_dir / "robustness.json", out)
+    save_json(Path("results") / "robustness.json", out)
+    print(f"Saved {result_dir / 'robustness.json'}")
     print("Saved results/robustness.json")
 
 
 if __name__ == "__main__":
     run()
-
-
-

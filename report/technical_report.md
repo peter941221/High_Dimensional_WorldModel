@@ -11,12 +11,13 @@ This report summarizes the current MVP implementation status against `技术文�
 - World models implemented: MLP / GRU / RSSM (`models/`)
 - Training stack implemented: replay buffer, transfer utility, dream trainer (`training/`)
 - Policy optimization upgraded to imagination-based actor-critic (actor + value + target value)
+- Checkpoint/resume implemented for cross-session continuous training (model + optimizer + replay buffer + RNG + progress)
 - Experiment runners implemented (`experiments/run_*.py`)
 - Visualization pipeline implemented (`experiments/visualize.py`)
 
 ## 2. Validation Results
 
-- Full test suite: `18 passed`
+- Full test suite: `20 passed`
 - Command: `pytest -q`
 
 Key validated areas:
@@ -26,6 +27,7 @@ Key validated areas:
 - Buffer and transfer tests
 - Trainer epoch smoke test
 - Actor/critic parameter update regression test
+- Checkpoint round-trip and replay-buffer round-trip tests
 
 ## 3. Experiment Outputs (Current MVP)
 
@@ -59,3 +61,17 @@ Not yet complete:
 2. Upgrade policy optimization to full actor-critic (or Dreamer-style value learning).
 3. Add integration tests for checkpoint resume and long rollout stability.
 4. Automate experiment orchestration + aggregated summary report.
+
+## 6. Resume Workflow
+
+Example:
+
+```bash
+python experiments/run_baseline.py --run-id my_run --epochs 5
+python experiments/run_baseline.py --run-id my_run --resume --epochs 10
+```
+
+Result persistence:
+- Per-run outputs: `results/<experiment>/<run_id>/*.json`
+- Per-run checkpoints: `checkpoints/<experiment>/<run_id>/*.pt`
+- Compatibility summary: `results/<experiment>.json`

@@ -48,3 +48,21 @@ def test_sequence_integrity_within_single_episode():
         diffs = seq[1:] - seq[:-1]
         assert torch.all(diffs == diffs[0])
 
+
+def test_buffer_state_dict_round_trip():
+    buffer = ReplayBuffer(capacity=200)
+    buffer.add_episode(_episode(50))
+    buffer.add_episode(_episode(60))
+
+    state = buffer.state_dict()
+    clone = ReplayBuffer(capacity=1)
+    clone.load_state_dict(state)
+
+    assert clone.capacity == buffer.capacity
+    assert len(clone) == len(buffer)
+    assert len(clone.episodes) == len(buffer.episodes)
+    for a, b in zip(clone.episodes, buffer.episodes):
+        assert torch.allclose(a["states"], b["states"])
+        assert torch.allclose(a["actions"], b["actions"])
+        assert torch.allclose(a["rewards"], b["rewards"])
+

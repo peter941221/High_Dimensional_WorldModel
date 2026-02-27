@@ -79,3 +79,31 @@ class ReplayBuffer:
     def __len__(self) -> int:
         return self.total_steps
 
+    def state_dict(self) -> dict:
+        return {
+            "capacity": self.capacity,
+            "total_steps": self.total_steps,
+            "episodes": [
+                {
+                    "states": ep["states"].detach().cpu().clone(),
+                    "actions": ep["actions"].detach().cpu().clone(),
+                    "rewards": ep["rewards"].detach().cpu().clone(),
+                }
+                for ep in self.episodes
+            ],
+        }
+
+    def load_state_dict(self, state: dict) -> None:
+        self.capacity = int(state["capacity"])
+        self.total_steps = int(state["total_steps"])
+        self.episodes = []
+        for ep in state["episodes"]:
+            self.episodes.append(
+                {
+                    "states": ep["states"].float(),
+                    "actions": ep["actions"].float(),
+                    "rewards": ep["rewards"].float(),
+                }
+            )
+        self._trim_capacity()
+

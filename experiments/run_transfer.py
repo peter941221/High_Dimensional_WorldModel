@@ -1,15 +1,15 @@
 from pathlib import Path
+import argparse
 import sys
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import json
-from pathlib import Path
-
 import torch
 
 from envs.push_ball import PushBallNDEnv
+from experiments.common import default_run_id, find_latest_run, load_json, prepare_run_dirs, save_json
 from models.gru_world_model import GRUWorldModel
 from models.policy import PolicyNetwork
 from training.buffer import ReplayBuffer
@@ -44,62 +44,148 @@ def evaluate(env: PushBallNDEnv, policy: PolicyNetwork, episodes: int = 20) -> f
     return success / episodes
 
 
-def train_agent(dim: int, epochs: int):
-    env = PushBallNDEnv(dim=dim, difficulty="easy", max_steps=80)
+def resolve_run_id(exp_name: str, run_id: str | None, resume: bool) -> str:
+    if run_id:
+        return run_id
+    if resume:
+        latest = find_latest_run(exp_name)
+        if latest is not None:
+            return latest
+    return default_run_id()
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Cross-dimensional transfer with checkpoint resume support.")
+    parser.add_argument("--run-id", type=str, default=None)
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--pretrain-epochs", type=int, default=3)
+    parser.add_argument("--finetune-epochs", type=int, default=3)
+    parser.add_argument("--max-steps", type=int, default=80)
+    parser.add_argument("--eval-episodes", type=int, default=20)
+    return parser.parse_args()
+
+
+def make_trainer(dim: int, max_steps: int):
+    env = PushBallNDEnv(dim=dim, difficulty="easy", max_steps=max_steps)
     wm = GRUWorldModel(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
     policy = PolicyNetwork(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
     trainer = DreamTrainer(env=env, world_model=wm, policy=policy, buffer=ReplayBuffer(capacity=30_000))
-    for _ in range(4):
-        trainer.collect_episode(max_steps=80, random_policy=True)
-    for _ in range(epochs):
-        trainer.train_epoch(collect_episodes=2, wm_steps=8, policy_episodes=1)
     return env, wm, policy, trainer
 
 
+def bootstrap_if_empty(trainer: DreamTrainer, max_steps: int):
+    if len(trainer.buffer.episodes) == 0:
+        for _ in range(4):
+            trainer.collect_episode(max_steps=max_steps, random_policy=True)
+
+
 def run():
+    args = parse_args()
+    exp_name = "transfer"
+    run_id = resolve_run_id(exp_name, args.run_id, args.resume)
+    result_dir, checkpoint_dir = prepare_run_dirs(exp_name, run_id)
+    progress_path = result_dir / "progress.json"
+
+    progress = load_json(
+        progress_path,
+        default={"experiment": exp_name, "run_id": run_id, "results": [], "meta": {}},
+    )
+    results_by_src = {int(item["source_dim"]): item for item in progress.get("results", [])}
+
     source_dims = [2, 3, 4, 5, 6, 8]
     target_dim = 3
-    out = {"experiment": "transfer", "target_dim": target_dim, "results": []}
 
-    # Scratch baseline
-    env_scratch, _, policy_scratch, _ = train_agent(dim=target_dim, epochs=5)
-    baseline_success = evaluate(env_scratch, policy_scratch)
+    scratch_env, _, scratch_policy, scratch_trainer = make_trainer(dim=target_dim, max_steps=args.max_steps)
+    scratch_ckpt = checkpoint_dir / f"scratch_dim{target_dim}.pt"
+    if args.resume and scratch_ckpt.exists():
+        scratch_trainer.load_checkpoint(scratch_ckpt)
+        print(f"[transfer] resumed scratch baseline at epoch={scratch_trainer.train_epochs}")
+    else:
+        bootstrap_if_empty(scratch_trainer, args.max_steps)
+
+    for epoch in range(scratch_trainer.train_epochs, args.pretrain_epochs):
+        stats = scratch_trainer.train_epoch(collect_episodes=2, wm_steps=8, policy_episodes=1)
+        scratch_trainer.save_checkpoint(
+            scratch_ckpt,
+            extra={"stage": "scratch", "epoch": epoch + 1, "run_id": run_id, "wm_loss": stats.world_model_loss},
+        )
+    baseline_success = evaluate(scratch_env, scratch_policy, episodes=args.eval_episodes)
 
     for src_dim in source_dims:
-        _, src_wm, _, _ = train_agent(dim=src_dim, epochs=3)
-        tgt_env = PushBallNDEnv(dim=target_dim, difficulty="easy", max_steps=80)
-        tgt_wm = GRUWorldModel(state_dim=tgt_env.state_dim, action_dim=tgt_env.action_dim, hidden_dim=128)
-        tgt_policy = PolicyNetwork(state_dim=tgt_env.state_dim, action_dim=tgt_env.action_dim, hidden_dim=128)
+        src_env, src_wm, _, src_trainer = make_trainer(dim=src_dim, max_steps=args.max_steps)
+        src_ckpt = checkpoint_dir / f"source_dim{src_dim}.pt"
+        if args.resume and src_ckpt.exists():
+            src_trainer.load_checkpoint(src_ckpt)
+            print(f"[transfer] source {src_dim}D resumed at epoch={src_trainer.train_epochs}")
+        else:
+            bootstrap_if_empty(src_trainer, args.max_steps)
 
-        transfer = DimensionTransfer(source_dim=src_dim, target_dim=target_dim, transfer_strategy="hidden_only")
-        tgt_wm, transfer_stats = transfer.transfer(src_wm, tgt_wm)
+        for epoch in range(src_trainer.train_epochs, args.pretrain_epochs):
+            stats = src_trainer.train_epoch(collect_episodes=2, wm_steps=8, policy_episodes=1)
+            src_trainer.save_checkpoint(
+                src_ckpt,
+                extra={"stage": f"source_{src_dim}", "epoch": epoch + 1, "run_id": run_id, "wm_loss": stats.world_model_loss},
+            )
 
-        trainer = DreamTrainer(env=tgt_env, world_model=tgt_wm, policy=tgt_policy, buffer=ReplayBuffer(capacity=30_000))
-        for _ in range(3):
-            trainer.collect_episode(max_steps=80, random_policy=True)
-        for _ in range(3):
-            trainer.train_epoch(collect_episodes=2, wm_steps=6, policy_episodes=1)
+        tgt_env, tgt_wm, tgt_policy, tgt_trainer = make_trainer(dim=target_dim, max_steps=args.max_steps)
+        tgt_ckpt = checkpoint_dir / f"transfer_{src_dim}_to_{target_dim}.pt"
 
-        transfer_success = evaluate(tgt_env, tgt_policy)
-        out["results"].append(
-            {
-                "source_dim": src_dim,
-                "target_dim": target_dim,
-                "baseline_success": baseline_success,
-                "transfer_success": transfer_success,
-                "transfer_stats": transfer_stats,
-            }
-        )
+        transfer_stats = {"transferred": 0, "skipped": 0}
+        if args.resume and tgt_ckpt.exists():
+            tgt_trainer.load_checkpoint(tgt_ckpt)
+            print(f"[transfer] target {src_dim}->{target_dim} resumed at epoch={tgt_trainer.train_epochs}")
+        else:
+            transfer = DimensionTransfer(source_dim=src_dim, target_dim=target_dim, transfer_strategy="hidden_only")
+            tgt_wm, transfer_stats = transfer.transfer(src_wm, tgt_wm)
+            tgt_trainer.world_model.load_state_dict(tgt_wm.state_dict())
+            bootstrap_if_empty(tgt_trainer, args.max_steps)
+
+        for epoch in range(tgt_trainer.train_epochs, args.finetune_epochs):
+            stats = tgt_trainer.train_epoch(collect_episodes=2, wm_steps=6, policy_episodes=1)
+            tgt_trainer.save_checkpoint(
+                tgt_ckpt,
+                extra={
+                    "stage": f"transfer_{src_dim}_to_{target_dim}",
+                    "epoch": epoch + 1,
+                    "run_id": run_id,
+                    "transfer_stats": transfer_stats,
+                    "wm_loss": stats.world_model_loss,
+                },
+            )
+
+        transfer_success = evaluate(tgt_env, tgt_policy, episodes=args.eval_episodes)
+        results_by_src[src_dim] = {
+            "source_dim": src_dim,
+            "target_dim": target_dim,
+            "baseline_success": baseline_success,
+            "transfer_success": transfer_success,
+            "transfer_stats": transfer_stats,
+            "trained_epochs": tgt_trainer.train_epochs,
+            "gradient_steps": tgt_trainer.gradient_steps,
+        }
+        progress["results"] = [results_by_src[d] for d in sorted(results_by_src.keys())]
+        progress["meta"] = {
+            "pretrain_epochs": args.pretrain_epochs,
+            "finetune_epochs": args.finetune_epochs,
+            "max_steps": args.max_steps,
+            "eval_episodes": args.eval_episodes,
+            "target_dim": target_dim,
+        }
+        save_json(progress_path, progress)
         print(f"[transfer] {src_dim}D -> {target_dim}D success={transfer_success:.3f}")
 
-    Path("results").mkdir(exist_ok=True)
-    with open("results/transfer.json", "w", encoding="utf-8") as f:
-        json.dump(out, f, indent=2, ensure_ascii=False)
+    final_payload = {
+        "experiment": exp_name,
+        "run_id": run_id,
+        "target_dim": target_dim,
+        "results": [results_by_src[d] for d in sorted(results_by_src.keys())],
+        "meta": progress["meta"],
+    }
+    save_json(result_dir / "transfer.json", final_payload)
+    save_json(Path("results") / "transfer.json", final_payload)
+    print(f"Saved {result_dir / 'transfer.json'}")
     print("Saved results/transfer.json")
 
 
 if __name__ == "__main__":
     run()
-
-
-

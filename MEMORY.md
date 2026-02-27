@@ -15,3 +15,12 @@
 - Added assessment report at `report/technical_report.md` with coverage, metrics snapshot, and gap analysis.
 - Upgraded `DreamTrainer` from imitation-only policy updates to imagination-based actor-critic with `ValueNetwork` and target value soft update.
 - Added actor-critic parameter-update regression test and restored full suite pass (`18 passed`).
+- Added checkpoint/resume support to `DreamTrainer` (model/optimizer/buffer/RNG/progress serialization).
+- Added replay buffer state serialization (`state_dict`/`load_state_dict`) for true cross-session continuation.
+- Upgraded experiment scripts with persistent `run_id` directories and resume flags:
+  - `run_baseline.py --run-id ... --resume`
+  - `run_transfer.py --run-id ... --resume`
+  - `run_ablation.py --run-id ... --resume`
+  - `run_robustness.py` now writes run-scoped outputs too
+- Added checkpoint round-trip tests and buffer round-trip tests; full test suite now `20 passed`.
+- Smoke-validated resume flow on baseline/transfer/ablation with epoch continuation logs.

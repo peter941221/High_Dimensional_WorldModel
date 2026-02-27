@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+import random
 
 import torch
 import torch.nn.functional as F
@@ -51,6 +53,8 @@ class DreamTrainer:
         self.wm_optimizer = torch.optim.Adam(self.world_model.parameters(), lr=3e-4)
         self.actor_optimizer = torch.optim.Adam(self.policy.parameters(), lr=3e-4)
         self.value_optimizer = torch.optim.Adam(self.value_model.parameters(), lr=3e-4)
+        self.train_epochs = 0
+        self.gradient_steps = 0
 
     def collect_episode(self, max_steps: int = 200, random_policy: bool = False):
         state = self.env.reset()
@@ -146,6 +150,7 @@ class DreamTrainer:
             loss.backward()
             self.wm_optimizer.step()
             total += float(loss.item())
+            self.gradient_steps += 1
         return total / max(steps, 1)
 
     def _heuristic_targets(self, states: torch.Tensor) -> torch.Tensor:
@@ -232,6 +237,7 @@ class DreamTrainer:
 
             actor_total += float(actor_loss.item())
             value_total += float(value_loss.item())
+            self.gradient_steps += 2
 
         return actor_total / max(steps, 1), value_total / max(steps, 1)
 
@@ -250,8 +256,93 @@ class DreamTrainer:
             batch_size=64,
             imagine_horizon=5,
         )
-        return TrainStats(
+        stats = TrainStats(
             world_model_loss=wm_loss,
             actor_loss=actor_loss,
             value_loss=value_loss,
         )
+        self.train_epochs += 1
+        return stats
+
+    def save_checkpoint(self, path: str | Path, extra: dict | None = None) -> Path:
+        ckpt_path = Path(path)
+        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": 1,
+            "trainer": {
+                "gamma": self.gamma,
+                "actor_bc_coef": self.actor_bc_coef,
+                "train_epochs": self.train_epochs,
+                "gradient_steps": self.gradient_steps,
+            },
+            "env": {
+                "state_dim": int(self.env.state_dim),
+                "action_dim": int(self.env.action_dim),
+            },
+            "world_model": self.world_model.state_dict(),
+            "policy": self.policy.state_dict(),
+            "value_model": self.value_model.state_dict(),
+            "target_value_model": self.target_value_model.state_dict(),
+            "optimizers": {
+                "wm_optimizer": self.wm_optimizer.state_dict(),
+                "actor_optimizer": self.actor_optimizer.state_dict(),
+                "value_optimizer": self.value_optimizer.state_dict(),
+            },
+            "buffer": self.buffer.state_dict(),
+            "rng": {
+                "python_random": random.getstate(),
+                "torch_cpu": torch.get_rng_state(),
+                "torch_cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+            },
+            "extra": extra or {},
+        }
+        torch.save(payload, ckpt_path)
+        return ckpt_path
+
+    def load_checkpoint(
+        self,
+        path: str | Path,
+        map_location: str | torch.device | None = None,
+        strict: bool = True,
+        load_optimizers: bool = True,
+        load_buffer: bool = True,
+        load_rng: bool = True,
+    ) -> dict:
+        ckpt = torch.load(path, map_location=map_location or self.device)
+
+        env_meta = ckpt.get("env", {})
+        if strict:
+            if int(env_meta.get("state_dim", self.env.state_dim)) != int(self.env.state_dim):
+                raise ValueError("checkpoint state_dim does not match current env state_dim")
+            if int(env_meta.get("action_dim", self.env.action_dim)) != int(self.env.action_dim):
+                raise ValueError("checkpoint action_dim does not match current env action_dim")
+
+        self.world_model.load_state_dict(ckpt["world_model"])
+        self.policy.load_state_dict(ckpt["policy"])
+        self.value_model.load_state_dict(ckpt["value_model"])
+        self.target_value_model.load_state_dict(ckpt["target_value_model"])
+
+        if load_optimizers and "optimizers" in ckpt:
+            self.wm_optimizer.load_state_dict(ckpt["optimizers"]["wm_optimizer"])
+            self.actor_optimizer.load_state_dict(ckpt["optimizers"]["actor_optimizer"])
+            self.value_optimizer.load_state_dict(ckpt["optimizers"]["value_optimizer"])
+
+        if load_buffer and "buffer" in ckpt:
+            self.buffer.load_state_dict(ckpt["buffer"])
+
+        trainer_meta = ckpt.get("trainer", {})
+        self.gamma = float(trainer_meta.get("gamma", self.gamma))
+        self.actor_bc_coef = float(trainer_meta.get("actor_bc_coef", self.actor_bc_coef))
+        self.train_epochs = int(trainer_meta.get("train_epochs", 0))
+        self.gradient_steps = int(trainer_meta.get("gradient_steps", 0))
+
+        if load_rng and "rng" in ckpt:
+            rng = ckpt["rng"]
+            if "python_random" in rng:
+                random.setstate(rng["python_random"])
+            if "torch_cpu" in rng and rng["torch_cpu"] is not None:
+                torch.set_rng_state(rng["torch_cpu"])
+            if torch.cuda.is_available() and "torch_cuda" in rng and rng["torch_cuda"] is not None:
+                torch.cuda.set_rng_state_all(rng["torch_cuda"])
+
+        return ckpt.get("extra", {})

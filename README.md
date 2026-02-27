@@ -16,3 +16,12 @@ python experiments/run_baseline.py
 - RL environments and replay buffer
 - World models (MLP -> GRU -> RSSM)
 - Cross-dimensional transfer and robustness experiments
+
+## Resume Experiments
+
+Each training script now supports checkpoint-based resume with `--run-id` and `--resume`.
+
+```bash
+python experiments/run_baseline.py --run-id my_run --epochs 5
+python experiments/run_baseline.py --run-id my_run --resume --epochs 10
+```
