@@ -83,3 +83,13 @@
   - Updated notebooks (`06`, `07`) autorun command cells to include `--heartbeat-every 1` and `--push-after-each-stage`.
 - Fixed notebook command-cell indentation regression:
   - In `06_colab_auto_push_results.ipynb` and `07_colab_aggressive_oneclick.ipynb`, `--heartbeat-every` and `--push-after-each-stage` are now correctly inside the `cmd` list (no `IndentationError`).
+- Added Kaggle asynchronous workflow support:
+  - New script `kaggle_job_manager.py` with commands: `prepare`, `push`, `status`, `watch`, `output`, `run`.
+  - New Kaggle runtime files: `kaggle/run_kaggle_job.py`, `kaggle/run_config.example.json`, `kaggle/kernel-metadata.template.json`, `kaggle/README.md`.
+  - `kaggle_job_manager.py prepare` now builds `.kaggle_kernel_build/` bundle with generated `kernel-metadata.json` and `kaggle/run_config.json`.
+- Updated runtime flexibility for non-Colab platforms:
+  - `colab_autorun.py` now supports `--skip-repo-sync` and `--skip-install-deps`, enabling direct use inside packaged Kaggle kernels without git clone/pull.
+- Documentation and housekeeping:
+  - Updated `RUNBOOK.md` with Kaggle login timing and one-command batch run example.
+  - Updated `README.md` with Kaggle batch runner overview.
+  - Updated `.gitignore` to ignore local Kaggle build/output folders.

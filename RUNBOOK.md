@@ -59,3 +59,40 @@ python colab_autorun.py \
   --token-env GITHUB_TOKEN \
   --token-secret-name GITHUB_T
 ```
+
+## Kaggle Batch (No Keep-Tab-Alive)
+
+`kaggle_job_manager.py` 提供 `prepare / push / watch / output / run` 全流程。
+
+### 什么时候需要登录 Kaggle
+
+- `prepare`: 不需要登录（只打包本地文件）
+- `push / status / watch / output / run`: 需要已登录
+
+登录方式（二选一）：
+
+```bash
+# 方式A：环境变量
+set KAGGLE_USERNAME=your_name
+set KAGGLE_KEY=your_api_key
+
+# 方式B：~/.kaggle/kaggle.json
+```
+
+### 一键跑（推荐）
+
+```bash
+python kaggle_job_manager.py run \
+  --owner your_kaggle_username \
+  --slug high-dimensional-worldmodel-aggressive \
+  --title "HyperDream Aggressive Runner" \
+  --baseline-epochs 12 \
+  --transfer-pretrain-epochs 8 \
+  --transfer-finetune-epochs 8 \
+  --ablation-epochs 8 \
+  --robustness-episodes 120 \
+  --eval-episodes 40 \
+  --max-steps 120
+```
+
+输出会自动下载到 `kaggle_outputs/`。

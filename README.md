@@ -37,3 +37,17 @@ Checkpoint files include:
 - Use `--push-results-to-github` and provide token via environment variable (default: `GITHUB_TOKEN`).
 - For Colab Secrets workflow, set `--token-secret-name <your_secret_key>` (for example: `GITHUB_T`).
 - GitHub-only pipeline is supported (no Drive dependency required).
+
+## Kaggle Batch Runner
+
+Use `kaggle_job_manager.py` for asynchronous Kaggle workflow:
+
+```bash
+python kaggle_job_manager.py run --owner <your_kaggle_username>
+```
+
+It supports:
+- kernel bundle preparation
+- push to Kaggle
+- status polling
+- output download

@@ -109,6 +109,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo-url", type=str, default=DEFAULT_REPO_URL)
     parser.add_argument("--branch", type=str, default="main")
     parser.add_argument("--project-dir", type=str, default="/content/High_Dimensional_WorldModel")
+    parser.add_argument("--skip-repo-sync", action="store_true", help="Skip git clone/fetch/reset and use existing files in project-dir.")
+    parser.add_argument("--skip-install-deps", action="store_true", help="Skip pip install steps.")
 
     parser.add_argument("--run-id", type=str, default=None)
     parser.add_argument("--resume", action="store_true")
@@ -173,8 +175,15 @@ def main() -> None:
         "status": "running",
     }
 
-    ensure_repo(project_dir=project_dir, repo_url=args.repo_url, branch=args.branch)
-    install_dependencies(project_dir=project_dir)
+    if args.skip_repo_sync:
+        log("Skip repo sync enabled; using existing project files.")
+    else:
+        ensure_repo(project_dir=project_dir, repo_url=args.repo_url, branch=args.branch)
+
+    if args.skip_install_deps:
+        log("Skip dependency install enabled.")
+    else:
+        install_dependencies(project_dir=project_dir)
 
     def push_results(reason: str) -> None:
         if not args.push_results_to_github:
