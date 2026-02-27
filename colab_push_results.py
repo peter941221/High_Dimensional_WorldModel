@@ -42,6 +42,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--git-user-email", type=str, default="colab-bot@users.noreply.github.com")
     parser.add_argument("--include-checkpoints", action="store_true", help="Also push checkpoints for this run.")
     parser.add_argument("--allow-empty", action="store_true", help="Create commit even if no file changes.")
+    parser.add_argument(
+        "--check-token-only",
+        action="store_true",
+        help="Only validate token resolution and exit without git add/commit/push.",
+    )
     return parser.parse_args()
 
 
@@ -160,9 +165,13 @@ def restore_public_remote(repo_dir: Path, github_user: str, repo_name: str) -> N
 def main() -> None:
     args = parse_args()
     repo_dir = Path(args.repo_dir).resolve()
-    ensure_repo(repo_dir)
 
     token = resolve_token(token_env=args.token_env, token_secret_name=args.token_secret_name)
+    if args.check_token_only:
+        log("Token preflight passed.")
+        return
+
+    ensure_repo(repo_dir)
 
     run_cmd(["git", "config", "user.name", args.git_user_name], cwd=repo_dir)
     run_cmd(["git", "config", "user.email", args.git_user_email], cwd=repo_dir)

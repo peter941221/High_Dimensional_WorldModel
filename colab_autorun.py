@@ -18,7 +18,31 @@ def log(message: str) -> None:
 def run_cmd(cmd: list[str], cwd: Path | None = None) -> None:
     where = f" (cwd={cwd})" if cwd else ""
     log(f"RUN {' '.join(cmd)}{where}")
-    subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True)
+    try:
+        subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True)
+    except subprocess.CalledProcessError as exc:
+        log(f"FAILED (code={exc.returncode}): {' '.join(cmd)}")
+        raise
+
+
+def run_cmd_capture(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    where = f" (cwd={cwd})" if cwd else ""
+    log(f"RUN {' '.join(cmd)}{where}")
+    proc = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if proc.stdout:
+        print(proc.stdout, end="")
+    if proc.stderr:
+        print(proc.stderr, end="", file=sys.stderr)
+    if proc.returncode != 0:
+        log(f"FAILED (code={proc.returncode}): {' '.join(cmd)}")
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=proc.stdout, stderr=proc.stderr)
+    return proc
 
 
 def now_tag() -> str:
@@ -108,6 +132,31 @@ def main() -> None:
     ensure_repo(project_dir=project_dir, repo_url=args.repo_url, branch=args.branch)
     install_dependencies(project_dir=project_dir)
 
+    if args.push_results_to_github:
+        preflight_cmd = [
+            sys.executable,
+            "colab_push_results.py",
+            "--repo-dir",
+            str(project_dir),
+            "--run-id",
+            run_id,
+            "--branch",
+            args.push_branch,
+            "--base-branch",
+            args.base_branch,
+            "--github-user",
+            args.github_user,
+            "--repo-name",
+            args.repo_name,
+            "--token-env",
+            args.token_env,
+            "--token-secret-name",
+            args.token_secret_name,
+            "--check-token-only",
+        ]
+        run_cmd_capture(preflight_cmd, cwd=project_dir)
+        manifest["commands"].append(" ".join(preflight_cmd))
+
     if args.run_tests:
         cmd = [sys.executable, "-m", "pytest", "-q"]
         run_cmd(cmd, cwd=project_dir)
@@ -193,7 +242,7 @@ def main() -> None:
         ]
         if args.include_checkpoints_in_push:
             push_cmd.append("--include-checkpoints")
-        run_cmd(push_cmd, cwd=project_dir)
+        run_cmd_capture(push_cmd, cwd=project_dir)
         manifest["commands"].append(" ".join(push_cmd))
 
     manifest["status"] = "completed"

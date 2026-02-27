@@ -45,3 +45,12 @@
 - Improved Colab token robustness for refresh-and-run workflow:
   - `colab_push_results.py` now auto-detects token from multiple Colab Secret keys (`token-secret-name`, `GITHUB_TOKEN`, `GITHUB_1`, `GITHUB_T`, `GH_TOKEN`) and injects into `token-env`.
   - `notebooks/06_colab_auto_push_results.ipynb` now mirrors the same fallback strategy in its secret-loading cell, reducing manual edits after Colab runtime reset.
+- Added push-token preflight to `colab_autorun.py`:
+  - Before experiments, it now calls `colab_push_results.py --check-token-only` when `--push-results-to-github` is enabled, so token/config issues fail fast.
+- Improved failure diagnostics:
+  - `colab_autorun.py` push-related subcommands now capture and print full stdout/stderr before raising.
+  - `notebooks/06_colab_auto_push_results.ipynb` run cell now prints `RETURN CODE`, `STDOUT`, and `STDERR` to expose real failure causes directly.
+- Local validation executed:
+  - `pytest -q` passed (`21 passed`).
+  - `colab_push_results.py --check-token-only` validated both pass/fail paths.
+  - `colab_autorun.py` minimal smoke run completed successfully.
