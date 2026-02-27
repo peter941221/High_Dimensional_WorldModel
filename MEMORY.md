@@ -110,3 +110,10 @@
   - `kaggle/run_kaggle_job.py` now prefers dataset-mounted source extraction before fallback git clone/pull.
   - `kaggle_job_manager.py` now supports transient network retry on `status`/`output`, plus filtered output download (`--output-file-pattern`) to avoid large checkpoint download failures.
   - Verified complete run on Kaggle kernel `peter941221/high-dimensional-worldmodel-aggressive` with run id `kaggle_20260227_090002`; artifacts downloaded under `kaggle_outputs/`.
+- Launched a stronger Kaggle run directly from local manager:
+  - New run id `kaggle_20260227_093053` completed and outputs downloaded.
+  - Runtime flow: code dataset versioned -> kernel pushed (version 5) -> status complete -> outputs fetched with retry on transient SSL/network errors.
+  - Baseline (2/3/4/5/6/8D): `0.325/0.275/0.125/0.050/0.050/0.000`.
+  - Transfer to 3D (source 2/3/4/5/6/8D): `0.075/0.100/0.125/0.075/0.075/0.100`.
+  - Ablation (gru/mlp/rssm): `0.000/0.025/0.025`.
+  - Robustness (easy/medium/hard): `0.208/0.000/0.000`.
