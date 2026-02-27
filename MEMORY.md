@@ -69,3 +69,6 @@
 - Hardened aggressive notebook preflight cell:
   - Uses absolute script path (`/content/High_Dimensional_WorldModel/colab_push_results.py`) and `SECRET_NAME` variable (no hardcoded secret key).
   - Adds full `RETURN CODE` + `STDOUT/STDERR` diagnostics for fast token-permission troubleshooting.
+- Fixed push preflight false negative on existing `colab-results` history:
+  - `colab_push_results.py::ensure_push_access` now uses `git push --dry-run --force-with-lease` (aligned with real push command).
+  - Added clearer error branch for branch-protection policy rejections.

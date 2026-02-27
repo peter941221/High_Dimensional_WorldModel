@@ -169,7 +169,7 @@ def restore_public_remote(repo_dir: Path, github_user: str, repo_name: str) -> N
 
 def ensure_push_access(repo_dir: Path, branch: str) -> None:
     probe = subprocess.run(
-        ["git", "push", "--dry-run", "origin", f"HEAD:refs/heads/{branch}"],
+        ["git", "push", "--dry-run", "--force-with-lease", "origin", f"HEAD:refs/heads/{branch}"],
         cwd=str(repo_dir),
         check=False,
         text=True,
@@ -193,6 +193,11 @@ def ensure_push_access(repo_dir: Path, branch: str) -> None:
                 "- Fine-grained PAT: Repository access includes target repo + Contents=Read and write.\n"
                 "- Classic PAT: include `repo` scope.\n"
                 "- Confirm Colab Secret value is the token itself (not username).\n"
+            )
+        if "protected branch" in msg or "hook declined" in msg:
+            raise RuntimeError(
+                "Push dry-run blocked by branch protection/policy. "
+                "Choose another push branch (e.g., `colab-results`) or adjust branch rules."
             )
         raise RuntimeError("Git push dry-run failed. See logs above for details.")
 
