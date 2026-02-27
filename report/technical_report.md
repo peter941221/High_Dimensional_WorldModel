@@ -17,7 +17,7 @@ This report summarizes the current MVP implementation status against `技术文�
 
 ## 2. Validation Results
 
-- Full test suite: `20 passed`
+- Full test suite: `21 passed`
 - Command: `pytest -q`
 
 Key validated areas:
@@ -28,6 +28,7 @@ Key validated areas:
 - Trainer epoch smoke test
 - Actor/critic parameter update regression test
 - Checkpoint round-trip and replay-buffer round-trip tests
+- Checkpoint rotation tests (`latest/best/archive retention`)
 
 ## 3. Experiment Outputs (Current MVP)
 
@@ -75,3 +76,7 @@ Result persistence:
 - Per-run outputs: `results/<experiment>/<run_id>/*.json`
 - Per-run checkpoints: `checkpoints/<experiment>/<run_id>/*.pt`
 - Compatibility summary: `results/<experiment>.json`
+
+Checkpoint retention controls:
+- `--save-every N`: periodic archive cadence
+- `--keep-last K`: max archived checkpoints retained per worker

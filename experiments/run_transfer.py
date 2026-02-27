@@ -9,7 +9,14 @@ if str(ROOT) not in sys.path:
 import torch
 
 from envs.push_ball import PushBallNDEnv
-from experiments.common import default_run_id, find_latest_run, load_json, prepare_run_dirs, save_json
+from experiments.common import (
+    default_run_id,
+    find_latest_run,
+    load_json,
+    prepare_run_dirs,
+    rotate_checkpoint,
+    save_json,
+)
 from models.gru_world_model import GRUWorldModel
 from models.policy import PolicyNetwork
 from training.buffer import ReplayBuffer
@@ -62,6 +69,8 @@ def parse_args():
     parser.add_argument("--finetune-epochs", type=int, default=3)
     parser.add_argument("--max-steps", type=int, default=80)
     parser.add_argument("--eval-episodes", type=int, default=20)
+    parser.add_argument("--save-every", type=int, default=5, help="Archive checkpoint every N epochs (0 disables).")
+    parser.add_argument("--keep-last", type=int, default=5, help="How many archive checkpoints to keep.")
     return parser.parse_args()
 
 
@@ -109,6 +118,13 @@ def run():
             scratch_ckpt,
             extra={"stage": "scratch", "epoch": epoch + 1, "run_id": run_id, "wm_loss": stats.world_model_loss},
         )
+        rotate_checkpoint(
+            latest_path=scratch_ckpt,
+            epoch=epoch + 1,
+            metric=float(stats.world_model_loss),
+            save_every=args.save_every,
+            keep_last=args.keep_last,
+        )
     baseline_success = evaluate(scratch_env, scratch_policy, episodes=args.eval_episodes)
 
     for src_dim in source_dims:
@@ -125,6 +141,13 @@ def run():
             src_trainer.save_checkpoint(
                 src_ckpt,
                 extra={"stage": f"source_{src_dim}", "epoch": epoch + 1, "run_id": run_id, "wm_loss": stats.world_model_loss},
+            )
+            rotate_checkpoint(
+                latest_path=src_ckpt,
+                epoch=epoch + 1,
+                metric=float(stats.world_model_loss),
+                save_every=args.save_every,
+                keep_last=args.keep_last,
             )
 
         tgt_env, tgt_wm, tgt_policy, tgt_trainer = make_trainer(dim=target_dim, max_steps=args.max_steps)
@@ -152,6 +175,13 @@ def run():
                     "wm_loss": stats.world_model_loss,
                 },
             )
+            rotate_checkpoint(
+                latest_path=tgt_ckpt,
+                epoch=epoch + 1,
+                metric=float(stats.world_model_loss),
+                save_every=args.save_every,
+                keep_last=args.keep_last,
+            )
 
         transfer_success = evaluate(tgt_env, tgt_policy, episodes=args.eval_episodes)
         results_by_src[src_dim] = {
@@ -170,6 +200,8 @@ def run():
             "max_steps": args.max_steps,
             "eval_episodes": args.eval_episodes,
             "target_dim": target_dim,
+            "save_every": args.save_every,
+            "keep_last": args.keep_last,
         }
         save_json(progress_path, progress)
         print(f"[transfer] {src_dim}D -> {target_dim}D success={transfer_success:.3f}")

@@ -24,3 +24,5 @@
   - `run_robustness.py` now writes run-scoped outputs too
 - Added checkpoint round-trip tests and buffer round-trip tests; full test suite now `20 passed`.
 - Smoke-validated resume flow on baseline/transfer/ablation with epoch continuation logs.
+- Added automatic checkpoint rotation (`latest` + `best` + periodic `epochXXXX`) with retention control (`--save-every`, `--keep-last`).
+- Added `experiments/tests/test_common.py` for checkpoint rotation behavior; full test suite now `21 passed`.
