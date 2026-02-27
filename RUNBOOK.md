@@ -31,6 +31,18 @@ python experiments/run_baseline.py --run-id demo_run --resume --epochs 20
 python experiments/run_baseline.py --run-id demo_run --resume --epochs 30 --save-every 5 --keep-last 3
 ```
 
+## Train Until Target Success
+
+```bash
+python experiments/run_until_success.py \
+  --dim 3 \
+  --difficulty easy \
+  --target-success 0.70 \
+  --max-rounds 20 \
+  --epochs-per-round 2 \
+  --eval-episodes 40
+```
+
 ## Colab One-Click
 
 ```bash

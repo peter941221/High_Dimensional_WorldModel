@@ -7,6 +7,7 @@ import random
 import torch
 import torch.nn.functional as F
 
+from experiments.policy_guidance import guided_push_action, guided_push_action_batch
 from models.gru_world_model import GRUWorldModel
 from models.mlp_world_model import MLPWorldModel
 from models.policy import PolicyNetwork
@@ -68,8 +69,9 @@ class DreamTrainer:
                 action = torch.randn(self.env.action_dim).clamp(-1, 1)
             else:
                 with torch.no_grad():
-                    action = self.policy(state_t.unsqueeze(0)).squeeze(0).cpu()
-                action = (action + 0.15 * torch.randn_like(action)).clamp(-1, 1)
+                    model_action = self.policy(state_t.unsqueeze(0)).squeeze(0).cpu()
+                guide_action = guided_push_action(state_t, self.env.action_dim)
+                action = (0.3 * model_action + 0.7 * guide_action + 0.10 * torch.randn_like(model_action)).clamp(-1, 1)
 
             next_state, reward, done, _ = self.env.step(action)
             states.append(state_t)
@@ -154,17 +156,7 @@ class DreamTrainer:
         return total / max(steps, 1)
 
     def _heuristic_targets(self, states: torch.Tensor) -> torch.Tensor:
-        dim = self.env.action_dim
-        agent_pos = states[:, 0:dim]
-        ball_pos = states[:, 2 * dim : 3 * dim]
-        target_pos = states[:, 4 * dim : 5 * dim]
-
-        to_ball = ball_pos - agent_pos
-        to_target = target_pos - ball_pos
-        far_mask = (torch.linalg.norm(to_ball, dim=-1, keepdim=True) > 0.8).float()
-        mixed = 0.25 * to_ball + 0.75 * to_target
-        actions = far_mask * to_ball + (1.0 - far_mask) * mixed
-        return actions.clamp(-1.0, 1.0)
+        return guided_push_action_batch(states, self.env.action_dim)
 
     def _soft_update_target_value(self, tau: float = 0.02):
         with torch.no_grad():

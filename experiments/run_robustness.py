@@ -10,17 +10,11 @@ import torch
 
 from envs.push_ball import PushBallNDEnv
 from experiments.common import default_run_id, find_latest_run, prepare_run_dirs, save_json
+from experiments.policy_guidance import guided_push_action
 
 
 def heuristic_policy(state: torch.Tensor, dim: int):
-    agent_pos = state[:dim]
-    ball_pos = state[2 * dim : 3 * dim]
-    target_pos = state[4 * dim : 5 * dim]
-    to_ball = ball_pos - agent_pos
-    to_target = target_pos - ball_pos
-    if torch.linalg.norm(to_ball).item() > 0.8:
-        return to_ball.clamp(-1, 1)
-    return (0.2 * to_ball + 0.8 * to_target).clamp(-1, 1)
+    return guided_push_action(state, dim)
 
 
 def eval_under_condition(dim: int, difficulty: str, episodes: int = 40, heartbeat_every: int = 10):

@@ -31,6 +31,14 @@ Checkpoint files include:
 - `*_best.pt`: best world-model-loss snapshot
 - `*_epochXXXX.pt`: periodic archives (controlled by `--save-every` and `--keep-last`)
 
+## Train Until Success Threshold
+
+Use iterative rounds and stop automatically once success-rate reaches target:
+
+```bash
+python experiments/run_until_success.py --dim 3 --difficulty easy --target-success 0.70
+```
+
 ## Colab Auto Push
 
 - `colab_autorun.py` now supports pushing result artifacts to GitHub branch automatically.

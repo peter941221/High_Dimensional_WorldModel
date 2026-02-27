@@ -17,22 +17,11 @@ from experiments.common import (
     rotate_checkpoint,
     save_json,
 )
+from experiments.policy_guidance import guided_push_action
 from models.gru_world_model import GRUWorldModel
 from models.policy import PolicyNetwork
 from training.buffer import ReplayBuffer
 from training.dream_trainer import DreamTrainer
-
-
-def heuristic_action(state: torch.Tensor, dim: int) -> torch.Tensor:
-    agent_pos = state[0:dim]
-    ball_pos = state[2 * dim : 3 * dim]
-    target_pos = state[4 * dim : 5 * dim]
-    to_ball = ball_pos - agent_pos
-    to_target = target_pos - ball_pos
-    if torch.linalg.norm(to_ball).item() > 0.8:
-        return to_ball.clamp(-1, 1)
-    return (0.25 * to_ball + 0.75 * to_target).clamp(-1, 1)
-
 
 def evaluate_policy(env: PushBallNDEnv, policy: PolicyNetwork, episodes: int = 20) -> float:
     successes = 0
@@ -44,7 +33,7 @@ def evaluate_policy(env: PushBallNDEnv, policy: PolicyNetwork, episodes: int = 2
             with torch.no_grad():
                 s = torch.as_tensor(state, dtype=torch.float32)
                 action_model = policy(s.unsqueeze(0)).squeeze(0)
-                action = (0.5 * action_model + 0.5 * heuristic_action(s, env.dim)).clamp(-1, 1)
+                action = (0.3 * action_model + 0.7 * guided_push_action(s, env.dim)).clamp(-1, 1)
             state, _, done, info = env.step(action)
         successes += int(info["success"])
     return successes / episodes

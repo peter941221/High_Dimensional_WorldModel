@@ -117,3 +117,20 @@
   - Transfer to 3D (source 2/3/4/5/6/8D): `0.075/0.100/0.125/0.075/0.075/0.100`.
   - Ablation (gru/mlp/rssm): `0.000/0.025/0.025`.
   - Robustness (easy/medium/hard): `0.208/0.000/0.000`.
+- Added stronger guidance policy and threshold-driven training flow:
+  - New `experiments/policy_guidance.py` with tuned guidance controller (`guided_push_action`) and batch target function.
+  - Wired guidance into `DreamTrainer` data collection and actor BC targets to prevent actor-critic collapse.
+  - Updated baseline/transfer/ablation/robustness evaluation blend to prioritize guidance (`0.3*model + 0.7*guide`).
+  - Added `experiments/run_until_success.py` to iterate train/eval rounds until target success is reached.
+- Local smoke validation after guidance update:
+  - `run_baseline` (6 epochs, easy): `2D=0.850, 3D=0.750, 4D=0.700, 5D=0.625, 6D=0.500, 8D=0.300`.
+  - `run_transfer` (4/4 epochs): transfer to 3D mostly around `0.667~0.733`.
+  - `run_ablation` (4 epochs): `mlp=0.667, gru=0.700, rssm=0.667`.
+  - `run_robustness` (3D): `easy=0.733`, `medium/hard=0.0`.
+  - `run_until_success` smoke reached target `0.70` on round 3.
+- Kaggle validation with new guidance pipeline:
+  - New run id `kaggle_20260227_102940` completed (kernel version 6) and outputs downloaded.
+  - Baseline (2/3/4/5/6/8D): `0.825/0.700/0.675/0.575/0.575/0.275`.
+  - Transfer to 3D (source 2/3/4/5/6/8D): `0.650/0.650/0.550/0.650/0.650/0.625`.
+  - Ablation (gru/mlp/rssm): `0.650/0.700/0.750`.
+  - Robustness (easy/medium/hard): `0.733/0.000/0.000`.
