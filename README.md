@@ -109,16 +109,16 @@ python experiments/run_p0_baseline_freeze.py \
   --robustness-episodes 120
 ```
 
-### 2) P2 v2 recommendation (robustness-focused randomization)
+### 2) Robustness recommendation (hard-only, scale 0.20)
 
 ```bash
 python experiments/run_p0_baseline_freeze.py \
-  --run-id-prefix p2_v2_5seed \
+  --run-id-prefix p2_hard020_5seed \
   --seeds 11 22 33 44 55 \
   --domain-rand \
   --domain-rand-scope robustness_only \
-  --robustness-domain-rand-difficulties medium_hard \
-  --domain-rand-scale 0.10 \
+  --robustness-domain-rand-difficulties hard_only \
+  --domain-rand-scale 0.20 \
   --domain-rand-profile conservative \
   --domain-rand-warmup-episodes 200 \
   --domain-rand-warmup-epochs 8 \
@@ -135,8 +135,8 @@ python experiments/run_p0_baseline_freeze.py \
 ```bash
 python experiments/significance_report.py \
   --a-prefix p0_freeze_5seed \
-  --b-prefix p2_v2_5seed \
-  --report-name release_significance_p0_vs_p2v2_5seed
+  --b-prefix p2_hard020_5seed \
+  --report-name release_significance_p0_vs_p2hard020_5seed
 ```
 
 ## ☁️ Kaggle (No Colab)

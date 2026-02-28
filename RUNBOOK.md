@@ -25,7 +25,7 @@ python experiments/run_baseline.py \
   --run-id p2_baseline_seed11 \
   --seed 11 \
   --domain-rand \
-  --domain-rand-scale 0.10 \
+  --domain-rand-scale 0.20 \
   --domain-rand-profile conservative \
   --domain-rand-warmup-episodes 200 \
   --domain-rand-warmup-epochs 8 \
@@ -35,12 +35,12 @@ python experiments/run_baseline.py \
 
 ```bash
 python experiments/run_p0_baseline_freeze.py \
-  --run-id-prefix p2_conservative_v2 \
+  --run-id-prefix p2_conservative_hard020 \
   --seeds 11 22 33 \
   --domain-rand \
   --domain-rand-scope robustness_only \
-  --robustness-domain-rand-difficulties medium_hard \
-  --domain-rand-scale 0.10 \
+  --robustness-domain-rand-difficulties hard_only \
+  --domain-rand-scale 0.20 \
   --domain-rand-profile conservative \
   --domain-rand-warmup-episodes 200 \
   --domain-rand-warmup-epochs 8 \

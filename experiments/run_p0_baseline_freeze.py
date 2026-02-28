@@ -91,11 +91,11 @@ def parse_args():
         choices=["all", "robustness_only", "train_only"],
         help="Where to apply domain randomization in orchestrated runs.",
     )
-    parser.add_argument("--domain-rand-scale", type=float, default=0.15, help="Relative randomization scale.")
+    parser.add_argument("--domain-rand-scale", type=float, default=0.20, help="Relative randomization scale.")
     parser.add_argument(
         "--domain-rand-profile",
         type=str,
-        default="full",
+        default="conservative",
         choices=["full", "conservative"],
         help="Domain randomization parameter profile.",
     )
@@ -114,7 +114,7 @@ def parse_args():
     parser.add_argument(
         "--robustness-domain-rand-difficulties",
         type=str,
-        default="all",
+        default="hard_only",
         choices=["all", "medium_hard", "hard_only"],
         help="Difficulty scope for robustness randomization.",
     )
