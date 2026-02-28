@@ -12,6 +12,9 @@ pip install -r requirements.txt
 pytest -q
 ```
 
+说明：
+- 已通过 `pytest.ini` 屏蔽 `kaggle_outputs/` 与临时构建目录，直接执行上面的命令即可全量回归。
+
 ## Baseline
 
 ```bash
@@ -173,3 +176,36 @@ python kaggle_job_manager.py run \
 说明：
 - 默认启用 `--use-code-dataset`，会先把项目源码上传为 Kaggle Dataset，再由 Kernel 从 `/kaggle/input/...` 读取，避免运行时依赖 GitHub 网络解析。
 - 可通过 `--seed` 透传到 `baseline/transfer/ablation/robustness` 四个实验脚本，便于和本地配对复现。
+
+## Kaggle Smoke Validation (2 Seeds, hard_only + 0.20)
+
+```bash
+python kaggle_job_manager.py \
+  --owner your_kaggle_username \
+  --slug high-dimensional-worldmodel-aggressive \
+  --code-dataset-slug high-dimensional-worldmodel-src \
+  --title high-dimensional-worldmodel-aggressive \
+  --run-id kg_smoke_hard020_s11_YYYYMMDD \
+  --seed 11 \
+  --baseline-epochs 1 \
+  --transfer-pretrain-epochs 1 \
+  --transfer-finetune-epochs 1 \
+  --ablation-epochs 1 \
+  --robustness-episodes 20 \
+  --eval-episodes 8 \
+  --max-steps 60 \
+  --robustness-domain-rand \
+  --robustness-domain-rand-scale 0.20 \
+  --robustness-domain-rand-profile conservative \
+  --robustness-domain-rand-difficulties hard_only \
+  --robustness-domain-rand-warmup-episodes 20 \
+  --robustness-domain-rand-warmup-epochs 0 \
+  --watch-interval 30 \
+  --watch-timeout-minutes 180 \
+  run
+```
+
+将 `--seed` 和 `--run-id` 换成 `22` 再跑一遍，即可得到 2-seed smoke 数据。
+已生成参考报告：
+- `report/kaggle_smoke_hard020_2seed_summary.md`
+- `report/kaggle_smoke_vs_hifinal_hard020_overlap2_significance.md`

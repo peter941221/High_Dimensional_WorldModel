@@ -191,3 +191,6 @@ python kaggle_job_manager.py run \
 - `RUNBOOK.md` for execution commands.
 - `report/` for technical and significance reports.
 - `改造计划.MD` for phased roadmap (P0 -> P6).
+- Latest smoke validation reports:
+  - `report/kaggle_smoke_hard020_2seed_summary.md`
+  - `report/kaggle_smoke_vs_hifinal_hard020_overlap2_significance.md`
