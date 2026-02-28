@@ -1,8 +1,93 @@
-# HyperDream: Higher-Dimensional World Models for Cross-Dimensional Transfer
+# HyperDream
+### 🌌 Higher-Dimensional World Models for Cross-Dimensional Transfer
 
-Research codebase for training world models in N-dimensional physics environments and studying transfer to 3D tasks.
+Train world models in N-dimensional physics, then transfer policies back to 3D tasks with reproducible, staged validation.
 
-## Quick Start
+```text
+Core Idea
+├─ Learn in flexible N-D simulation
+├─ Transfer structure across dimensions
+└─ Validate robustness with reproducible seed-based reports
+```
+
+## ✨ Why This Repo
+
+- 🎯 Build a research-grade playground for **world model + transfer** experiments.
+- 🧪 Keep everything measurable via **multi-seed summaries** and **significance reports**.
+- 🚚 Run locally or on Kaggle with one operational path (**no Colab dependency**).
+
+## 🧱 System Map
+
+```text
+[Physics Engine (N-D)]
+        |
+        v
+[PushBallNDEnv]
+        |
+        v
+[World Model]
+  |---- MLP
+  |---- GRU
+  |---- RSSM
+  |---- Physics+Residual
+        |
+        v
+[DreamTrainer + ReplayBuffer]
+        |
+        v
+[Experiments]
+  |---- baseline
+  |---- transfer
+  |---- ablation
+  |---- robustness
+  |---- curriculum
+  |---- hifi_migration
+```
+
+## 🚦 Current Status
+
+```text
+Roadmap
+├─ P0 Baseline Freeze: ✅
+├─ P1 Semantic Interface Lock: ✅
+├─ P2 Domain Randomization: ✅
+├─ P3 Physics+Residual Model: ✅
+├─ P4 Curriculum Runner: ✅
+├─ P5 Aggregate Reporting: ✅
+├─ P6 Hi-Fi Proxy Migration: ✅
+└─ De-Colab + Kaggle Consistency: ✅
+```
+
+## 📊 Snapshot
+
+### Release comparison (5 seeds, paired exact sign-flip)
+
+| KPI | Delta (P2_v2 - P0) | p-value | Significant @0.05 |
+| --- | ---: | ---: | --- |
+| baseline_success_dim3 | 0.0000 | 1.0000 | No |
+| baseline_success_dim4 | 0.0000 | 1.0000 | No |
+| transfer_success_mean | 0.0000 | 1.0000 | No |
+| transfer_gain_mean | 0.0000 | 1.0000 | No |
+| robust_easy | 0.0000 | 1.0000 | No |
+| robust_medium | +0.0500 | 0.0625 | No (trend up) |
+| robust_hard | -0.0167 | 0.0625 | No |
+
+Source: `report/release_significance_p0_vs_p2v2_5seed.md`
+
+### Latest P0 freeze (9 seeds) summary mean
+
+| KPI | Mean |
+| --- | ---: |
+| baseline_success_dim3 | 0.7306 |
+| baseline_success_dim4 | 0.6556 |
+| transfer_success_mean | 0.6301 |
+| transfer_gain_mean | 0.0162 |
+| robust_medium | 0.2417 |
+| robust_hard | 0.1667 |
+
+Source: `results/p0_freeze/p0_freeze_9seed/p0_summary.json`
+
+## 🚀 Quick Start
 
 ```bash
 pip install -r requirements.txt
@@ -10,69 +95,9 @@ pytest -q
 python experiments/run_baseline.py
 ```
 
-## Scope
+## 🔁 Repro Workflows
 
-- N-dimensional physics simulator
-- RL environments and replay buffer
-- World models (MLP -> GRU -> RSSM)
-- Cross-dimensional transfer and robustness experiments
-
-## Phase Roadmap (P0 -> P6)
-
-- P0: `experiments/run_p0_baseline_freeze.py` for multi-seed release baseline/freeze.
-- P1: state semantics lock + checkpoint compatibility guard.
-- P2: conservative domain randomization with warmup/scope/stage multipliers.
-- P3: `PhysicsResidualWorldModel` (physics prior + learnable residual).
-- P4: `experiments/run_curriculum.py` for threshold-driven easy->medium->hard curriculum.
-- P5: `experiments/aggregate_report.py` for cross-run KPI aggregation.
-- P6: `envs/high_fidelity_proxy.py` + `experiments/run_hifi_migration.py` for proxy hi-fi migration.
-
-## Resume Experiments
-
-Each training script now supports checkpoint-based resume with `--run-id` and `--resume`.
-
-```bash
-python experiments/run_baseline.py --run-id my_run --epochs 5
-python experiments/run_baseline.py --run-id my_run --resume --epochs 10
-```
-
-Checkpoint files include:
-- `*_latest.pt`: last epoch snapshot
-- `*_best.pt`: best world-model-loss snapshot
-- `*_epochXXXX.pt`: periodic archives (controlled by `--save-every` and `--keep-last`)
-
-## Train Until Success Threshold
-
-Use iterative rounds and stop automatically once success-rate reaches target:
-
-```bash
-python experiments/run_until_success.py --dim 3 --difficulty easy --target-success 0.70
-```
-
-## Execution Policy
-
-- Local + Kaggle only.
-- Colab workflow has been removed from active pipeline.
-
-## Kaggle Batch Runner
-
-Use `kaggle_job_manager.py` for asynchronous Kaggle workflow:
-
-```bash
-python kaggle_job_manager.py run --owner <your_kaggle_username> --seed 11
-```
-
-It supports:
-- kernel bundle preparation
-- code dataset packaging/versioning (for network-independent source loading)
-- push to Kaggle
-- status polling
-- output download
-- seed forwarding to all experiment runners (`baseline/transfer/ablation/robustness`)
-
-## P0 Baseline Freeze
-
-Use `experiments/run_p0_baseline_freeze.py` to run baseline/transfer/robustness across multiple seeds and generate a single summary report (`mean/std`) for migration-safe baselines.
+### 1) Baseline freeze (multi-seed)
 
 ```bash
 python experiments/run_p0_baseline_freeze.py \
@@ -84,13 +109,7 @@ python experiments/run_p0_baseline_freeze.py \
   --robustness-episodes 120
 ```
 
-## P2 Domain Randomization
-
-`PushBallNDEnv` now supports per-episode physics randomization (`domain_randomization`, `domain_rand_scale`) to reduce sim-gap and improve robustness. Experiment runners expose this via `--domain-rand --domain-rand-scale`.
-Use `--domain-rand-profile conservative` and `--domain-rand-warmup-episodes <N>` for safer staged randomization.
-Use `--domain-rand-warmup-epochs <N>` for epoch-linked warmup and transfer multipliers (`--domain-rand-source-multiplier`, `--domain-rand-finetune-multiplier`) to make finetune-stage randomization weaker.
-
-Current migration-safe recommendation:
+### 2) P2 v2 recommendation (robustness-focused randomization)
 
 ```bash
 python experiments/run_p0_baseline_freeze.py \
@@ -111,22 +130,7 @@ python experiments/run_p0_baseline_freeze.py \
   --robustness-episodes 120
 ```
 
-## P3/P4/P5/P6 Additions
-
-- P3: `PhysicsResidualWorldModel` (physics prior + learnable residual).
-- P4: `experiments/run_curriculum.py` for threshold-driven easy->medium->hard curriculum.
-- P5: `experiments/aggregate_report.py` for multi-run KPI summary reports.
-- P6: `envs/high_fidelity_proxy.py` + `experiments/run_hifi_migration.py` for proxy high-fidelity migration evaluation.
-
-## Release Freeze + Significance (5 Seeds)
-
-Release freeze should use:
-
-```bash
-pytest -q .
-```
-
-5-seed paired significance report:
+### 3) Significance report
 
 ```bash
 python experiments/significance_report.py \
@@ -135,16 +139,55 @@ python experiments/significance_report.py \
   --report-name release_significance_p0_vs_p2v2_5seed
 ```
 
-Outputs:
-- `report/release_significance_p0_vs_p2v2_5seed.json`
-- `report/release_significance_p0_vs_p2v2_5seed.md`
+## ☁️ Kaggle (No Colab)
 
-Latest 5-seed result snapshot (paired exact sign-flip, alpha=0.05):
-- No KPI crossed `p < 0.05` with `n=5`.
-- `robust_medium`: `+0.0500`, `p=0.0625` (trend up, not significant yet).
-- `robust_hard`: `-0.0167`, `p=0.0625` (small drop, not significant yet).
-- Baseline and transfer KPIs were unchanged between the two prefixes.
+```text
+Runtime Policy
+├─ Local + Kaggle only
+└─ Colab path removed from active pipeline
+```
 
-Interpretation rule:
-- If `p < 0.05`: treat as statistically significant difference for this paired setup.
-- If `p >= 0.05`: treat as "insufficient evidence" (do not claim real improvement/regression yet).
+```bash
+python kaggle_job_manager.py run \
+  --owner <your_kaggle_username> \
+  --slug high-dimensional-worldmodel-aggressive \
+  --seed 11
+```
+
+- Direct stage execution inside kernel: baseline/transfer/ablation/robustness.
+- `run_id` and `seed` are verified to propagate end-to-end.
+
+## 🗂️ Project Layout
+
+```text
+.
+├─ envs/
+├─ physics/
+├─ models/
+├─ training/
+├─ experiments/
+├─ kaggle/
+├─ report/
+├─ results/
+└─ RUNBOOK.md
+```
+
+## 🧩 GitHub About (Copy/Paste)
+
+### Description
+
+`Higher-dimensional world models for cross-dimensional transfer: reproducible N-D physics training, robustness evaluation, and Kaggle-ready experiment orchestration.`
+
+### Website
+
+`(optional) link to your latest report or project page`
+
+### Topics
+
+`reinforcement-learning, world-model, model-based-rl, transfer-learning, simulation, physics, pytorch, kaggle, reproducibility, research`
+
+## 📘 More Docs
+
+- `RUNBOOK.md` for execution commands.
+- `report/` for technical and significance reports.
+- `改造计划.MD` for phased roadmap (P0 -> P6).
