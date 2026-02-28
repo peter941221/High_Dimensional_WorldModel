@@ -391,3 +391,88 @@
 - README updated with:
   - P0/P2 reproducible command blocks (5-seed).
   - release-freeze + significance workflow and interpretation notes.
+- Added end-to-end seed forwarding for Kaggle/Colab automation:
+  - `colab_autorun.py` now supports `--seed` and forwards it to:
+    - `experiments/run_baseline.py`
+    - `experiments/run_transfer.py`
+    - `experiments/run_ablation.py`
+    - `experiments/run_robustness.py`
+  - `kaggle_job_manager.py` now supports `--seed` and writes it into `kaggle/run_config.json`.
+  - `kaggle/run_kaggle_job.py` now forwards config `seed` into the generated `colab_autorun.py` command.
+  - Updated docs/examples:
+    - `kaggle/run_config.example.json` adds `"seed": 11`
+    - `RUNBOOK.md` Kaggle one-click example includes `--seed`
+    - `README.md` Kaggle quick-start mentions seed forwarding.
+  - Validation:
+    - `python colab_autorun.py --help` shows `--seed`
+    - `python kaggle_job_manager.py --help` shows `--seed`
+    - `python - <<...>>` check confirmed `kaggle/run_kaggle_job.py::build_cmd(...)` includes `--seed 11`.
+- Removed Colab runtime path and switched to direct Local/Kaggle execution:
+  - Deleted obsolete Colab entry scripts:
+    - `colab_autorun.py`
+    - `colab_push_results.py`
+  - Refactored `kaggle/run_kaggle_job.py`:
+    - no longer calls `colab_autorun.py`
+    - runs experiment stages directly (`run_baseline.py`, `run_transfer.py`, `run_ablation.py`, `run_robustness.py`, optional `visualize.py`)
+    - supports shared common args (`run_id`, `seed`, `resume`, `max_steps`, `eval_episodes`, `save_every`, `keep_last`)
+    - records per-stage elapsed time in summary JSON.
+  - Updated `kaggle_job_manager.py`:
+    - removed Colab file packaging dependencies from `INCLUDE_FILES`
+    - runtime args simplified (removed Colab push-related args, added `--skip-visualize`)
+    - `to_run_config(...)` now writes no Colab-specific push config.
+  - Updated docs/config:
+    - `README.md` removes Colab section and states Local+Kaggle policy.
+    - `RUNBOOK.md` removes Colab command sections and marks Colab entry removed.
+    - `kaggle/run_config.example.json` removed Colab push fields and added `skip_visualize`.
+    - `kaggle/README.md` now states runner is direct (no Colab dependency).
+  - Validation:
+    - `python kaggle_job_manager.py --help` passed (new CLI shape).
+    - `python -m py_compile kaggle_job_manager.py kaggle/run_kaggle_job.py` passed.
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-aggressive --code-dataset-slug high-dimensional-worldmodel-src --title high-dimensional-worldmodel-aggressive prepare` passed.
+    - inline check confirmed `build_stage_cmds(...)` generates direct experiment commands and contains no `colab_autorun.py`.
+- Removed Colab-only notebooks to enforce single operation path:
+  - deleted:
+    - `notebooks/05_colab_step_by_step.ipynb`
+    - `notebooks/06_colab_auto_push_results.ipynb`
+    - `notebooks/07_colab_aggressive_oneclick.ipynb`
+- Executed post-decolab Kaggle end-to-end smoke (`prepare -> push -> watch -> output`):
+  - Command path: `python kaggle_job_manager.py ... run`
+  - Exit code: `0`
+  - Total duration: `~498s` (`~8m18s`)
+  - Kernel final status: `complete`
+  - Output artifacts downloaded under:
+    - `kaggle_outputs/high-dimensional-worldmodel-aggressive.log`
+    - `kaggle_outputs/hyperdream_kaggle_summary.json`
+    - `kaggle_outputs/High_Dimensional_WorldModel/results/...` (`baseline/transfer/ablation/robustness`)
+  - Validation conclusion:
+    - direct Kaggle runner chain is operational after Colab removal.
+- Fixed Kaggle run-config propagation bug (run_id/seed fallback to defaults):
+  - Root cause:
+    - runtime log showed `run_config.json not found, using built-in defaults`, causing `run_id` auto timestamp and `seed=null`.
+  - Fixes:
+    - `kaggle_job_manager.py` now injects `kaggle/run_config.json` into `project_bundle.zip` during code-dataset build.
+    - `kaggle/run_kaggle_job.py` now:
+      - supports richer config candidate paths (script dir, cwd variants, legacy path, project path)
+      - reloads config after dataset extraction/repo preparation (`root/kaggle/run_config.json`) so mounted config overrides defaults
+      - includes `seed` in summary output.
+  - Validation:
+    - local compile pass: `python -m py_compile kaggle_job_manager.py kaggle/run_kaggle_job.py`
+    - local packaging check: code dataset zip contains `kaggle/run_config.json`
+    - final Kaggle E2E consistency run:
+      - command run-id: `kaggle_cfgverify2_20260228`, seed: `11`
+      - exit code: `0`, runtime: `108.9s`
+      - `kaggle_outputs/hyperdream_kaggle_summary.json`: `run_id=kaggle_cfgverify2_20260228`, `seed=11`
+      - `kaggle_outputs/High_Dimensional_WorldModel/results/baseline.json`: `run_id=kaggle_cfgverify2_20260228`, `meta.seed=11`
+      - conclusion: PASS.
+
+## 2026-02-28 10:40:00 - Kaggle E2E cfg verify (issue + resolved)
+- Initial check detected mismatch:
+  - command run_id: `kaggle_cfgverify_20260228`
+  - expected seed: `11`
+  - observed summary/baseline: auto run_id + `seed=null`
+- Follow-up fix applied (run_config injection + post-extract reload), then re-verified:
+  - command run_id: `kaggle_cfgverify2_20260228`
+  - observed summary: `run_id=kaggle_cfgverify2_20260228`, `seed=11`
+  - observed baseline: `run_id=kaggle_cfgverify2_20260228`, `meta.seed=11`
+- Final status: resolved (PASS).
+

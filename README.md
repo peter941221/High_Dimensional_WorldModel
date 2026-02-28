@@ -49,19 +49,17 @@ Use iterative rounds and stop automatically once success-rate reaches target:
 python experiments/run_until_success.py --dim 3 --difficulty easy --target-success 0.70
 ```
 
-## Colab Auto Push
+## Execution Policy
 
-- `colab_autorun.py` now supports pushing result artifacts to GitHub branch automatically.
-- Use `--push-results-to-github` and provide token via environment variable (default: `GITHUB_TOKEN`).
-- For Colab Secrets workflow, set `--token-secret-name <your_secret_key>` (for example: `GITHUB_T`).
-- GitHub-only pipeline is supported (no Drive dependency required).
+- Local + Kaggle only.
+- Colab workflow has been removed from active pipeline.
 
 ## Kaggle Batch Runner
 
 Use `kaggle_job_manager.py` for asynchronous Kaggle workflow:
 
 ```bash
-python kaggle_job_manager.py run --owner <your_kaggle_username>
+python kaggle_job_manager.py run --owner <your_kaggle_username> --seed 11
 ```
 
 It supports:
@@ -70,6 +68,7 @@ It supports:
 - push to Kaggle
 - status polling
 - output download
+- seed forwarding to all experiment runners (`baseline/transfer/ablation/robustness`)
 
 ## P0 Baseline Freeze
 

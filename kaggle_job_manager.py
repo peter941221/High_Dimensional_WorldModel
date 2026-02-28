@@ -27,8 +27,6 @@ INCLUDE_DIRS = [
 ]
 
 INCLUDE_FILES = [
-    "colab_autorun.py",
-    "colab_push_results.py",
     "requirements.txt",
     "README.md",
     "RUNBOOK.md",
@@ -106,11 +104,11 @@ def to_run_config(args: argparse.Namespace) -> dict:
     run_id = args.run_id or f"kaggle_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     return {
         "run_id": run_id,
+        "seed": args.seed,
         "resume": args.resume,
         "run_tests": args.run_tests,
         "skip_install_deps": args.skip_install_deps,
         "heartbeat_every": args.heartbeat_every,
-        "push_after_each_stage": args.push_after_each_stage,
         "baseline_epochs": args.baseline_epochs,
         "transfer_pretrain_epochs": args.transfer_pretrain_epochs,
         "transfer_finetune_epochs": args.transfer_finetune_epochs,
@@ -120,14 +118,7 @@ def to_run_config(args: argparse.Namespace) -> dict:
         "max_steps": args.max_steps,
         "save_every": args.save_every,
         "keep_last": args.keep_last,
-        "push_results_to_github": args.push_results_to_github,
-        "push_branch": args.push_branch,
-        "base_branch": args.base_branch,
-        "github_user": args.github_user,
-        "repo_name": args.repo_name,
-        "token_env": args.token_env,
-        "token_secret_name": args.token_secret_name,
-        "include_checkpoints_in_push": args.include_checkpoints_in_push,
+        "skip_visualize": args.skip_visualize,
         "use_code_dataset": args.use_code_dataset,
         "code_dataset_slug": slugify(args.code_dataset_slug),
         "code_bundle_filename": args.code_bundle_filename,
@@ -218,7 +209,7 @@ def build_project_bundle_zip(zip_path: Path) -> None:
                 zf.write(src, arcname=src.relative_to(ROOT).as_posix())
 
 
-def prepare_code_dataset_bundle(args: argparse.Namespace) -> Path:
+def prepare_code_dataset_bundle(args: argparse.Namespace, run_config: dict) -> Path:
     dataset_dir = Path(args.code_dataset_build_dir).resolve()
     if dataset_dir.exists():
         shutil.rmtree(dataset_dir)
@@ -233,7 +224,11 @@ def prepare_code_dataset_bundle(args: argparse.Namespace) -> Path:
     (dataset_dir / "dataset-metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
 
     bundle_name = args.code_bundle_filename
-    build_project_bundle_zip(dataset_dir / bundle_name)
+    zip_path = dataset_dir / bundle_name
+    build_project_bundle_zip(zip_path)
+    # Ensure runtime config is available from dataset mount for de-colab direct runner.
+    with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("kaggle/run_config.json", json.dumps(run_config, indent=2, ensure_ascii=False))
     log(f"Prepared code dataset bundle: {dataset_dir}")
     return dataset_dir
 
@@ -273,7 +268,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, dict, Path | None]:
     metadata = write_metadata(args, build_dir)
     dataset_dir = None
     if args.use_code_dataset:
-        dataset_dir = prepare_code_dataset_bundle(args)
+        dataset_dir = prepare_code_dataset_bundle(args, run_config=run_config)
     log(f"Prepared kernel bundle: {build_dir}")
     log(f"Kernel id: {metadata['id']}")
     return build_dir, metadata, dataset_dir
@@ -307,7 +302,7 @@ def kernels_push(args: argparse.Namespace, build_dir: Path, dataset_dir: Path | 
         if dataset_dir is None:
             dataset_dir = Path(args.code_dataset_build_dir).resolve()
             if not (dataset_dir / "dataset-metadata.json").exists():
-                dataset_dir = prepare_code_dataset_bundle(args)
+                dataset_dir = prepare_code_dataset_bundle(args, run_config=to_run_config(args))
         push_code_dataset(args, dataset_dir)
     ensure_auth()
     run_cmd([*kaggle, "kernels", "push", "-p", str(build_dir)], capture=True)
@@ -372,15 +367,14 @@ def kernels_output(kernel_id: str, out_dir: Path, file_pattern: str | None = Non
 
 def add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--run-id", type=str, default=None)
+    parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--run-tests", action="store_true")
     parser.add_argument("--skip-install-deps", dest="skip_install_deps", action="store_true")
     parser.add_argument("--install-deps", dest="skip_install_deps", action="store_false")
     parser.set_defaults(skip_install_deps=True)
     parser.add_argument("--heartbeat-every", type=int, default=1)
-    parser.add_argument("--push-after-each-stage", dest="push_after_each_stage", action="store_true")
-    parser.add_argument("--no-push-after-each-stage", dest="push_after_each_stage", action="store_false")
-    parser.set_defaults(push_after_each_stage=True)
+    parser.add_argument("--skip-visualize", action="store_true")
     parser.add_argument("--baseline-epochs", type=int, default=12)
     parser.add_argument("--transfer-pretrain-epochs", type=int, default=8)
     parser.add_argument("--transfer-finetune-epochs", type=int, default=8)
@@ -390,14 +384,6 @@ def add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-steps", type=int, default=120)
     parser.add_argument("--save-every", type=int, default=4)
     parser.add_argument("--keep-last", type=int, default=6)
-    parser.add_argument("--push-results-to-github", action="store_true")
-    parser.add_argument("--push-branch", type=str, default="colab-results")
-    parser.add_argument("--base-branch", type=str, default="main")
-    parser.add_argument("--github-user", type=str, default="peter941221")
-    parser.add_argument("--repo-name", type=str, default="High_Dimensional_WorldModel")
-    parser.add_argument("--token-env", type=str, default="GITHUB_TOKEN")
-    parser.add_argument("--token-secret-name", type=str, default="GITHUB_TOKEN")
-    parser.add_argument("--include-checkpoints-in-push", action="store_true")
 
 
 def build_parser() -> argparse.ArgumentParser:

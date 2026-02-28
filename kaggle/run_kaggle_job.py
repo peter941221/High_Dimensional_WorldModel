@@ -7,11 +7,11 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import time
 
 
 REPO_URL = "https://github.com/peter941221/High_Dimensional_WorldModel.git"
 PROJECT_DIR = Path("/kaggle/working/High_Dimensional_WorldModel")
-CONFIG_PATH = Path("/kaggle/src/kaggle/run_config.json")
 OUTPUT_SUMMARY = Path("/kaggle/working") / "hyperdream_kaggle_summary.json"
 
 
@@ -27,14 +27,14 @@ def to_bool(value: object) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def load_config() -> dict:
+def load_config(extra_candidates: list[Path] | None = None) -> dict:
     defaults = {
         "run_id": f"kaggle_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        "seed": None,
         "resume": False,
         "run_tests": False,
         "skip_install_deps": False,
         "heartbeat_every": 1,
-        "push_after_each_stage": True,
         "baseline_epochs": 12,
         "transfer_pretrain_epochs": 8,
         "transfer_finetune_epochs": 8,
@@ -44,22 +44,33 @@ def load_config() -> dict:
         "max_steps": 120,
         "save_every": 4,
         "keep_last": 6,
-        "push_results_to_github": False,
-        "push_branch": "colab-results",
-        "base_branch": "main",
-        "github_user": "peter941221",
-        "repo_name": "High_Dimensional_WorldModel",
-        "token_env": "GITHUB_TOKEN",
-        "token_secret_name": "GITHUB_TOKEN",
-        "include_checkpoints_in_push": False,
+        "skip_visualize": False,
         "use_code_dataset": True,
         "code_dataset_slug": "high-dimensional-worldmodel-src",
         "code_bundle_filename": "project_bundle.zip",
     }
 
-    if CONFIG_PATH.exists():
-        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        defaults.update(data)
+    config_candidates = [
+        # Preferred: config generated adjacent to this runtime script in Kaggle kernel bundle.
+        Path(__file__).resolve().parent / "run_config.json",
+        # Legacy fallback path used by earlier kernel layouts.
+        Path("/kaggle/src/kaggle/run_config.json"),
+        # Runtime extracted project path fallback.
+        PROJECT_DIR / "kaggle" / "run_config.json",
+        # CWD fallbacks for varying Kaggle script layouts.
+        Path.cwd() / "kaggle" / "run_config.json",
+        Path.cwd() / "run_config.json",
+    ]
+    if extra_candidates:
+        config_candidates.extend(extra_candidates)
+    for cfg_path in config_candidates:
+        if cfg_path.exists():
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            defaults.update(data)
+            log(f"Loaded run config from: {cfg_path}")
+            break
+    else:
+        log("run_config.json not found, using built-in defaults.")
     return defaults
 
 
@@ -79,8 +90,20 @@ def prepare_from_dataset(cfg: dict) -> Path | None:
     bundle_name = str(cfg.get("code_bundle_filename", "project_bundle.zip"))
     bundle_path = mount_dir / bundle_name
     if not mount_dir.exists():
-        log(f"Dataset mount not found: {mount_dir}")
-        return None
+        # Fallback: search all mounted datasets for the expected bundle/source layout.
+        input_root = Path("/kaggle/input")
+        if input_root.exists():
+            for candidate_dir in input_root.iterdir():
+                if not candidate_dir.is_dir():
+                    continue
+                if (candidate_dir / bundle_name).exists() or (candidate_dir / "experiments").exists():
+                    mount_dir = candidate_dir
+                    bundle_path = mount_dir / bundle_name
+                    log(f"Dataset slug fallback matched mount: {mount_dir}")
+                    break
+        if not mount_dir.exists():
+            log(f"Dataset mount not found: {mount_dir}")
+            return None
 
     if PROJECT_DIR.exists():
         shutil.rmtree(PROJECT_DIR)
@@ -92,7 +115,7 @@ def prepare_from_dataset(cfg: dict) -> Path | None:
             zf.extractall(PROJECT_DIR)
         return PROJECT_DIR
 
-    if (mount_dir / "colab_autorun.py").exists():
+    if (mount_dir / "experiments").exists():
         log(f"Copying source tree from dataset mount: {mount_dir}")
         shutil.copytree(mount_dir, PROJECT_DIR, dirs_exist_ok=True)
         return PROJECT_DIR
@@ -111,85 +134,154 @@ def ensure_repo() -> Path:
     return PROJECT_DIR
 
 
-def build_cmd(cfg: dict, root: Path) -> list[str]:
-    cmd = [
-        sys.executable,
-        "colab_autorun.py",
-        "--project-dir",
-        str(root),
+def run_cmd(cmd: list[str], cwd: Path, stage: str) -> None:
+    log(f"[stage={stage}] RUN {' '.join(cmd)}")
+    subprocess.run(cmd, cwd=str(cwd), check=True)
+
+
+def run_stage(name: str, cmd: list[str], cwd: Path) -> dict:
+    started = time.time()
+    log(f"[heartbeat] stage={name} status=start")
+    run_cmd(cmd, cwd=cwd, stage=name)
+    elapsed = time.time() - started
+    log(f"[heartbeat] stage={name} status=done elapsed_sec={elapsed:.1f}")
+    return {
+        "name": name,
+        "elapsed_sec": round(elapsed, 3),
+    }
+
+
+def install_dependencies(root: Path) -> None:
+    run_cmd([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], cwd=root, stage="install")
+    run_cmd([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], cwd=root, stage="install")
+
+
+def build_common_args(cfg: dict) -> list[str]:
+    common = [
         "--run-id",
         str(cfg["run_id"]),
-        "--skip-repo-sync",
-        "--baseline-epochs",
-        str(cfg["baseline_epochs"]),
-        "--transfer-pretrain-epochs",
-        str(cfg["transfer_pretrain_epochs"]),
-        "--transfer-finetune-epochs",
-        str(cfg["transfer_finetune_epochs"]),
-        "--ablation-epochs",
-        str(cfg["ablation_epochs"]),
-        "--robustness-episodes",
-        str(cfg["robustness_episodes"]),
-        "--eval-episodes",
-        str(cfg["eval_episodes"]),
         "--max-steps",
         str(cfg["max_steps"]),
+        "--eval-episodes",
+        str(cfg["eval_episodes"]),
         "--save-every",
         str(cfg["save_every"]),
         "--keep-last",
         str(cfg["keep_last"]),
-        "--heartbeat-every",
-        str(cfg["heartbeat_every"]),
+    ]
+    if cfg.get("seed") is not None:
+        common.extend(["--seed", str(cfg["seed"])])
+    if to_bool(cfg.get("resume", False)):
+        common.append("--resume")
+    return common
+
+
+def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
+    common = build_common_args(cfg)
+    heartbeat = max(int(cfg.get("heartbeat_every", 1)), 1)
+
+    cmds: list[tuple[str, list[str]]] = [
+        (
+            "baseline",
+            [
+                sys.executable,
+                "experiments/run_baseline.py",
+                *common,
+                "--epochs",
+                str(cfg["baseline_epochs"]),
+                "--heartbeat-every",
+                str(heartbeat),
+            ],
+        ),
+        (
+            "transfer",
+            [
+                sys.executable,
+                "experiments/run_transfer.py",
+                *common,
+                "--pretrain-epochs",
+                str(cfg["transfer_pretrain_epochs"]),
+                "--finetune-epochs",
+                str(cfg["transfer_finetune_epochs"]),
+                "--heartbeat-every",
+                str(heartbeat),
+            ],
+        ),
+        (
+            "ablation",
+            [
+                sys.executable,
+                "experiments/run_ablation.py",
+                *common,
+                "--epochs",
+                str(cfg["ablation_epochs"]),
+                "--heartbeat-every",
+                str(heartbeat),
+            ],
+        ),
+        (
+            "robustness",
+            [
+                sys.executable,
+                "experiments/run_robustness.py",
+                "--run-id",
+                str(cfg["run_id"]),
+                "--episodes",
+                str(cfg["robustness_episodes"]),
+                "--heartbeat-every",
+                str(heartbeat * 5),
+            ]
+            + (
+                ["--seed", str(cfg["seed"])]
+                if cfg.get("seed") is not None
+                else []
+            )
+            + (
+                ["--resume"]
+                if to_bool(cfg.get("resume", False))
+                else []
+            ),
+        ),
     ]
 
-    if to_bool(cfg.get("skip_install_deps", True)):
-        cmd.append("--skip-install-deps")
-    if to_bool(cfg.get("resume", False)):
-        cmd.append("--resume")
-    if to_bool(cfg.get("run_tests", False)):
-        cmd.append("--run-tests")
-    if to_bool(cfg.get("push_after_each_stage", True)):
-        cmd.append("--push-after-each-stage")
-    else:
-        cmd.append("--no-push-after-each-stage")
-
-    if to_bool(cfg.get("push_results_to_github", False)):
-        cmd.extend(
-            [
-                "--push-results-to-github",
-                "--push-branch",
-                str(cfg.get("push_branch", "colab-results")),
-                "--base-branch",
-                str(cfg.get("base_branch", "main")),
-                "--github-user",
-                str(cfg.get("github_user", "")),
-                "--repo-name",
-                str(cfg.get("repo_name", "")),
-                "--token-env",
-                str(cfg.get("token_env", "GITHUB_TOKEN")),
-                "--token-secret-name",
-                str(cfg.get("token_secret_name", "GITHUB_TOKEN")),
-            ]
-        )
-        if to_bool(cfg.get("include_checkpoints_in_push", False)):
-            cmd.append("--include-checkpoints-in-push")
-    return cmd
+    if not to_bool(cfg.get("skip_visualize", False)):
+        cmds.append(("visualize", [sys.executable, "experiments/visualize.py"]))
+    return cmds
 
 
 def main() -> None:
     cfg = load_config()
     root = prepare_from_dataset(cfg) or ensure_repo()
-    cmd = build_cmd(cfg, root=root)
-    log("Running command:")
-    log(" ".join(cmd))
-    subprocess.run(cmd, cwd=str(root), check=True)
+    # Reload after dataset extraction/repo ready so runtime-mounted config can override defaults.
+    cfg = load_config(extra_candidates=[root / "kaggle" / "run_config.json"])
+
+    stage_results: list[dict] = []
+
+    if not to_bool(cfg.get("skip_install_deps", False)):
+        install_dependencies(root)
+    else:
+        log("Skip dependency install enabled.")
+
+    if to_bool(cfg.get("run_tests", False)):
+        stage_results.append(
+            run_stage(
+                name="tests",
+                cmd=[sys.executable, "-m", "pytest", "-q"],
+                cwd=root,
+            )
+        )
+
+    for stage_name, stage_cmd in build_stage_cmds(cfg):
+        stage_results.append(run_stage(name=stage_name, cmd=stage_cmd, cwd=root))
 
     summary = {
         "run_id": cfg["run_id"],
+        "seed": cfg.get("seed"),
         "finished_at": datetime.now().isoformat(),
         "results_dir": str(root / "results"),
         "figures_dir": str(root / "figures"),
         "checkpoints_dir": str(root / "checkpoints"),
+        "stages": stage_results,
     }
     OUTPUT_SUMMARY.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_SUMMARY.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")

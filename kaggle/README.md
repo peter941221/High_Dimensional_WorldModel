@@ -3,6 +3,7 @@
 - `run_kaggle_job.py`: Kaggle kernel entry script.
 - `run_config.example.json`: configuration template for batch runs.
 - `kernel-metadata.template.json`: metadata template reference.
+- Runner executes experiment scripts directly (no Colab dependency).
 
 Default flow uses a code dataset bundle:
 - manager uploads `project_bundle.zip` to Kaggle Dataset

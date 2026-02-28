@@ -126,34 +126,10 @@ python experiments/run_until_success.py \
   --eval-episodes 40
 ```
 
-## Colab One-Click
+## Runtime Policy
 
-```bash
-python colab_autorun.py \
-  --run-tests \
-  --run-id colab_first_run \
-  --baseline-epochs 5 \
-  --transfer-pretrain-epochs 3 \
-  --transfer-finetune-epochs 3 \
-  --ablation-epochs 4
-```
-
-## Colab Auto Push To GitHub
-
-```bash
-# 推荐：在 Colab Secrets 新建 key（例如 GITHUB_T），然后脚本自动读取
-# 也可手动 export GITHUB_TOKEN=your_pat
-
-python colab_autorun.py \
-  --run-id colab_push_demo \
-  --run-tests \
-  --push-results-to-github \
-  --push-branch colab-results \
-  --github-user peter941221 \
-  --repo-name High_Dimensional_WorldModel \
-  --token-env GITHUB_TOKEN \
-  --token-secret-name GITHUB_T
-```
+- 当前执行策略：仅使用 Local + Kaggle。
+- Colab 入口已移除，不再维护。
 
 ## Kaggle Batch (No Keep-Tab-Alive)
 
@@ -182,6 +158,7 @@ python kaggle_job_manager.py run \
   --slug high-dimensional-worldmodel-aggressive \
   --code-dataset-slug high-dimensional-worldmodel-src \
   --title "HyperDream Aggressive Runner" \
+  --seed 11 \
   --baseline-epochs 12 \
   --transfer-pretrain-epochs 8 \
   --transfer-finetune-epochs 8 \
@@ -195,3 +172,4 @@ python kaggle_job_manager.py run \
 
 说明：
 - 默认启用 `--use-code-dataset`，会先把项目源码上传为 Kaggle Dataset，再由 Kernel 从 `/kaggle/input/...` 读取，避免运行时依赖 GitHub 网络解析。
+- 可通过 `--seed` 透传到 `baseline/transfer/ablation/robustness` 四个实验脚本，便于和本地配对复现。
