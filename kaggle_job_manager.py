@@ -114,6 +114,12 @@ def to_run_config(args: argparse.Namespace) -> dict:
         "transfer_finetune_epochs": args.transfer_finetune_epochs,
         "ablation_epochs": args.ablation_epochs,
         "robustness_episodes": args.robustness_episodes,
+        "robustness_domain_rand": args.robustness_domain_rand,
+        "robustness_domain_rand_scale": args.robustness_domain_rand_scale,
+        "robustness_domain_rand_profile": args.robustness_domain_rand_profile,
+        "robustness_domain_rand_warmup_episodes": args.robustness_domain_rand_warmup_episodes,
+        "robustness_domain_rand_warmup_epochs": args.robustness_domain_rand_warmup_epochs,
+        "robustness_domain_rand_difficulties": args.robustness_domain_rand_difficulties,
         "eval_episodes": args.eval_episodes,
         "max_steps": args.max_steps,
         "save_every": args.save_every,
@@ -209,6 +215,18 @@ def build_project_bundle_zip(zip_path: Path) -> None:
                 zf.write(src, arcname=src.relative_to(ROOT).as_posix())
 
 
+def inject_embedded_run_config(build_dir: Path, run_config: dict) -> None:
+    runner_path = build_dir / "kaggle" / "run_kaggle_job.py"
+    marker = 'EMBEDDED_RUN_CONFIG_JSON = "{}"'
+    payload = json.dumps(run_config, ensure_ascii=False)
+    replacement = f"EMBEDDED_RUN_CONFIG_JSON = {payload!r}"
+
+    text = runner_path.read_text(encoding="utf-8")
+    if marker not in text:
+        raise RuntimeError(f"Embedded config marker not found in {runner_path}")
+    runner_path.write_text(text.replace(marker, replacement, 1), encoding="utf-8")
+
+
 def prepare_code_dataset_bundle(args: argparse.Namespace, run_config: dict) -> Path:
     dataset_dir = Path(args.code_dataset_build_dir).resolve()
     if dataset_dir.exists():
@@ -264,6 +282,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, dict, Path | None]:
     build_dir = Path(args.build_dir).resolve()
     copy_project(build_dir)
     run_config = to_run_config(args)
+    inject_embedded_run_config(build_dir, run_config=run_config)
     (build_dir / "kaggle" / "run_config.json").write_text(json.dumps(run_config, indent=2, ensure_ascii=False), encoding="utf-8")
     metadata = write_metadata(args, build_dir)
     dataset_dir = None
@@ -380,6 +399,43 @@ def add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--transfer-finetune-epochs", type=int, default=8)
     parser.add_argument("--ablation-epochs", type=int, default=8)
     parser.add_argument("--robustness-episodes", type=int, default=120)
+    parser.add_argument(
+        "--robustness-domain-rand",
+        action="store_true",
+        help="Enable domain randomization for robustness stage only.",
+    )
+    parser.add_argument(
+        "--robustness-domain-rand-scale",
+        type=float,
+        default=0.20,
+        help="Relative randomization scale for robustness stage.",
+    )
+    parser.add_argument(
+        "--robustness-domain-rand-profile",
+        type=str,
+        choices=["full", "conservative"],
+        default="conservative",
+        help="Domain randomization profile for robustness stage.",
+    )
+    parser.add_argument(
+        "--robustness-domain-rand-warmup-episodes",
+        type=int,
+        default=200,
+        help="Warmup episodes for robustness-stage randomization scale.",
+    )
+    parser.add_argument(
+        "--robustness-domain-rand-warmup-epochs",
+        type=int,
+        default=0,
+        help="Warmup epochs for robustness-stage randomization scale.",
+    )
+    parser.add_argument(
+        "--robustness-domain-rand-difficulties",
+        type=str,
+        choices=["all", "medium_hard", "hard_only"],
+        default="hard_only",
+        help="Difficulty scope for robustness-stage randomization.",
+    )
     parser.add_argument("--eval-episodes", type=int, default=40)
     parser.add_argument("--max-steps", type=int, default=120)
     parser.add_argument("--save-every", type=int, default=4)

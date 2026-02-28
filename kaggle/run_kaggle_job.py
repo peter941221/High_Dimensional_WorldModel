@@ -13,6 +13,8 @@ import time
 REPO_URL = "https://github.com/peter941221/High_Dimensional_WorldModel.git"
 PROJECT_DIR = Path("/kaggle/working/High_Dimensional_WorldModel")
 OUTPUT_SUMMARY = Path("/kaggle/working") / "hyperdream_kaggle_summary.json"
+# Patched at kernel build time by kaggle_job_manager.py when available.
+EMBEDDED_RUN_CONFIG_JSON = "{}"
 
 
 def log(message: str) -> None:
@@ -40,6 +42,12 @@ def load_config(extra_candidates: list[Path] | None = None) -> dict:
         "transfer_finetune_epochs": 8,
         "ablation_epochs": 8,
         "robustness_episodes": 120,
+        "robustness_domain_rand": False,
+        "robustness_domain_rand_scale": 0.20,
+        "robustness_domain_rand_profile": "conservative",
+        "robustness_domain_rand_warmup_episodes": 200,
+        "robustness_domain_rand_warmup_epochs": 0,
+        "robustness_domain_rand_difficulties": "hard_only",
         "eval_episodes": 40,
         "max_steps": 120,
         "save_every": 4,
@@ -49,6 +57,14 @@ def load_config(extra_candidates: list[Path] | None = None) -> dict:
         "code_dataset_slug": "high-dimensional-worldmodel-src",
         "code_bundle_filename": "project_bundle.zip",
     }
+    try:
+        embedded_cfg = json.loads(EMBEDDED_RUN_CONFIG_JSON)
+    except json.JSONDecodeError:
+        embedded_cfg = {}
+        log("Embedded run config JSON decode failed; ignored.")
+    if isinstance(embedded_cfg, dict) and embedded_cfg:
+        defaults.update(embedded_cfg)
+        log("Loaded embedded run config from kernel script.")
 
     config_candidates = [
         # Preferred: config generated adjacent to this runtime script in Kaggle kernel bundle.
@@ -180,6 +196,37 @@ def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
     common = build_common_args(cfg)
     heartbeat = max(int(cfg.get("heartbeat_every", 1)), 1)
 
+    robustness_cmd = [
+        sys.executable,
+        "experiments/run_robustness.py",
+        "--run-id",
+        str(cfg["run_id"]),
+        "--episodes",
+        str(cfg["robustness_episodes"]),
+        "--heartbeat-every",
+        str(heartbeat * 5),
+    ]
+    if cfg.get("seed") is not None:
+        robustness_cmd.extend(["--seed", str(cfg["seed"])])
+    if to_bool(cfg.get("resume", False)):
+        robustness_cmd.append("--resume")
+    if to_bool(cfg.get("robustness_domain_rand", False)):
+        robustness_cmd.extend(
+            [
+                "--domain-rand",
+                "--domain-rand-scale",
+                str(cfg.get("robustness_domain_rand_scale", 0.20)),
+                "--domain-rand-profile",
+                str(cfg.get("robustness_domain_rand_profile", "conservative")),
+                "--domain-rand-warmup-episodes",
+                str(cfg.get("robustness_domain_rand_warmup_episodes", 200)),
+                "--domain-rand-warmup-epochs",
+                str(cfg.get("robustness_domain_rand_warmup_epochs", 0)),
+                "--domain-rand-difficulties",
+                str(cfg.get("robustness_domain_rand_difficulties", "hard_only")),
+            ]
+        )
+
     cmds: list[tuple[str, list[str]]] = [
         (
             "baseline",
@@ -221,26 +268,7 @@ def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
         ),
         (
             "robustness",
-            [
-                sys.executable,
-                "experiments/run_robustness.py",
-                "--run-id",
-                str(cfg["run_id"]),
-                "--episodes",
-                str(cfg["robustness_episodes"]),
-                "--heartbeat-every",
-                str(heartbeat * 5),
-            ]
-            + (
-                ["--seed", str(cfg["seed"])]
-                if cfg.get("seed") is not None
-                else []
-            )
-            + (
-                ["--resume"]
-                if to_bool(cfg.get("resume", False))
-                else []
-            ),
+            robustness_cmd,
         ),
     ]
 
