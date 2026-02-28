@@ -16,6 +16,7 @@ from experiments.common import (
     prepare_run_dirs,
     rotate_checkpoint,
     save_json,
+    set_global_seed,
 )
 from experiments.policy_guidance import guided_push_action
 from models.gru_world_model import GRUWorldModel
@@ -61,11 +62,68 @@ def parse_args():
     parser.add_argument("--save-every", type=int, default=5, help="Archive checkpoint every N epochs (0 disables).")
     parser.add_argument("--keep-last", type=int, default=5, help="How many archive checkpoints to keep.")
     parser.add_argument("--heartbeat-every", type=int, default=1, help="Print training heartbeat every N epochs.")
+    parser.add_argument("--seed", type=int, default=None, help="Global random seed for reproducibility.")
+    parser.add_argument("--domain-rand", action="store_true", help="Enable domain randomization in environment.")
+    parser.add_argument("--domain-rand-scale", type=float, default=0.15, help="Relative randomization scale.")
+    parser.add_argument(
+        "--domain-rand-profile",
+        type=str,
+        default="full",
+        choices=["full", "conservative"],
+        help="Domain randomization parameter profile.",
+    )
+    parser.add_argument(
+        "--domain-rand-warmup-episodes",
+        type=int,
+        default=0,
+        help="Linear warmup episodes for effective randomization scale.",
+    )
+    parser.add_argument(
+        "--domain-rand-warmup-epochs",
+        type=int,
+        default=0,
+        help="Linear warmup epochs for effective randomization scale.",
+    )
+    parser.add_argument(
+        "--domain-rand-scratch-multiplier",
+        type=float,
+        default=1.0,
+        help="Stage multiplier for scratch baseline training randomization.",
+    )
+    parser.add_argument(
+        "--domain-rand-source-multiplier",
+        type=float,
+        default=1.0,
+        help="Stage multiplier for source pretraining randomization.",
+    )
+    parser.add_argument(
+        "--domain-rand-finetune-multiplier",
+        type=float,
+        default=0.5,
+        help="Stage multiplier for transfer finetune randomization.",
+    )
     return parser.parse_args()
 
 
-def make_trainer(dim: int, max_steps: int):
-    env = PushBallNDEnv(dim=dim, difficulty="easy", max_steps=max_steps)
+def make_trainer(
+    dim: int,
+    max_steps: int,
+    domain_rand: bool,
+    domain_rand_scale: float,
+    domain_rand_profile: str,
+    domain_rand_warmup_episodes: int,
+    domain_rand_warmup_epochs: int,
+):
+    env = PushBallNDEnv(
+        dim=dim,
+        difficulty="easy",
+        max_steps=max_steps,
+        domain_randomization=domain_rand,
+        domain_rand_scale=domain_rand_scale,
+        domain_rand_profile=domain_rand_profile,
+        domain_rand_warmup_episodes=domain_rand_warmup_episodes,
+        domain_rand_warmup_epochs=domain_rand_warmup_epochs,
+    )
     wm = GRUWorldModel(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
     policy = PolicyNetwork(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
     trainer = DreamTrainer(env=env, world_model=wm, policy=policy, buffer=ReplayBuffer(capacity=30_000))
@@ -80,6 +138,8 @@ def bootstrap_if_empty(trainer: DreamTrainer, max_steps: int):
 
 def run():
     args = parse_args()
+    if args.seed is not None:
+        set_global_seed(args.seed)
     exp_name = "transfer"
     run_id = resolve_run_id(exp_name, args.run_id, args.resume)
     result_dir, checkpoint_dir = prepare_run_dirs(exp_name, run_id)
@@ -94,7 +154,16 @@ def run():
     source_dims = [2, 3, 4, 5, 6, 8]
     target_dim = 3
 
-    scratch_env, _, scratch_policy, scratch_trainer = make_trainer(dim=target_dim, max_steps=args.max_steps)
+    scratch_env, _, scratch_policy, scratch_trainer = make_trainer(
+        dim=target_dim,
+        max_steps=args.max_steps,
+        domain_rand=args.domain_rand,
+        domain_rand_scale=args.domain_rand_scale,
+        domain_rand_profile=args.domain_rand_profile,
+        domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
+        domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
+    )
+    scratch_env.set_domain_rand_stage_multiplier(args.domain_rand_scratch_multiplier)
     scratch_ckpt = checkpoint_dir / f"scratch_dim{target_dim}.pt"
     if args.resume and scratch_ckpt.exists():
         scratch_trainer.load_checkpoint(scratch_ckpt)
@@ -103,6 +172,7 @@ def run():
         bootstrap_if_empty(scratch_trainer, args.max_steps)
 
     for epoch in range(scratch_trainer.train_epochs, args.pretrain_epochs):
+        scratch_env.set_domain_rand_training_epoch(epoch + 1)
         stats = scratch_trainer.train_epoch(collect_episodes=2, wm_steps=8, policy_episodes=1)
         scratch_trainer.save_checkpoint(
             scratch_ckpt,
@@ -122,10 +192,22 @@ def run():
                 f"value_loss={stats.value_loss:.4f} grad_steps={scratch_trainer.gradient_steps}",
                 flush=True,
             )
+    if args.domain_rand:
+        scratch_env.set_domain_rand_training_epoch(max(scratch_trainer.train_epochs, 1))
+        scratch_env.set_domain_rand_stage_multiplier(args.domain_rand_scratch_multiplier)
     baseline_success = evaluate(scratch_env, scratch_policy, episodes=args.eval_episodes)
 
     for src_dim in source_dims:
-        src_env, src_wm, _, src_trainer = make_trainer(dim=src_dim, max_steps=args.max_steps)
+        src_env, src_wm, _, src_trainer = make_trainer(
+            dim=src_dim,
+            max_steps=args.max_steps,
+            domain_rand=args.domain_rand,
+            domain_rand_scale=args.domain_rand_scale,
+            domain_rand_profile=args.domain_rand_profile,
+            domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
+            domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
+        )
+        src_env.set_domain_rand_stage_multiplier(args.domain_rand_source_multiplier)
         src_ckpt = checkpoint_dir / f"source_dim{src_dim}.pt"
         if args.resume and src_ckpt.exists():
             src_trainer.load_checkpoint(src_ckpt)
@@ -134,6 +216,7 @@ def run():
             bootstrap_if_empty(src_trainer, args.max_steps)
 
         for epoch in range(src_trainer.train_epochs, args.pretrain_epochs):
+            src_env.set_domain_rand_training_epoch(epoch + 1)
             stats = src_trainer.train_epoch(collect_episodes=2, wm_steps=8, policy_episodes=1)
             src_trainer.save_checkpoint(
                 src_ckpt,
@@ -154,7 +237,16 @@ def run():
                     flush=True,
                 )
 
-        tgt_env, tgt_wm, tgt_policy, tgt_trainer = make_trainer(dim=target_dim, max_steps=args.max_steps)
+        tgt_env, tgt_wm, tgt_policy, tgt_trainer = make_trainer(
+            dim=target_dim,
+            max_steps=args.max_steps,
+            domain_rand=args.domain_rand,
+            domain_rand_scale=args.domain_rand_scale,
+            domain_rand_profile=args.domain_rand_profile,
+            domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
+            domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
+        )
+        tgt_env.set_domain_rand_stage_multiplier(args.domain_rand_finetune_multiplier)
         tgt_ckpt = checkpoint_dir / f"transfer_{src_dim}_to_{target_dim}.pt"
 
         transfer_stats = {"transferred": 0, "skipped": 0}
@@ -168,6 +260,7 @@ def run():
             bootstrap_if_empty(tgt_trainer, args.max_steps)
 
         for epoch in range(tgt_trainer.train_epochs, args.finetune_epochs):
+            tgt_env.set_domain_rand_training_epoch(epoch + 1)
             stats = tgt_trainer.train_epoch(collect_episodes=2, wm_steps=6, policy_episodes=1)
             tgt_trainer.save_checkpoint(
                 tgt_ckpt,
@@ -195,6 +288,9 @@ def run():
                     flush=True,
                 )
 
+        if args.domain_rand:
+            tgt_env.set_domain_rand_training_epoch(max(tgt_trainer.train_epochs, 1))
+            tgt_env.set_domain_rand_stage_multiplier(args.domain_rand_finetune_multiplier)
         transfer_success = evaluate(tgt_env, tgt_policy, episodes=args.eval_episodes)
         results_by_src[src_dim] = {
             "source_dim": src_dim,
@@ -214,6 +310,15 @@ def run():
             "target_dim": target_dim,
             "save_every": args.save_every,
             "keep_last": args.keep_last,
+            "seed": args.seed,
+            "domain_rand": args.domain_rand,
+            "domain_rand_scale": args.domain_rand_scale,
+            "domain_rand_profile": args.domain_rand_profile,
+            "domain_rand_warmup_episodes": args.domain_rand_warmup_episodes,
+            "domain_rand_warmup_epochs": args.domain_rand_warmup_epochs,
+            "domain_rand_scratch_multiplier": args.domain_rand_scratch_multiplier,
+            "domain_rand_source_multiplier": args.domain_rand_source_multiplier,
+            "domain_rand_finetune_multiplier": args.domain_rand_finetune_multiplier,
         }
         save_json(progress_path, progress)
         print(f"[transfer] {src_dim}D -> {target_dim}D success={transfer_success:.3f}")

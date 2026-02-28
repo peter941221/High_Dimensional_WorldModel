@@ -16,6 +16,7 @@ from experiments.common import (
     prepare_run_dirs,
     rotate_checkpoint,
     save_json,
+    set_global_seed,
 )
 from experiments.policy_guidance import guided_push_action
 from models.gru_world_model import GRUWorldModel
@@ -59,11 +60,35 @@ def parse_args():
     parser.add_argument("--save-every", type=int, default=5, help="Archive checkpoint every N epochs (0 disables).")
     parser.add_argument("--keep-last", type=int, default=5, help="How many archive checkpoints to keep per worker.")
     parser.add_argument("--heartbeat-every", type=int, default=1, help="Print training heartbeat every N epochs.")
+    parser.add_argument("--seed", type=int, default=None, help="Global random seed for reproducibility.")
+    parser.add_argument("--domain-rand", action="store_true", help="Enable domain randomization in environment.")
+    parser.add_argument("--domain-rand-scale", type=float, default=0.15, help="Relative randomization scale.")
+    parser.add_argument(
+        "--domain-rand-profile",
+        type=str,
+        default="full",
+        choices=["full", "conservative"],
+        help="Domain randomization parameter profile.",
+    )
+    parser.add_argument(
+        "--domain-rand-warmup-episodes",
+        type=int,
+        default=0,
+        help="Linear warmup episodes for effective randomization scale.",
+    )
+    parser.add_argument(
+        "--domain-rand-warmup-epochs",
+        type=int,
+        default=0,
+        help="Linear warmup epochs for effective randomization scale.",
+    )
     return parser.parse_args()
 
 
 def run():
     args = parse_args()
+    if args.seed is not None:
+        set_global_seed(args.seed)
     exp_name = "baseline"
     run_id = resolve_run_id(exp_name, args.run_id, args.resume)
     result_dir, checkpoint_dir = prepare_run_dirs(exp_name, run_id)
@@ -77,7 +102,16 @@ def run():
 
     dims = [2, 3, 4, 5, 6, 8]
     for dim in dims:
-        env = PushBallNDEnv(dim=dim, difficulty="easy", max_steps=args.max_steps)
+        env = PushBallNDEnv(
+            dim=dim,
+            difficulty="easy",
+            max_steps=args.max_steps,
+            domain_randomization=args.domain_rand,
+            domain_rand_scale=args.domain_rand_scale,
+            domain_rand_profile=args.domain_rand_profile,
+            domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
+            domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
+        )
         world_model = GRUWorldModel(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
         policy = PolicyNetwork(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
         trainer = DreamTrainer(
@@ -97,6 +131,7 @@ def run():
 
         start_epoch = trainer.train_epochs
         for epoch in range(start_epoch, args.epochs):
+            env.set_domain_rand_training_epoch(epoch + 1)
             stats = trainer.train_epoch(collect_episodes=2, wm_steps=8, policy_episodes=1)
             trainer.save_checkpoint(
                 dim_ckpt,
@@ -125,6 +160,8 @@ def run():
                     flush=True,
                 )
 
+        if args.domain_rand:
+            env.set_domain_rand_training_epoch(max(trainer.train_epochs, 1))
         success_rate = evaluate_policy(env, policy, episodes=args.eval_episodes)
         result = {
             "dim": dim,
@@ -140,6 +177,12 @@ def run():
             "eval_episodes": args.eval_episodes,
             "save_every": args.save_every,
             "keep_last": args.keep_last,
+            "seed": args.seed,
+            "domain_rand": args.domain_rand,
+            "domain_rand_scale": args.domain_rand_scale,
+            "domain_rand_profile": args.domain_rand_profile,
+            "domain_rand_warmup_episodes": args.domain_rand_warmup_episodes,
+            "domain_rand_warmup_epochs": args.domain_rand_warmup_epochs,
         }
         save_json(progress_path, progress)
         print(f"[baseline] dim={dim} success_rate={success_rate:.3f}")

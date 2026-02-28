@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from experiments.policy_guidance import guided_push_action, guided_push_action_batch
 from models.gru_world_model import GRUWorldModel
 from models.mlp_world_model import MLPWorldModel
+from models.physics_residual_world_model import PhysicsResidualWorldModel
 from models.policy import PolicyNetwork
 from models.rssm_world_model import RSSMWorldModel
 from models.value import ValueNetwork
@@ -57,14 +58,25 @@ class DreamTrainer:
         self.train_epochs = 0
         self.gradient_steps = 0
 
+    def _assert_state_contract(self, state, source: str) -> torch.Tensor:
+        state_t = torch.as_tensor(state, dtype=torch.float32).flatten()
+        if state_t.shape != (self.env.state_dim,):
+            raise ValueError(
+                f"{source}: state must be shape ({self.env.state_dim},), got {tuple(state_t.shape)}"
+            )
+        if hasattr(self.env, "split_state"):
+            # Validate semantic partition contract when environment provides it.
+            _ = self.env.split_state(state_t)
+        return state_t
+
     def collect_episode(self, max_steps: int = 200, random_policy: bool = False):
-        state = self.env.reset()
+        state = self._assert_state_contract(self.env.reset(), source="reset")
         states = []
         actions = []
         rewards = []
 
         for _ in range(max_steps):
-            state_t = torch.as_tensor(state, dtype=torch.float32)
+            state_t = self._assert_state_contract(state, source="rollout")
             if random_policy:
                 action = torch.randn(self.env.action_dim).clamp(-1, 1)
             else:
@@ -73,11 +85,15 @@ class DreamTrainer:
                 guide_action = guided_push_action(state_t, self.env.action_dim)
                 action = (0.3 * model_action + 0.7 * guide_action + 0.10 * torch.randn_like(model_action)).clamp(-1, 1)
 
+            if action.shape != (self.env.action_dim,):
+                raise ValueError(
+                    f"rollout: action must be shape ({self.env.action_dim},), got {tuple(action.shape)}"
+                )
             next_state, reward, done, _ = self.env.step(action)
             states.append(state_t)
             actions.append(action.float())
             rewards.append(torch.tensor([reward], dtype=torch.float32))
-            state = next_state
+            state = self._assert_state_contract(next_state, source="next_state")
             if done:
                 break
 
@@ -90,7 +106,7 @@ class DreamTrainer:
         return episode
 
     def _predict_world_model(self, state: torch.Tensor, action: torch.Tensor, hidden):
-        if isinstance(self.world_model, MLPWorldModel):
+        if isinstance(self.world_model, (MLPWorldModel, PhysicsResidualWorldModel)):
             next_state, reward = self.world_model(state, action)
             return next_state, reward, hidden, 0.0
 
@@ -270,6 +286,8 @@ class DreamTrainer:
             "env": {
                 "state_dim": int(self.env.state_dim),
                 "action_dim": int(self.env.action_dim),
+                "state_layout_version": 1,
+                "state_components": list(getattr(self.env, "state_components", [])),
             },
             "world_model": self.world_model.state_dict(),
             "policy": self.policy.state_dict(),
@@ -308,6 +326,11 @@ class DreamTrainer:
                 raise ValueError("checkpoint state_dim does not match current env state_dim")
             if int(env_meta.get("action_dim", self.env.action_dim)) != int(self.env.action_dim):
                 raise ValueError("checkpoint action_dim does not match current env action_dim")
+            ckpt_components = env_meta.get("state_components")
+            if ckpt_components is not None and hasattr(self.env, "state_components"):
+                current_components = list(getattr(self.env, "state_components"))
+                if list(ckpt_components) != current_components:
+                    raise ValueError("checkpoint state_components do not match current env semantics")
 
         self.world_model.load_state_dict(ckpt["world_model"])
         self.policy.load_state_dict(ckpt["policy"])

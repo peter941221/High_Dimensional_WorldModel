@@ -2,6 +2,7 @@ import torch
 
 from models.gru_world_model import GRUWorldModel
 from models.mlp_world_model import MLPWorldModel
+from models.physics_residual_world_model import PhysicsResidualWorldModel
 from models.rssm_world_model import RSSMWorldModel
 
 
@@ -16,6 +17,11 @@ def test_forward_shapes_for_all_models():
 
         mlp = MLPWorldModel(state_dim, action_dim, hidden_dim=128)
         pred_s, pred_r = mlp(state, action)
+        assert pred_s.shape == (batch, state_dim)
+        assert pred_r.shape == (batch, 1)
+
+        phys_res = PhysicsResidualWorldModel(state_dim, action_dim, hidden_dim=128)
+        pred_s, pred_r = phys_res(state, action)
         assert pred_s.shape == (batch, state_dim)
         assert pred_r.shape == (batch, 1)
 
@@ -49,13 +55,14 @@ def test_gradients_flow_for_all_models():
 
     models = [
         MLPWorldModel(state_dim, action_dim, hidden_dim=64),
+        PhysicsResidualWorldModel(state_dim, action_dim, hidden_dim=64),
         GRUWorldModel(state_dim, action_dim, hidden_dim=64),
         RSSMWorldModel(state_dim, action_dim, det_dim=64, stoch_dim=16, hidden_dim=64),
     ]
 
     for model in models:
         model.zero_grad()
-        if isinstance(model, MLPWorldModel):
+        if isinstance(model, (MLPWorldModel, PhysicsResidualWorldModel)):
             pred_s, pred_r = model(state, action)
             loss = ((pred_s - target_state) ** 2).mean() + ((pred_r - target_reward) ** 2).mean()
         elif isinstance(model, GRUWorldModel):

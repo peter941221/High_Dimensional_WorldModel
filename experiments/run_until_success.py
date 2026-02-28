@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
 import torch
 
 from envs.push_ball import PushBallNDEnv
-from experiments.common import default_run_id, prepare_run_dirs, rotate_checkpoint, save_json
+from experiments.common import default_run_id, prepare_run_dirs, rotate_checkpoint, save_json, set_global_seed
 from experiments.policy_guidance import guided_push_action
 from models.gru_world_model import GRUWorldModel
 from models.policy import PolicyNetwork
@@ -51,17 +51,50 @@ def parse_args():
     parser.add_argument("--save-every", type=int, default=2)
     parser.add_argument("--keep-last", type=int, default=5)
     parser.add_argument("--heartbeat-every", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=None, help="Global random seed for reproducibility.")
+    parser.add_argument("--domain-rand", action="store_true", help="Enable domain randomization in environment.")
+    parser.add_argument("--domain-rand-scale", type=float, default=0.15, help="Relative randomization scale.")
+    parser.add_argument(
+        "--domain-rand-profile",
+        type=str,
+        default="full",
+        choices=["full", "conservative"],
+        help="Domain randomization parameter profile.",
+    )
+    parser.add_argument(
+        "--domain-rand-warmup-episodes",
+        type=int,
+        default=0,
+        help="Linear warmup episodes for effective randomization scale.",
+    )
+    parser.add_argument(
+        "--domain-rand-warmup-epochs",
+        type=int,
+        default=0,
+        help="Linear warmup epochs for effective randomization scale.",
+    )
     return parser.parse_args()
 
 
 def run():
     args = parse_args()
+    if args.seed is not None:
+        set_global_seed(args.seed)
     run_id = args.run_id or default_run_id()
     result_dir, checkpoint_dir = prepare_run_dirs("until_success", run_id)
     progress_path = result_dir / "progress.json"
     ckpt_path = checkpoint_dir / f"dim{args.dim}_{args.difficulty}_latest.pt"
 
-    env = PushBallNDEnv(dim=args.dim, difficulty=args.difficulty, max_steps=args.max_steps)
+    env = PushBallNDEnv(
+        dim=args.dim,
+        difficulty=args.difficulty,
+        max_steps=args.max_steps,
+        domain_randomization=args.domain_rand,
+        domain_rand_scale=args.domain_rand_scale,
+        domain_rand_profile=args.domain_rand_profile,
+        domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
+        domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
+    )
     wm = GRUWorldModel(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
     policy = PolicyNetwork(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
     trainer = DreamTrainer(env=env, world_model=wm, policy=policy, buffer=ReplayBuffer(capacity=40_000))
@@ -73,6 +106,7 @@ def run():
     reached = False
     for round_idx in range(1, args.max_rounds + 1):
         for _ in range(args.epochs_per_round):
+            env.set_domain_rand_training_epoch(trainer.train_epochs + 1)
             trainer.train_epoch(
                 collect_episodes=args.collect_episodes,
                 wm_steps=args.wm_steps,
@@ -112,6 +146,12 @@ def run():
                 "target_success": args.target_success,
                 "dim": args.dim,
                 "difficulty": args.difficulty,
+                "seed": args.seed,
+                "domain_rand": args.domain_rand,
+                "domain_rand_scale": args.domain_rand_scale,
+                "domain_rand_profile": args.domain_rand_profile,
+                "domain_rand_warmup_episodes": args.domain_rand_warmup_episodes,
+                "domain_rand_warmup_epochs": args.domain_rand_warmup_epochs,
                 "rounds": rounds,
                 "reached": success >= args.target_success,
             },
@@ -134,6 +174,12 @@ def run():
         "dim": args.dim,
         "difficulty": args.difficulty,
         "target_success": args.target_success,
+        "seed": args.seed,
+        "domain_rand": args.domain_rand,
+        "domain_rand_scale": args.domain_rand_scale,
+        "domain_rand_profile": args.domain_rand_profile,
+        "domain_rand_warmup_episodes": args.domain_rand_warmup_episodes,
+        "domain_rand_warmup_epochs": args.domain_rand_warmup_epochs,
         "reached": reached,
         "rounds": rounds,
         "final_success_rate": rounds[-1]["success_rate"] if rounds else 0.0,

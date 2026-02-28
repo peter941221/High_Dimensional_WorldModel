@@ -18,6 +18,89 @@ pytest -q
 python experiments/run_baseline.py
 ```
 
+## P2 Domain Randomization (Starter)
+
+```bash
+python experiments/run_baseline.py \
+  --run-id p2_baseline_seed11 \
+  --seed 11 \
+  --domain-rand \
+  --domain-rand-scale 0.10 \
+  --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 200 \
+  --domain-rand-warmup-epochs 8 \
+  --epochs 8 \
+  --eval-episodes 40
+```
+
+```bash
+python experiments/run_p0_baseline_freeze.py \
+  --run-id-prefix p2_conservative_v2 \
+  --seeds 11 22 33 \
+  --domain-rand \
+  --domain-rand-scope robustness_only \
+  --robustness-domain-rand-difficulties medium_hard \
+  --domain-rand-scale 0.10 \
+  --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 200 \
+  --domain-rand-warmup-epochs 8 \
+  --domain-rand-finetune-multiplier 0.5 \
+  --baseline-epochs 8 \
+  --transfer-pretrain-epochs 6 \
+  --transfer-finetune-epochs 6 \
+  --robustness-episodes 120
+```
+
+## P4 Curriculum (easy -> medium -> hard)
+
+```bash
+python experiments/run_curriculum.py \
+  --run-id p4_curriculum_v1 \
+  --dim 3 \
+  --target-easy 0.70 \
+  --target-medium 0.35 \
+  --target-hard 0.25 \
+  --max-rounds-per-stage 20 \
+  --epochs-per-round 2
+```
+
+## P5 Aggregate Report
+
+```bash
+python experiments/aggregate_report.py \
+  --run-prefixes p0_freeze_v1 p2_rand_v1 p2_v2 \
+  --report-name p5_phase_compare
+```
+
+## P6 Hi-Fi Migration
+
+```bash
+python experiments/run_hifi_migration.py \
+  --run-id p6_hifi_v1 \
+  --source-run-id p2_v2_s11 \
+  --dim 3 \
+  --difficulty medium \
+  --fidelity-level mild \
+  --finetune-epochs 6 \
+  --eval-episodes 40
+```
+
+## P0 Baseline Freeze (Multi-Seed)
+
+```bash
+python experiments/run_p0_baseline_freeze.py \
+  --run-id-prefix p0_freeze_v1 \
+  --seeds 11 22 33 \
+  --baseline-epochs 8 \
+  --transfer-pretrain-epochs 6 \
+  --transfer-finetune-epochs 6 \
+  --robustness-episodes 120
+```
+
+输出：
+- 每个 seed 的单项实验结果：`results/<experiment>/<run_id>/...`
+- 多 seed 汇总：`results/p0_freeze/<run_id_prefix>/p0_summary.json`
+
 ## Resume Training
 
 ```bash

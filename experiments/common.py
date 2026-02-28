@@ -3,7 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 import json
 from pathlib import Path
+import random
 import shutil
+
+import torch
+
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional dependency fallback
+    np = None
 
 
 def default_run_id() -> str:
@@ -40,6 +48,21 @@ def save_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
+
+
+def set_global_seed(seed: int, deterministic: bool = True) -> None:
+    seed = int(seed)
+    random.seed(seed)
+    if np is not None:
+        np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    if deterministic:
+        if torch.backends.cudnn.is_available():
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
 
 def rotate_checkpoint(

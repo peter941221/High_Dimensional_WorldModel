@@ -9,7 +9,7 @@ if str(ROOT) not in sys.path:
 import torch
 
 from envs.push_ball import PushBallNDEnv
-from experiments.common import default_run_id, find_latest_run, prepare_run_dirs, save_json
+from experiments.common import default_run_id, find_latest_run, prepare_run_dirs, save_json, set_global_seed
 from experiments.policy_guidance import guided_push_action
 
 
@@ -17,8 +17,42 @@ def heuristic_policy(state: torch.Tensor, dim: int):
     return guided_push_action(state, dim)
 
 
-def eval_under_condition(dim: int, difficulty: str, episodes: int = 40, heartbeat_every: int = 10):
-    env = PushBallNDEnv(dim=dim, difficulty=difficulty, max_steps=100)
+def should_apply_domain_rand(enabled: bool, scope: str, difficulty: str) -> bool:
+    if not enabled:
+        return False
+    if scope == "all":
+        return True
+    if scope == "medium_hard":
+        return difficulty in {"medium", "hard"}
+    if scope == "hard_only":
+        return difficulty == "hard"
+    raise ValueError(f"unknown domain-rand difficulty scope: {scope}")
+
+
+def eval_under_condition(
+    dim: int,
+    difficulty: str,
+    episodes: int = 40,
+    heartbeat_every: int = 10,
+    domain_rand: bool = False,
+    domain_rand_scale: float = 0.15,
+    domain_rand_profile: str = "full",
+    domain_rand_warmup_episodes: int = 0,
+    domain_rand_warmup_epochs: int = 0,
+):
+    env = PushBallNDEnv(
+        dim=dim,
+        difficulty=difficulty,
+        max_steps=100,
+        domain_randomization=domain_rand,
+        domain_rand_scale=domain_rand_scale,
+        domain_rand_profile=domain_rand_profile,
+        domain_rand_warmup_episodes=domain_rand_warmup_episodes,
+        domain_rand_warmup_epochs=domain_rand_warmup_epochs,
+    )
+    if domain_rand and domain_rand_warmup_epochs > 0:
+        # Evaluation should reflect post-warmup randomization regime.
+        env.set_domain_rand_training_epoch(domain_rand_warmup_epochs)
     success = 0
     for ep in range(episodes):
         state = env.reset(seed=ep + 42)
@@ -54,18 +88,54 @@ def parse_args():
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--episodes", type=int, default=50)
     parser.add_argument("--dim", type=int, default=3)
+    parser.add_argument("--seed", type=int, default=None, help="Global random seed for reproducibility.")
+    parser.add_argument("--domain-rand", action="store_true", help="Enable domain randomization in environment.")
+    parser.add_argument("--domain-rand-scale", type=float, default=0.15, help="Relative randomization scale.")
+    parser.add_argument(
+        "--domain-rand-profile",
+        type=str,
+        default="full",
+        choices=["full", "conservative"],
+        help="Domain randomization parameter profile.",
+    )
+    parser.add_argument(
+        "--domain-rand-warmup-episodes",
+        type=int,
+        default=0,
+        help="Linear warmup episodes for effective randomization scale.",
+    )
+    parser.add_argument(
+        "--domain-rand-warmup-epochs",
+        type=int,
+        default=0,
+        help="Linear warmup epochs for effective randomization scale.",
+    )
+    parser.add_argument(
+        "--domain-rand-difficulties",
+        type=str,
+        default="all",
+        choices=["all", "medium_hard", "hard_only"],
+        help="Which difficulty levels apply domain randomization.",
+    )
     parser.add_argument("--heartbeat-every", type=int, default=10, help="Print eval heartbeat every N episodes.")
     return parser.parse_args()
 
 
 def run():
     args = parse_args()
+    if args.seed is not None:
+        set_global_seed(args.seed)
     exp_name = "robustness"
     run_id = resolve_run_id(exp_name, args.run_id, args.resume)
     result_dir, _ = prepare_run_dirs(exp_name, run_id)
 
     rows = []
     for difficulty in ["easy", "medium", "hard"]:
+        apply_domain_rand = should_apply_domain_rand(
+            enabled=args.domain_rand,
+            scope=args.domain_rand_difficulties,
+            difficulty=difficulty,
+        )
         rows.append(
             {
                 "difficulty": difficulty,
@@ -74,6 +144,11 @@ def run():
                     difficulty=difficulty,
                     episodes=args.episodes,
                     heartbeat_every=args.heartbeat_every,
+                    domain_rand=apply_domain_rand,
+                    domain_rand_scale=args.domain_rand_scale,
+                    domain_rand_profile=args.domain_rand_profile,
+                    domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
+                    domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
                 ),
             }
         )
@@ -82,7 +157,17 @@ def run():
         "experiment": exp_name,
         "run_id": run_id,
         "results": rows,
-        "meta": {"episodes": args.episodes, "dim": args.dim},
+        "meta": {
+            "episodes": args.episodes,
+            "dim": args.dim,
+            "seed": args.seed,
+            "domain_rand": args.domain_rand,
+            "domain_rand_scale": args.domain_rand_scale,
+            "domain_rand_profile": args.domain_rand_profile,
+            "domain_rand_warmup_episodes": args.domain_rand_warmup_episodes,
+            "domain_rand_warmup_epochs": args.domain_rand_warmup_epochs,
+            "domain_rand_difficulties": args.domain_rand_difficulties,
+        },
     }
     save_json(result_dir / "robustness.json", out)
     save_json(Path("results") / "robustness.json", out)

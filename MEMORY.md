@@ -152,3 +152,242 @@
   - Kaggle transfer to 3D (source 2/3/4/5/6/8D): `0.625/0.675/0.675/0.700/0.675/0.650`.
   - Kaggle ablation (gru/mlp/rssm): `0.675/0.725/0.650`.
   - Kaggle robustness (easy/medium/hard): `0.733/0.242/0.167`.
+- Restored memory context for current session and verified high-dimensional implementation path:
+  - Re-read `MEMORY.md`, `RUNBOOK.md`, `README.md`, and core modules under `physics/`, `envs/`, `models/`, `training/`, `experiments/`.
+  - Confirmed dimensional parameterization is implemented end-to-end via `dim` (`state_dim=5*dim`, `action_dim=dim`, shared N-D physics and model heads).
+  - Ran targeted tests for dimensional/runtime correctness:
+    - `pytest -q envs/tests/test_env_basics.py models/tests/test_forward.py physics/tests/test_free_fall.py`
+    - Result: `4 passed, 1 warning`.
+- Added staged upgrade plan document:
+  - Created `改造计划.MD` at project root with phased roadmap `P0~P6`.
+  - Included per-phase scope, risk tier, acceptance criteria, reproducible commands, rollback plan, and week-1 sprint targets.
+  - Added ASCII roadmap/dependency maps and global validation gate definitions for migration-safe evolution.
+- Started implementation of Phase P0 (baseline freeze) tooling:
+  - Added global reproducible seeding helper `set_global_seed` in `experiments/common.py`.
+  - Added `--seed` support to experiment runners:
+    - `experiments/run_baseline.py`
+    - `experiments/run_transfer.py`
+    - `experiments/run_robustness.py`
+    - `experiments/run_ablation.py`
+  - Added multi-seed orchestration script `experiments/run_p0_baseline_freeze.py`:
+    - runs baseline/transfer/robustness per seed
+    - aggregates key KPIs (`baseline_success_dim3/4`, `transfer_success_mean/gain`, `robust_easy/medium/hard`)
+    - writes summary to `results/p0_freeze/<run_id_prefix>/p0_summary.json`
+  - Added seed reproducibility tests: `experiments/tests/test_common_seed.py`.
+  - Updated docs:
+    - `RUNBOOK.md` with P0 multi-seed command section
+    - `README.md` with P0 baseline-freeze workflow note
+  - Validation:
+    - `pytest -q experiments/tests/test_common_seed.py envs/tests/test_env_basics.py models/tests/test_forward.py training/tests/test_dream_trainer.py` -> `8 passed, 1 warning`
+    - P0 script smoke run passed:
+      - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p0_smoke_seed --seeds 7 --baseline-epochs 1 --baseline-eval-episodes 8 --baseline-max-steps 60 --transfer-pretrain-epochs 1 --transfer-finetune-epochs 1 --transfer-eval-episodes 8 --transfer-max-steps 60 --robustness-episodes 12 --robustness-dim 3`
+      - output summary generated at `results/p0_freeze/p0_smoke_seed/p0_summary.json`.
+- Completed formal P0 multi-seed baseline freeze run:
+  - Command:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p0_freeze_v1 --seeds 11 22 33 --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120`
+  - Runtime:
+    - `~11m48s` (`707.9s`), exit code `0`.
+  - Output:
+    - `results/p0_freeze/p0_freeze_v1/p0_summary.json`
+    - `results/p0_freeze_summary.json`
+  - Aggregated metrics (mean ± std):
+    - `baseline_success_dim3`: `0.7333 ± 0.0144`
+    - `baseline_success_dim4`: `0.6583 ± 0.0144`
+    - `transfer_success_mean`: `0.6347 ± 0.0146`
+    - `transfer_gain_mean`: `+0.0264 ± 0.0064`
+    - `robust_easy`: `0.7333 ± 0.0000`
+    - `robust_medium`: `0.2417 ± 0.0000`
+    - `robust_hard`: `0.1667 ± 0.0000`
+  - Per-seed rows archived in summary for reproducibility:
+    - `p0_freeze_v1_s11`, `p0_freeze_v1_s22`, `p0_freeze_v1_s33`.
+- Completed P0 reproducibility re-check (same seed repeated twice):
+  - Commands:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p0_repeat_seed99_a --seeds 99 --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120`
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p0_repeat_seed99_b --seeds 99 --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120`
+  - Runtime:
+    - `~8m38s` total, both exits `0`.
+  - Result:
+    - Core metrics were identical across both runs (`abs diff = 0` for all tracked KPIs), passing the `±10%` repeatability gate.
+- Started and validated P1 interface-contract work (state semantics lock + checkpoint compatibility):
+  - `envs/push_ball.py`:
+    - Added explicit state semantic layout (`STATE_COMPONENTS`).
+    - Added `state_slices()` and `split_state()` contract helpers.
+    - Enforced semantic decomposition check in `_get_obs()`.
+  - `training/dream_trainer.py`:
+    - Added rollout state-contract assertions for `reset/rollout/next_state`.
+    - Added action shape assertion in collection loop.
+    - Checkpoint env metadata now includes `state_layout_version` and `state_components`.
+    - Strict checkpoint load now rejects semantic-component mismatch (while preserving backward compatibility).
+  - New tests:
+    - `envs/tests/test_state_semantics.py`
+    - extended `training/tests/test_dream_trainer.py` with:
+      - semantic mismatch rejection test
+      - legacy checkpoint compatibility test (missing semantic fields)
+  - Validation:
+    - `pytest -q envs/tests/test_state_semantics.py training/tests/test_dream_trainer.py experiments/tests/test_common_seed.py envs/tests/test_env_basics.py models/tests/test_forward.py`
+    - Result: `12 passed, 1 warning`.
+- Started P2 (Domain Randomization) implementation:
+  - `envs/push_ball.py` now supports per-episode randomized physics/task parameters:
+    - constructor flags: `domain_randomization`, `domain_rand_scale`
+    - sampled params include:
+      - `gravity_strength`, `wind_strength`
+      - `success_radius`
+      - `agent_mass`, `ball_mass`
+      - `push_radius`, `contact_gain`, `damping`
+    - runtime exposure via `episode_params`
+  - Experiment runner integration:
+    - Added `--domain-rand` and `--domain-rand-scale` to:
+      - `experiments/run_baseline.py`
+      - `experiments/run_transfer.py`
+      - `experiments/run_ablation.py`
+      - `experiments/run_robustness.py`
+      - `experiments/run_until_success.py`
+      - `experiments/run_p0_baseline_freeze.py`
+    - Result metadata now records domain-rand settings.
+  - Added tests:
+    - `envs/tests/test_domain_randomization.py` (base-params/no-rand, same-seed reproducibility, seed-to-seed variation, shape contract)
+  - Documentation update:
+    - `RUNBOOK.md` adds P2 starter commands.
+    - `README.md` adds P2 feature description.
+  - Validation:
+    - `pytest -q envs/tests/test_domain_randomization.py envs/tests/test_state_semantics.py training/tests/test_dream_trainer.py experiments/tests/test_common_seed.py envs/tests/test_env_basics.py models/tests/test_forward.py`
+    - Result: `16 passed, 1 warning`.
+    - P2 smoke run:
+      - `python experiments/run_baseline.py --run-id p2_smoke_seed11 --seed 11 --domain-rand --domain-rand-scale 0.15 --epochs 1 --max-steps 60 --eval-episodes 8 --save-every 0 --keep-last 2`
+      - Output: `results/baseline/p2_smoke_seed11/baseline.json` with domain-rand metadata.
+- Completed first formal P2 multi-seed evaluation (domain-rand v1):
+  - Command:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p2_rand_v1 --seeds 11 22 33 --domain-rand --domain-rand-scale 0.15 --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120`
+  - Runtime:
+    - `~12m03s` (`722.7s`), exit `0`.
+  - Outputs:
+    - `results/p0_freeze/p2_rand_v1/p0_summary.json`
+  - Comparison vs P0 baseline (`p0_freeze_v1`) indicates significant regression at current scale:
+    - `baseline_success_dim3`: `0.7333 -> 0.5083` (Δ `-0.2250`)
+    - `baseline_success_dim4`: `0.6583 -> 0.3833` (Δ `-0.2750`)
+    - `transfer_success_mean`: `0.6347 -> 0.4833` (Δ `-0.1514`)
+    - `robust_easy`: `0.7333 -> 0.6250` (Δ `-0.1083`)
+    - `robust_medium`: `0.2417 -> 0.1833` (Δ `-0.0583`)
+    - `robust_hard`: unchanged at `0.1667`
+- Ran quick P2 scale sweep (single-seed, seed=11):
+  - `domain_rand_scale=0.05` (`p2_scale005_s11`) and `0.10` (`p2_scale010_s11`) both completed, exits `0`.
+  - Results suggest `0.05` is less damaging than `0.10/0.15` but still degrades baseline dims and transfer gain:
+    - At `0.05`: `baseline_dim3 -0.125`, `baseline_dim4 -0.075`, `transfer_gain_mean -0.0625` vs P0 seed11.
+    - At `0.10`: degradation worsened further on baseline and transfer metrics.
+  - Current decision signal:
+    - P2 needs conservative profile tuning (parameter subset / annealed schedule), not direct full-parameter randomization at fixed scale.
+- Implemented P2 tuning controls (conservative profile + warmup):
+  - `envs/push_ball.py` updates:
+    - new args:
+      - `domain_rand_profile`: `full | conservative`
+      - `domain_rand_warmup_episodes`: linear scale warmup
+    - episode-level effective scale tracked via `episode_params["rand_scale_effective"]`.
+    - `conservative` profile keeps `agent_mass/ball_mass/success_radius/push_radius` fixed while randomizing mainly force/dynamics knobs.
+  - Runner arg propagation added for profile/warmup:
+    - `run_baseline.py`, `run_transfer.py`, `run_ablation.py`, `run_robustness.py`, `run_until_success.py`, `run_p0_baseline_freeze.py`
+  - Added tests:
+    - `test_conservative_profile_keeps_mass_and_success_radius_fixed`
+    - `test_domain_rand_warmup_increases_effective_scale`
+  - Validation:
+    - `pytest -q ...` now `18 passed, 1 warning`.
+    - baseline smoke and orchestrator smoke with `--domain-rand-profile conservative --domain-rand-warmup-episodes 50` passed.
+- Completed formal P2 conservative evaluation:
+  - Command:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p2_conservative_v1 --seeds 11 22 33 --domain-rand --domain-rand-scale 0.10 --domain-rand-profile conservative --domain-rand-warmup-episodes 200 --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120`
+  - Runtime:
+    - `~11m17s` (`677.2s`), exit `0`.
+  - Summary means:
+    - `baseline_success_dim3`: `0.5917`
+    - `baseline_success_dim4`: `0.5750`
+    - `transfer_success_mean`: `0.5875`
+    - `transfer_gain_mean`: `-0.0125`
+    - `robust_easy`: `0.7417`
+    - `robust_medium`: `0.2917`
+    - `robust_hard`: `0.1500`
+  - Comparison signals:
+    - vs P2 full (`p2_rand_v1`): large recovery on baseline/transfer success and easy/medium robustness.
+    - vs P0 baseline (`p0_freeze_v1`): still behind on baseline dims and transfer gain; medium robustness improved; hard slightly lower.
+- Implemented P2 v2 control path (requested 1/2/3 bundle):
+  - 1) Medium/Hard-only domain randomization scope:
+    - Added `experiments/run_robustness.py::should_apply_domain_rand(...)`.
+    - New CLI:
+      - `--domain-rand-difficulties {all,medium_hard,hard_only}`
+    - Added orchestrator control:
+      - `run_p0_baseline_freeze.py --domain-rand-scope {all,robustness_only,train_only}`
+      - `--robustness-domain-rand-difficulties ...`
+  - 2) Epoch-linked warmup + transfer stage-wise randomization:
+    - `envs/push_ball.py` adds:
+      - `domain_rand_warmup_epochs`
+      - `set_domain_rand_training_epoch(epoch)`
+      - `set_domain_rand_stage_multiplier(multiplier)`
+    - Effective scale now combines:
+      - base scale × episode warmup × epoch warmup × stage multiplier
+    - `run_transfer.py` adds:
+      - `--domain-rand-scratch-multiplier`
+      - `--domain-rand-source-multiplier`
+      - `--domain-rand-finetune-multiplier` (default weaker `0.5`)
+    - baseline/ablation/until_success/robustness/orchestrator now also support `--domain-rand-warmup-epochs`.
+  - 3) Formal target check (`transfer_gain_mean >= 0`) with v2 strategy:
+    - Command:
+      - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p2_v2 --seeds 11 22 33 --domain-rand --domain-rand-scope robustness_only --robustness-domain-rand-difficulties medium_hard --domain-rand-scale 0.10 --domain-rand-profile conservative --domain-rand-warmup-episodes 200 --domain-rand-warmup-epochs 8 --domain-rand-source-multiplier 1.0 --domain-rand-finetune-multiplier 0.5 --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120`
+    - Runtime:
+      - `~11m50s` (`710.4s`), exit `0`.
+    - Result:
+      - `transfer_gain_mean = +0.02639` (PASS, `>= 0`)
+      - baseline/transfer means recovered to P0-level
+      - `robust_medium` improved (`0.2917` vs P0 `0.2417`)
+      - `robust_hard` slightly lower (`0.1500` vs P0 `0.1667`)
+- Additional validation for v2 path:
+  - Tests:
+    - `pytest -q ...` -> `31 passed, 1 warning`
+    - Includes new:
+      - `envs/tests/test_domain_randomization.py` epoch/stage controls
+      - `experiments/tests/test_robustness_scope.py`
+  - Smoke:
+    - `run_p0_baseline_freeze.py --run-id-prefix p2_v2_smoke ...` passed.
+## 2026-02-27 22:49:38 P2 quick scale sweep (seed=11)
+- Completed runs: p2_scale005_s11_s11, p2_scale010_s11_s11
+- Both exit_code=0; runtimes ~286.04s and ~288.54s.
+- Baseline for delta comparison: results/p0_freeze/p0_freeze_v1/p0_summary.json seed=11 (run_id=p0_freeze_v1_s11).
+- Advanced through P3-P6 implementation sweep:
+  - P3 (Physics+Residual):
+    - Added `models/physics_residual_world_model.py` (`PhysicsResidualWorldModel`).
+    - Integrated into trainer dispatch and ablation (`phys_residual`).
+    - Added tests `models/tests/test_physics_residual.py` and updated `models/tests/test_forward.py`.
+  - P4 (Curriculum):
+    - Added `experiments/run_curriculum.py` for threshold-driven easy->medium->hard progression with checkpoint/progress persistence.
+  - P5 (Aggregation):
+    - Added `experiments/aggregate_report.py` to merge multiple run summaries into `aggregate.json` + `aggregate.md`.
+  - P6 (Hi-Fi migration):
+    - Added `envs/high_fidelity_proxy.py` (`HiFiPushBallProxyEnv`) with deterministic action-coupling + state-warp mismatch.
+    - Added `experiments/run_hifi_migration.py` for pre/post finetune migration evaluation from baseline checkpoints.
+    - Added tests `envs/tests/test_hifi_proxy.py`.
+- Full P3~P6 smoke validation completed:
+  - `pytest -q models/tests/test_forward.py models/tests/test_physics_residual.py envs/tests/test_domain_randomization.py envs/tests/test_hifi_proxy.py experiments/tests/test_robustness_scope.py training/tests/test_dream_trainer.py envs/tests/test_env_basics.py`
+  - Result: `31 passed, 1 warning`.
+  - `run_ablation.py --run-id p3_ablation_smoke ...` PASS.
+  - `run_curriculum.py --run-id p4_curriculum_smoke ...` PASS (`completed=False` under 1-round smoke budget).
+  - `aggregate_report.py --run-prefixes p0_freeze_v1 p2_rand_v1 p2_v2 --report-name p5_smoke_report` PASS.
+  - `run_hifi_migration.py --run-id p6_hifi_smoke --source-run-id p2_v2_s11 ... --finetune-epochs 1 --eval-episodes 8` PASS (`pre_hifi=0.125`, `post_hifi=0.125`).
+- Additional transfer-stage-randomization chain check:
+  - `run_p0_baseline_freeze.py --run-id-prefix p2_transfer_stage_smoke --domain-rand --domain-rand-scope train_only --domain-rand-scale 0.08 --domain-rand-profile conservative --domain-rand-warmup-episodes 20 --domain-rand-warmup-epochs 4 --domain-rand-source-multiplier 1.0 --domain-rand-finetune-multiplier 0.5 --baseline-epochs 1 --transfer-pretrain-epochs 1 --transfer-finetune-epochs 1 --robustness-episodes 8`
+  - Exit `0`, runtime ~129s.
+
+## 2026-02-28
+- Completed release freeze + significance package for user-requested "1/2":
+  - Release freeze gate:
+    - `pytest -q .` => `50 passed, 1 warning`.
+  - 5-seed long-budget runs completed:
+    - `p0_freeze_5seed` (seeds `11 22 33 44 55`), exit `0`.
+    - `p2_v2_5seed` (same seeds, P2 v2 conservative scope), exit `0`.
+  - Added significance tool:
+    - New script `experiments/significance_report.py` (paired exact sign-flip test).
+  - Produced release significance artifacts:
+    - `report/release_significance_p0_vs_p2v2_5seed.json`
+    - `report/release_significance_p0_vs_p2v2_5seed.md`
+  - Core conclusion (alpha=0.05, n=5 paired):
+    - No KPI reached statistical significance.
+    - `robust_medium` trend up (`+0.0500`, `p=0.0625`), `robust_hard` slight down (`-0.0167`, `p=0.0625`), others unchanged.
+- README updated with:
+  - P0/P2 reproducible command blocks (5-seed).
+  - release-freeze + significance workflow and interpretation notes.
