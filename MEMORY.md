@@ -476,3 +476,443 @@
   - observed baseline: `run_id=kaggle_cfgverify2_20260228`, `meta.seed=11`
 - Final status: resolved (PASS).
 
+## 2026-02-28 14:05:00 - Kaggle-heavy experiment wave (experiment-first)
+- User requested experiment-first and to maximize Kaggle usage.
+- Initial attempt with three new kernel slugs (`hdwm-exp-control-s11`, `hdwm-exp-hi-s11`, `hdwm-exp-hi-s22`) failed quickly with `KernelWorkerStatus.ERROR`.
+  - Observed failure pattern in downloaded logs:
+    - `run_config.json not found, using built-in defaults`
+    - dataset mount missing, then fallback to git clone
+    - git clone failed due runtime DNS/network blocker (`Could not resolve host: github.com`).
+- Implemented robustness fix for config propagation:
+  - `kaggle/run_kaggle_job.py`:
+    - added `EMBEDDED_RUN_CONFIG_JSON` support.
+    - loader now applies embedded config first and logs `Loaded embedded run config from kernel script.`.
+  - `kaggle_job_manager.py`:
+    - added `inject_embedded_run_config(build_dir, run_config)` in `prepare(...)`.
+    - each pushed kernel script now carries per-run config even when adjacent `run_config.json` is unavailable in Kaggle script layout.
+- Validation of fix:
+  - local compile: `python -m py_compile kaggle_job_manager.py kaggle/run_kaggle_job.py` (PASS).
+  - build artifact check: embedded JSON contains expected `run_id/seed/code_dataset_slug` (PASS).
+  - runtime log check on stable kernel now shows `Loaded embedded run config from kernel script.` (PASS).
+- Executed Kaggle formal experiment batch on stable slug `peter941221/high-dimensional-worldmodel-aggressive`:
+  - Control budget run:
+    - `run_id=kg_exp_ctrl_s11_20260228`, `seed=11`
+    - budget: baseline/transfer/ablation/robustness = `12 / (8+8) / 8 / 120`
+    - status: complete, outputs downloaded to `kaggle_outputs/aggr_ctrl_s11/`.
+  - High budget run #1:
+    - `run_id=kg_exp_hi_s11_20260228`, `seed=11`
+    - budget: `24 / (16+16) / 16 / 200`, eval=60, max_steps=150
+    - status: complete, outputs downloaded to `kaggle_outputs/aggr_hi_s11/`.
+  - High budget run #2:
+    - `run_id=kg_exp_hi_s22_20260228`, `seed=22`
+    - same high budget settings
+    - status: complete, outputs downloaded to `kaggle_outputs/aggr_hi_s22/`.
+- Aggregated summary artifacts generated:
+  - `report/kaggle_experiment_20260228_summary.json`
+  - `report/kaggle_experiment_20260228_summary.md`
+- Key comparison snapshot (high-budget mean vs control):
+  - Baseline: `dim3 +0.2083`, `dim4 +0.1333`, `dim6 +0.0500`, `dim8 +0.0500`.
+  - Transfer:
+    - `transfer_success_mean +0.2069` (absolute success improved strongly),
+    - `transfer_gain_mean -0.0097` (relative gain vs baseline slightly lower on average).
+  - Robustness:
+    - `easy +0.0067`, `medium -0.0267`, `hard +0.0033` (medium dipped slightly).
+  - Ablation best model shifted from `gru (0.725)` in control to `phys_residual (0.900)` in high-budget runs.
+
+## 2026-02-28 15:32:00 - Robustness-targeted Kaggle wave (Option 1)
+- User selected option 1: run high-budget experiments with robustness-focused tuning on Kaggle.
+- Implemented runner parameter passthrough for robustness-only domain randomization:
+  - `kaggle_job_manager.py`:
+    - added CLI/run-config fields:
+      - `--robustness-domain-rand`
+      - `--robustness-domain-rand-scale`
+      - `--robustness-domain-rand-profile`
+      - `--robustness-domain-rand-warmup-episodes`
+      - `--robustness-domain-rand-warmup-epochs`
+      - `--robustness-domain-rand-difficulties`
+  - `kaggle/run_kaggle_job.py`:
+    - defaults expanded with robustness-domain-rand config keys.
+    - `build_stage_cmds` now appends domain-rand args only to robustness stage when enabled.
+- Validation before run:
+  - `python -m py_compile kaggle_job_manager.py kaggle/run_kaggle_job.py` PASS.
+  - dry command construction check confirmed robustness command contains:
+    - `--domain-rand --domain-rand-scale 0.1 --domain-rand-profile conservative --domain-rand-difficulties medium_hard`.
+- Kaggle formal runs completed on stable kernel slug:
+  - `kg_exp_rbmh_s11_20260228` (seed=11), budget:
+    - baseline 24, transfer 16+16, ablation 16, robustness 240.
+    - robustness rand config:
+      - `scale=0.10`, `profile=conservative`, `warmup_episodes=200`, `difficulties=medium_hard`.
+    - status: COMPLETE, outputs in `kaggle_outputs/aggr_rbmh_s11/`.
+  - `kg_exp_rbmh_s22_20260228` (seed=22), same config/budget.
+    - status: COMPLETE, outputs in `kaggle_outputs/aggr_rbmh_s22/`.
+- Runtime log verification:
+  - robustness stage command in both runs included full targeted args (`domain-rand-difficulties medium_hard`).
+- Aggregated report generated:
+  - `report/kaggle_experiment_rbmh_20260228_summary.json`
+  - `report/kaggle_experiment_rbmh_20260228_summary.md`
+- Main comparison vs previous high-budget mean:
+  - unchanged:
+    - baseline dim3/4/6/8, transfer success mean, transfer gain mean (all equal to previous high-budget mean).
+  - robustness shifts:
+    - `robust_medium`: `+0.0225` (from `0.2150` to `0.2375`) -> improved.
+    - `robust_easy`: `-0.0108` (from `0.7400` to `0.7292`) -> slight drop.
+    - `robust_hard`: `-0.0325` (from `0.1700` to `0.1375`) -> notable drop.
+- Decision signal:
+  - medium-targeted objective partially achieved (medium recovers), but hard regressed.
+  - next likely direction: keep medium_hard scope but reduce randomness intensity for hard-sensitive region (e.g., lower scale or shorter warmup).
+
+## 2026-02-28 16:45:00 - Option 1 + 2 executed (Kaggle-heavy, full close-loop)
+- User requested to execute both:
+  - Option 1: run scale `0.08` robustness-targeted experiments.
+  - Option 2: run 5-seed experiment + significance report.
+
+- Parallelization probe status:
+  - Tried two additional kernel slugs:
+    - `high-dimensional-worldmodel-aggressive-a`
+    - `high-dimensional-worldmodel-aggressive-b`
+  - Both repeatedly failed at runtime with:
+    - dataset mount missing (`/kaggle/input/high-dimensional-worldmodel-src`)
+    - fallback git clone blocked by DNS (`Could not resolve host: github.com`)
+  - Decision: fallback to stable slug `high-dimensional-worldmodel-aggressive` for reliable sequential execution.
+
+- Stable Kaggle runs completed (all status `COMPLETE`):
+  - Option 1 (`scale=0.08`, medium_hard, conservative):
+    - `kg_exp_rb08_s11_20260228`
+    - `kg_exp_rb08_s22_20260228`
+  - Option 2 control completion (`scale=0.10`) extra seeds:
+    - `kg_exp_rb10_s33_20260228`
+    - `kg_exp_rb10_s44_20260228`
+    - `kg_exp_rb10_s55_20260228`
+  - Option 2 treatment completion (`scale=0.08`) extra seeds:
+    - `kg_exp_rb08_s33_20260228`
+    - `kg_exp_rb08_s44_20260228`
+    - `kg_exp_rb08_s55_20260228`
+
+- Verified command-level parameter forwarding in runtime logs:
+  - `scale=0.08` runs contain `--domain-rand-scale 0.08 --domain-rand-difficulties medium_hard`.
+  - `scale=0.10` runs contain `--domain-rand-scale 0.1 --domain-rand-difficulties medium_hard`.
+
+- Built paired 5-seed summary files for significance script:
+  - `results/p0_freeze/rb10/p0_summary.json`
+  - `results/p0_freeze/rb08/p0_summary.json`
+
+- Generated significance report:
+  - `report/kaggle_rb10_vs_rb08_5seed_significance.json`
+  - `report/kaggle_rb10_vs_rb08_5seed_significance.md`
+  - Result: all KPI deltas are exactly `0.0`, all `p_value=1.0`, no significant difference.
+
+- Additional compact comparison report:
+  - `report/kaggle_rb08_vs_rb10_option12_summary.json`
+  - `report/kaggle_rb08_vs_rb10_option12_summary.md`
+  - 2-seed (Option 1) and 5-seed (Option 2) both show `rb08 == rb10` on all tracked KPIs.
+
+- Important decision signal:
+  - In current pipeline, changing robustness randomization scale from `0.10` to `0.08` did not change any tracked KPI under tested settings.
+  - Indicates either:
+    - scale difference is not effectively influencing evaluated behavior in this setup, or
+    - current metric path is insensitive to this perturbation range.
+
+## 2026-02-28 17:10:00 - Next-step sensitivity probe (`0.02 vs 0.20`, `hard_only`)
+- User requested to continue after explanation; launched a stronger-gap probe to test sensitivity.
+- Experiment setup (Kaggle, stable slug, lightweight non-robust stages + heavy robustness):
+  - common:
+    - `baseline/transfer/ablation epochs = 1/1+1/1`
+    - `robustness_episodes = 240`
+    - `domain_rand_profile = conservative`
+    - `domain_rand_difficulties = hard_only`
+  - scale/grid:
+    - `0.02` and `0.20`
+  - seeds:
+    - `11`, `22`
+- Completed runs (`COMPLETE`):
+  - `kg_next_s002_hard_s11_20260228`
+  - `kg_next_s020_hard_s11_20260228`
+  - `kg_next_s002_hard_s22_20260228`
+  - `kg_next_s020_hard_s22_20260228`
+- Log verification:
+  - runtime commands confirmed `--domain-rand-difficulties hard_only`.
+  - runtime commands confirmed intended scale values (`0.02` / `0.2`).
+- Results summary:
+  - scale `0.02` mean:
+    - `easy=0.7292`, `medium=0.2167`, `hard=0.1375`
+  - scale `0.20` mean:
+    - `easy=0.7292`, `medium=0.2167`, `hard=0.1417`
+  - delta (`0.20 - 0.02`):
+    - `easy=0.0000`
+    - `medium=0.0000`
+    - `hard=+0.00417` (both seeds same direction)
+- Artifacts:
+  - `report/kaggle_next_scale_002_vs_020_hardonly_2seed.json`
+  - `report/kaggle_next_scale_002_vs_020_hardonly_2seed.md`
+- Decision signal:
+  - Compared to `0.08/0.10` fully-flat result, stronger scale gap plus `hard_only` finally shows a small positive movement on `hard`.
+  - Effect is still small; likely requires 5-seed significance before treating as stable gain.
+
+## 2026-02-28 17:35:00 - 5-seed extension for `0.02 vs 0.20` (`hard_only`) completed
+- User confirmed to continue; expanded the probe to full 5 seeds with paired design.
+- Additional completed runs (beyond existing seed 11/22 runs):
+  - `kg_next_s002_hard_s33_20260228`
+  - `kg_next_s020_hard_s33_20260228`
+  - `kg_next_s002_hard_s44_20260228`
+  - `kg_next_s020_hard_s44_20260228`
+  - `kg_next_s002_hard_s55_20260228`
+  - `kg_next_s020_hard_s55_20260228`
+- Total paired sets for this study:
+  - scales: `0.02` vs `0.20`
+  - seeds: `11,22,33,44,55`
+  - scope: `domain_rand_difficulties=hard_only`
+- Built significance-ready summaries:
+  - `results/p0_freeze/next_hard002_5seed/p0_summary.json`
+  - `results/p0_freeze/next_hard020_5seed/p0_summary.json`
+- Generated significance report:
+  - `report/kaggle_next_hard002_vs_hard020_5seed_significance.json`
+  - `report/kaggle_next_hard002_vs_hard020_5seed_significance.md`
+- Key result (paired exact sign-flip, alpha=0.05):
+  - `robust_hard`: `0.1375 -> 0.1417` (Δ `+0.00417`), `p=0.0625` (not significant at 0.05, trend positive).
+  - other KPIs unchanged (`delta=0`, `p=1.0`), including `robust_easy` and `robust_medium`.
+- Interpretation:
+  - `0.20` on `hard_only` appears directionally better for hard robustness, but evidence is still below formal 0.05 significance.
+  - Current non-robust stages used tiny budget (`epochs=1`) to prioritize robustness sensitivity testing; absolute baseline/transfer values are intentionally low in this phase.
+
+## 2026-02-28 18:55:00 - 9-seed extension completed and became significant
+- Continued the paused 9-seed extension on Kaggle (stable slug `high-dimensional-worldmodel-aggressive`).
+- Recovery + completion:
+  - recovered missing output for completed run:
+    - `kg_next_s020_hard_s77_20260228` -> downloaded successfully to `kaggle_outputs/next_s020_hard_s77/`.
+  - completed new seeds:
+    - `kg_next_s002_hard_s88_20260228`
+    - `kg_next_s020_hard_s88_20260228`
+    - `kg_next_s002_hard_s99_20260228`
+    - `kg_next_s020_hard_s99_20260228`
+- Important correction applied during execution:
+  - detected config mismatch in first s88/s99 attempt (`eval_episodes=40`, `max_steps=120`) versus earlier seeds (`eval_episodes=8`, `max_steps=60`).
+  - reran s88/s99 pair with aligned settings (`--eval-episodes 8 --max-steps 60`) to keep paired 9-seed comparability.
+- Built final 9-seed summaries:
+  - `results/p0_freeze/next_hard002_9seed/p0_summary.json`
+  - `results/p0_freeze/next_hard020_9seed/p0_summary.json`
+  - seeds: `11,22,33,44,55,66,77,88,99`
+- Generated significance report:
+  - `report/kaggle_next_hard002_vs_hard020_9seed_significance.json`
+  - `report/kaggle_next_hard002_vs_hard020_9seed_significance.md`
+- Key result (paired exact sign-flip, alpha=0.05):
+  - `robust_hard`: `0.1375 -> 0.1417` (Δ `+0.00417`), `p=0.00390625` -> **significant**.
+  - other KPIs unchanged (`delta=0`, `p=1.0`).
+- Decision signal update:
+  - compared with 5-seed trend (`p=0.0625`), 9-seed evidence crosses significance threshold.
+  - under this lightweight setting, `scale=0.20 + hard_only` is now supported as the better robustness config for hard difficulty.
+
+## 2026-02-28 19:40:00 - Executed both follow-ups: high-budget confirmation + neighbor curve
+- User requested "do both":
+  1) high-budget confirmation run for `0.20` vs `0.02`;
+  2) neighbor-scale scan (`0.15` / `0.25`) in same setting.
+
+- High-budget confirmation setup (Kaggle, stable slug):
+  - common config:
+    - `baseline=24`, `transfer=16+16`, `ablation=16`, `robustness_episodes=240`
+    - `eval_episodes=60`, `max_steps=150`
+    - robustness randomization: `profile=conservative`, `difficulties=hard_only`, `warmup_episodes=200`
+  - paired seeds: `11, 22`
+  - runs:
+    - `kg_hiconf_s002_hard_s11_20260228`
+    - `kg_hiconf_s020_hard_s11_20260228`
+    - `kg_hiconf_s002_hard_s22_20260228`
+    - `kg_hiconf_s020_hard_s22_20260228`
+
+- Neighbor-scale curve runs (same high-budget config):
+  - `kg_hicurve_s015_hard_s11_20260228`
+  - `kg_hicurve_s025_hard_s11_20260228`
+
+- New artifacts:
+  - significance summaries:
+    - `results/p0_freeze/hiconf_hard002_2seed/p0_summary.json`
+    - `results/p0_freeze/hiconf_hard020_2seed/p0_summary.json`
+  - high-budget significance report:
+    - `report/kaggle_hiconf_hard002_vs_hard020_2seed_significance.json`
+    - `report/kaggle_hiconf_hard002_vs_hard020_2seed_significance.md`
+  - curve report:
+    - `report/kaggle_hiconf_hardonly_scale_curve_seed11.json`
+    - `report/kaggle_hiconf_hardonly_scale_curve_seed11.md`
+
+- Key outcomes:
+  - High-budget `0.20 vs 0.02` (2-seed):
+    - `robust_hard`: `0.1375 -> 0.1417` (Δ `+0.00417`, same direction as prior studies),
+    - `p=0.5` (2-seed not significant, expected low power).
+    - all other tracked KPIs unchanged (`delta=0`, `p=1.0`).
+  - Neighbor-scale curve (seed 11):
+    - `robust_hard`: `0.15=0.1375`, `0.20=0.1417`, `0.25=0.1417`.
+    - indicates `0.20` and `0.25` are tied and both above `0.15` in this probe.
+
+- Decision update:
+  - Keep `0.20 + hard_only` as default candidate (supported by earlier 9-seed significance and high-budget directional confirmation).
+  - `0.25` is a viable alternative candidate with no observed gain beyond `0.20` in current single-seed curve check.
+
+## 2026-02-28 22:05:00 - High-budget final decider (`0.20 vs 0.25`, 5 seeds) completed
+- User requested to run the full final decider. Executed a clean paired 5-seed Kaggle batch:
+  - scales: `0.20` vs `0.25`
+  - scope: `hard_only`, `profile=conservative`, `warmup_episodes=200`
+  - budget:
+    - `baseline=24`, `transfer=16+16`, `ablation=16`, `robustness_episodes=240`
+    - `eval_episodes=60`, `max_steps=150`
+  - seeds: `11,22,33,44,55`
+
+- Completed runs:
+  - scale `0.20`:
+    - `kg_hifinal_s020_hard_s11_20260228`
+    - `kg_hifinal_s020_hard_s22_20260228`
+    - `kg_hifinal_s020_hard_s33_20260228`
+    - `kg_hifinal_s020_hard_s44_20260228`
+    - `kg_hifinal_s020_hard_s55_20260228`
+  - scale `0.25`:
+    - `kg_hifinal_s025_hard_s11_20260228`
+    - `kg_hifinal_s025_hard_s22_20260228`
+    - `kg_hifinal_s025_hard_s33_20260228`
+    - `kg_hifinal_s025_hard_s44_20260228`
+    - `kg_hifinal_s025_hard_s55_20260228`
+
+- Transient issue handling during batch:
+  - multiple SSL/connection-reset events occurred during `status/output/dataset version`.
+  - recovered via retry strategy (`watch` + `output`-only pull) without losing runs.
+
+- Verification:
+  - command-level config forwarding validated in output artifacts:
+    - `kg_hifinal_s020_hard_s55_20260228` has `domain_rand_scale=0.2`
+    - `kg_hifinal_s025_hard_s55_20260228` has `domain_rand_scale=0.25`
+  - confirms the flat comparison is not due to parameter forwarding failure.
+
+- New artifacts:
+  - summaries:
+    - `results/p0_freeze/hifinal_hard020_5seed/p0_summary.json`
+    - `results/p0_freeze/hifinal_hard025_5seed/p0_summary.json`
+  - significance:
+    - `report/kaggle_hifinal_hard020_vs_hard025_5seed_significance.json`
+    - `report/kaggle_hifinal_hard020_vs_hard025_5seed_significance.md`
+  - compact decision report:
+    - `report/kaggle_hifinal_hard020_vs_hard025_compact.json`
+    - `report/kaggle_hifinal_hard020_vs_hard025_compact.md`
+
+- Key result:
+  - all tracked KPIs are exactly equal across `0.20` and `0.25` (all deltas `0.0`, all `p=1.0`).
+  - `robust_hard`: both `0.1417`.
+
+- Final decision signal:
+  - no measurable gain from `0.25` over `0.20` under high-budget 5-seed paired evaluation.
+  - keep `0.20 + hard_only` as preferred default (same performance, lower scale).
+
+## 2026-02-28 23:04:36 - Memory recovery continuation: 10-seed confidence + default landing
+- Recovered latest local artifacts not yet recorded in memory:
+  - `report/kaggle_hiconf_hard020_10seed_summary.json`
+  - `report/kaggle_hiconf_hard020_10seed_summary.md`
+- High-budget `scale=0.20`, `hard_only` confidence summary (10 seeds: `11,22,33,44,55,66,77,88,99,111`):
+  - `robust_easy = 0.7292` (std `0.0000`)
+  - `robust_medium = 0.2167` (std `0.0000`)
+  - `robust_hard = 0.1417` (std `0.0000`)
+  - robustness KPIs remained fully stable across all 10 seeds in this setup.
+
+- Continued implementation work to align defaults with the validated decision (`0.20 + hard_only + conservative`):
+  - `experiments/run_p0_baseline_freeze.py` defaults updated:
+    - `--domain-rand-scale`: `0.15 -> 0.20`
+    - `--domain-rand-profile`: `full -> conservative`
+    - `--robustness-domain-rand-difficulties`: `all -> hard_only`
+  - docs updated to avoid stale commands:
+    - `README.md` robustness recommendation command now uses `hard_only + scale=0.20`
+    - `RUNBOOK.md` P2 starter/orchestrator examples now use `hard_only + scale=0.20`
+  - repo hygiene improvement:
+    - `.gitignore` now ignores patterned build dirs:
+      - `.kaggle_kernel_build_*/`
+      - `.kaggle_code_dataset_build_*/`
+
+- Decision status:
+  - default recommendation remains unchanged and now has code/docs default alignment:
+    - `domain_rand_profile=conservative`
+    - `robustness_domain_rand_difficulties=hard_only`
+    - `domain_rand_scale=0.20`
+
+## 2026-02-28 23:24:51 - Executed requested follow-ups: full regression + 2-seed Kaggle smoke
+- User requested to run both follow-ups:
+  1) full local regression;
+  2) Kaggle smoke validation with new robustness defaults.
+
+- Local regression execution:
+  - first `pytest -q` failed at collection due duplicate mirrored tests under:
+    - `kaggle_outputs/aggressive_latest/High_Dimensional_WorldModel/...`
+  - temporary rerun succeeded with ignores:
+    - `pytest -q --ignore=kaggle_outputs --ignore=.kaggle_kernel_build --ignore=.kaggle_code_dataset_build`
+    - result: `50 passed`.
+  - permanent hygiene fix applied:
+    - added `pytest.ini` with `norecursedirs` excluding generated Kaggle/output build folders.
+  - post-fix validation:
+    - `pytest -q` passes directly: `50 passed`.
+
+- Kaggle smoke runs completed (`run` flow: prepare + push + watch + output):
+  - kernel versions:
+    - `v72` for seed `11`
+    - `v73` for seed `22`
+  - run ids:
+    - `kg_smoke_hard020_s11_20260228`
+    - `kg_smoke_hard020_s22_20260228`
+  - lightweight config:
+    - `baseline/transfer/ablation epochs = 1/1+1/1`
+    - `robustness_episodes=20`
+    - `eval_episodes=8`, `max_steps=60`
+    - robustness rand: `domain_rand=true`, `scale=0.20`, `profile=conservative`, `difficulties=hard_only`, `warmup_episodes=20`
+  - runtime/outputs:
+    - both runs reached `status=complete`.
+    - one transient output download network error auto-recovered by retry.
+
+- Forwarding verification (artifact + log level):
+  - output JSON meta confirmed for both seeds:
+    - `domain_rand_scale=0.2`
+    - `domain_rand_profile=conservative`
+    - `domain_rand_difficulties=hard_only`
+  - kernel log command line also includes:
+    - `--domain-rand --domain-rand-scale 0.2 --domain-rand-profile conservative --domain-rand-difficulties hard_only`
+
+## 2026-02-28 23:31:48 - Continued: smoke summary artifacts + overlap significance
+- Continued from completed 2-seed smoke runs and converted outputs into formal report artifacts.
+
+- New summary artifacts generated from downloaded Kaggle outputs:
+  - `results/p0_freeze/kaggle_smoke_hard020_2seed/p0_summary.json` (local summary path for future paired tooling)
+  - `report/kaggle_smoke_hard020_2seed_summary.json`
+  - `report/kaggle_smoke_hard020_2seed_summary.md`
+
+- Smoke summary content (seeds `11,22`, tiny budget):
+  - `baseline_success_dim3=0.1250`
+  - `baseline_success_dim4=0.0000`
+  - `transfer_success_mean=0.1250`
+  - `transfer_gain_mean=0.0000`
+  - `robust_easy=0.8000`
+  - `robust_medium=0.1500`
+  - `robust_hard=0.1500`
+
+- Additional overlap comparison report created (for context only, not same budget):
+  - compared `hifinal_hard020_5seed` vs `kaggle_smoke_hard020_2seed` on overlapping seeds `[11,22]`
+  - artifacts:
+    - `report/kaggle_smoke_vs_hifinal_hard020_overlap2_significance.json`
+    - `report/kaggle_smoke_vs_hifinal_hard020_overlap2_significance.md`
+  - key interpretation:
+    - tiny-budget smoke strongly underperforms high-budget on baseline/transfer metrics (expected),
+    - robustness metrics are in similar range, and all p-values are non-significant at `n=2` (`p=0.5/1.0`).
+
+## 2026-02-28 23:36:14 - Documentation landing for smoke validation workflow
+- Continued by documenting reproducible validation workflow so future execution no longer depends on chat context.
+
+- `RUNBOOK.md` updates:
+  - clarified that `pytest -q` now works directly because `pytest.ini` excludes generated Kaggle/output folders.
+  - added a full `Kaggle Smoke Validation (2 Seeds, hard_only + 0.20)` command block.
+  - documented the exact follow-up run pattern (`seed=11` then `seed=22`) and linked generated report artifacts.
+
+- `README.md` updates:
+  - added links to latest smoke validation reports under docs section:
+    - `report/kaggle_smoke_hard020_2seed_summary.md`
+    - `report/kaggle_smoke_vs_hifinal_hard020_overlap2_significance.md`
+
+
+## 2026-03-01 00:51:03 - Research Template memory recovery and loop kickoff prep
+- Recovered session context for `Research_Template` in this workspace and inspected docs/scripts/runtime artifacts.
+- Identified stale prior runtime pointers targeting `C:\AI Projects\Fun Stuff\CrewAI\...`; planned clean run with explicit local paths.
+- Filled required template docs with concrete content:
+  - `Research_Template/RESEARCH_GOALS.md`
+  - `Research_Template/RESEARCH_PLAN.md`
+  - `Research_Template/FINDINGS.md`
+- Prepared loop kickoff command using explicit arguments (`-RepoRoot .` and doc paths under `Research_Template`) to ensure artifacts are written under this repository.
+- Next execution checkpoint: commit+push doc/memory updates, then run research loop and commit+push generated runtime artifacts.

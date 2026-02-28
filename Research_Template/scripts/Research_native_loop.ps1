@@ -1,0 +1,1243 @@
+param(
+  [string]$TemplatePath = ".\RESEARCH_NATIVE_LOOP_TEMPLATE.json",
+  [Alias("UltimateGoals")][string]$Task = "",
+  [string]$DoneCriteria = "",
+  [string]$RepoRoot = ".",
+  [string]$RiskTier,
+  [int]$MaxIterations = 0,
+  [Alias("GoalsPath")][string]$PrdPath = ".\RESEARCH_GOALS.md",
+  [Alias("PlanPath")][string]$DevDocPath = ".\RESEARCH_PLAN.md",
+  [string]$FindingsPath = ".\FINDINGS.md",
+  [string]$ProblemLink = "",
+  [switch]$DryRun,
+  [switch]$NoLiveOutput
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function Resolve-PathSafe {
+  param([string]$Base, [string]$PathSpec)
+  if ([System.IO.Path]::IsPathRooted($PathSpec)) { return [System.IO.Path]::GetFullPath($PathSpec) }
+  $normalized = $PathSpec -replace '^[.][/\\]', ''
+  return [System.IO.Path]::GetFullPath((Join-Path $Base $normalized))
+}
+
+function Save-Json {
+  param([object]$Obj, [string]$Path)
+  $Obj | ConvertTo-Json -Depth 12 | Set-Content -Path $Path -Encoding UTF8
+}
+
+function Write-Heartbeat {
+  param([string]$HeartbeatFile, [string]$Message)
+  $line = "{0} | {1}" -f (Get-Date -Format "s"), $Message
+  Add-Content -Path $HeartbeatFile -Value $line
+}
+
+function Write-TraceEvent {
+  param(
+    [string]$TraceFile,
+    [string]$RunId,
+    [string]$Step,
+    [string]$Status,
+    [int]$Iteration = -1,
+    [int]$Attempt = -1,
+    [string]$Message = ""
+  )
+  if ([string]::IsNullOrWhiteSpace($TraceFile)) { return }
+  $record = [ordered]@{
+    ts = (Get-Date).ToString("o")
+    run_id = $RunId
+    step = $Step
+    status = $Status
+    iteration = if ($Iteration -ge 0) { $Iteration } else { $null }
+    attempt = if ($Attempt -ge 0) { $Attempt } else { $null }
+    message = $Message
+  }
+  ($record | ConvertTo-Json -Compress) | Add-Content -Path $TraceFile -Encoding UTF8
+}
+
+function Add-RollingItem {
+  param(
+    [System.Collections.ArrayList]$List,
+    [string]$Item,
+    [int]$MaxItems = 12
+  )
+  if ($null -eq $List) { return }
+  if ([string]::IsNullOrWhiteSpace($Item)) { return }
+  [void]$List.Add($Item.Trim())
+  while ($List.Count -gt $MaxItems) {
+    $List.RemoveAt(0)
+  }
+}
+
+function Get-TailArray {
+  param(
+    [System.Collections.ArrayList]$List,
+    [int]$MaxItems = 4
+  )
+  if ($null -eq $List -or $List.Count -le 0) { return @() }
+  if ($List.Count -le $MaxItems) { return @($List.ToArray()) }
+  $start = $List.Count - $MaxItems
+  return @($List.ToArray()[$start..($List.Count - 1)])
+}
+
+function Read-NewStreamChunk {
+  param(
+    [string]$Path,
+    [long]$Cursor
+  )
+  if (-not (Test-Path $Path)) {
+    return [pscustomobject]@{ Text = ""; Cursor = $Cursor }
+  }
+
+  try {
+    $fs = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+      if ($fs.Length -lt $Cursor) { $Cursor = 0L }
+      $fs.Seek($Cursor, [System.IO.SeekOrigin]::Begin) | Out-Null
+      $reader = New-Object System.IO.StreamReader($fs, [System.Text.Encoding]::UTF8, $true, 1024, $true)
+      try {
+        $text = $reader.ReadToEnd()
+      } finally {
+        $reader.Dispose()
+      }
+      return [pscustomobject]@{
+        Text = $text
+        Cursor = $fs.Position
+      }
+    } finally {
+      $fs.Dispose()
+    }
+  } catch {
+    return [pscustomobject]@{ Text = ""; Cursor = $Cursor }
+  }
+}
+
+function Parse-FirstJsonObject {
+  param([string]$Text)
+  $trimmed = $Text.Trim()
+  if ($trimmed.StartsWith("{") -and $trimmed.EndsWith("}")) { return ($trimmed | ConvertFrom-Json) }
+  $match = [regex]::Match($trimmed, '\{[\s\S]*\}')
+  if (-not $match.Success) {
+    throw "Could not find JSON object in model output."
+  }
+  return ($match.Value | ConvertFrom-Json)
+}
+
+function Is-TemplatePlaceholder {
+  param([string]$Value)
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $true }
+  $trim = $Value.Trim()
+  if ($trim -match '^<\s*required\b') { return $true }
+  return $false
+}
+
+function Is-ProcessAlive {
+  param([int]$PidValue)
+  if ($PidValue -le 0) { return $false }
+  try {
+    $null = Get-Process -Id $PidValue -ErrorAction Stop
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Acquire-RunLock {
+  param(
+    [string]$LockFile,
+    [string]$RunId
+  )
+  if (Test-Path $LockFile) {
+    $existing = $null
+    try {
+      $existing = Get-Content -Path $LockFile -Raw | ConvertFrom-Json
+    } catch {
+      $existing = $null
+    }
+
+    if ($null -ne $existing) {
+      $existingPid = if ($existing.PSObject.Properties.Name -contains "pid") { [int]$existing.pid } else { -1 }
+      if (Is-ProcessAlive -PidValue $existingPid) {
+        $existingRunId = if ($existing.PSObject.Properties.Name -contains "run_id") { [string]$existing.run_id } else { "unknown" }
+        throw "Another loop run is active (run_id=$existingRunId, pid=$existingPid). Wait for it to finish or remove stale lock: $LockFile"
+      }
+    }
+  }
+
+  $lock = [ordered]@{
+    run_id = $RunId
+    pid = $PID
+    started_at = (Get-Date).ToString("s")
+  }
+  $lock | ConvertTo-Json -Depth 4 | Set-Content -Path $LockFile -Encoding UTF8
+}
+
+function Release-RunLock {
+  param(
+    [string]$LockFile,
+    [string]$RunId
+  )
+  if (-not (Test-Path $LockFile)) { return }
+  try {
+    $existing = Get-Content -Path $LockFile -Raw | ConvertFrom-Json
+    $existingRunId = if ($existing.PSObject.Properties.Name -contains "run_id") { [string]$existing.run_id } else { "" }
+    if ($existingRunId -eq $RunId) {
+      Remove-Item -Path $LockFile -Force -ErrorAction SilentlyContinue
+    }
+  } catch {
+    Remove-Item -Path $LockFile -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Test-BlockedOutput {
+  param(
+    [string]$Text,
+    [string[]]$Patterns
+  )
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return [pscustomobject]@{ blocked = $false; pattern = "" }
+  }
+
+  foreach ($pattern in $Patterns) {
+    if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
+    if ($Text -match [regex]::Escape($pattern)) {
+      return [pscustomobject]@{ blocked = $true; pattern = $pattern }
+    }
+  }
+
+  return [pscustomobject]@{ blocked = $false; pattern = "" }
+}
+
+function Write-BlockerReport {
+  param(
+    [string]$BlockerFile,
+    [string]$Reason,
+    [string]$LastStep,
+    [string]$NextActionCommand
+  )
+  $report = @"
+# Blocker Report
+
+- blocker_reason: $Reason
+- last_successful_step: $LastStep
+- next_action_command: $NextActionCommand
+- resume_command: codex resume --last
+"@
+  Set-Content -Path $BlockerFile -Value $report -Encoding UTF8
+}
+
+function Get-CodexLaunchSpec {
+  $isWindowsHost = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+  $allCodexCommands = @(Get-Command codex -All -ErrorAction Stop)
+
+  if ($isWindowsHost) {
+    $winAppCommand = $allCodexCommands |
+      Where-Object { $_.CommandType -eq "Application" } |
+      Where-Object { (($_ | Select-Object -ExpandProperty Path -ErrorAction SilentlyContinue) -like "*.cmd") } |
+      Select-Object -First 1
+
+    if (-not $winAppCommand) {
+      $winAppCommand = $allCodexCommands |
+        Where-Object { $_.CommandType -eq "Application" } |
+        Select-Object -First 1
+    }
+
+    if ($winAppCommand) {
+      $winPath = $winAppCommand | Select-Object -ExpandProperty Path -ErrorAction SilentlyContinue
+      if (-not [string]::IsNullOrWhiteSpace($winPath)) {
+        return [pscustomobject]@{
+          FilePath = $winPath
+          ArgPrefix = @()
+        }
+      }
+    }
+
+    $winScriptCommand = $allCodexCommands |
+      Where-Object { $_.CommandType -eq "ExternalScript" } |
+      Select-Object -First 1
+    if ($winScriptCommand) {
+      $winScriptPath = $winScriptCommand | Select-Object -ExpandProperty Path -ErrorAction SilentlyContinue
+      if (-not [string]::IsNullOrWhiteSpace($winScriptPath)) {
+        return [pscustomobject]@{
+          FilePath = "powershell"
+          ArgPrefix = @("-ExecutionPolicy", "Bypass", "-File", $winScriptPath)
+        }
+      }
+    }
+
+    return [pscustomobject]@{
+      FilePath = "codex"
+      ArgPrefix = @()
+    }
+  }
+  return [pscustomobject]@{
+    FilePath = "codex"
+    ArgPrefix = @()
+  }
+}
+
+function Invoke-CodexExecWithSafety {
+  param(
+    [string]$Prompt,
+    [string]$StepName,
+    [int]$Iteration,
+    [object]$Template,
+    [object]$CodexLaunchSpec,
+    [string[]]$ExtraExecArgs,
+    [string]$HeartbeatFile,
+    [string]$TraceFile,
+    [string]$RunId,
+    [bool]$ShowLiveOutput,
+    [switch]$DryRun
+  )
+
+  if ($DryRun) {
+    if ($StepName -like "director*") {
+      Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "dry_run_output" -Iteration $Iteration -Attempt 0 -Message "Synthetic director output generated."
+      return "{`"approved_final`":false,`"note_for_researcher`":`"dry run director note`",`"researcher_direction`":`"dry run researcher direction`",`"mode`":`"light`"}"
+    }
+    if ($StepName -eq "evaluator") {
+      Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "dry_run_output" -Iteration $Iteration -Attempt 0 -Message "Synthetic evaluator output generated."
+      $forceCompression = if ($Iteration -ge 2) { "true" } else { "false" }
+      $payload = "{`"approved`":false,`"quality_score`":0.75,`"progress_pct`":18,`"summary_for_user`":`"dry run evaluator summary`",`"next_direction`":`"dry run next direction`",`"coverage`":`"dry run coverage`",`"residual_risk`":`"dry run residual risk`",`"risk_level`":`"medium`",`"enforce_compression`":__FORCE__,`"compression_reason`":`"dry run adaptive compression`",`"context_risk_score`":0.35,`"snapshot_priority`":`"normal`"}"
+      return $payload.Replace("__FORCE__", $forceCompression)
+    }
+    if ($StepName -eq "bootstrap_merge") {
+      Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "dry_run_output" -Iteration $Iteration -Attempt 0 -Message "Synthetic bootstrap output generated."
+      return "{`"baseline_progress_pct`":25,`"reuse_candidates`":[{`"item`":`"prior findings draft`",`"confidence`":0.8}],`"open_gaps`":[`"source triangulation`"],`"next_direction`":`"validate and extend existing findings`"}"
+    }
+    Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "dry_run_output" -Iteration $Iteration -Attempt 0 -Message "Synthetic researcher output generated."
+    return "{`"approved_candidate`":false,`"quality_score_self`":0.7,`"progress_pct_claim`":20,`"summary_for_user`":`"dry run researcher summary`",`"evidence_updates`":[`"none`"],`"limitations`":[`"none`"],`"next_direction`":`"continue`"}"
+  }
+
+  $retryCfg = $Template.runtime_safety.auto_retry_on_failure
+  $retryEnabled = [bool]$retryCfg.enabled
+  $maxRetries = if ($retryEnabled) { [int]$retryCfg.max_retries_per_step } else { 0 }
+  $backoff = @($retryCfg.backoff_seconds)
+  $maxIdleMinutes = [int]$Template.runtime_safety.max_idle_minutes
+  $heartbeatSec = [int]$Template.runtime_safety.heartbeat_interval_sec
+
+  for ($attempt = 0; $attempt -le $maxRetries; $attempt++) {
+    $outFile = Join-Path $env:TEMP ("codex_{0}.out" -f [guid]::NewGuid().ToString("N"))
+    $errFile = Join-Path $env:TEMP ("codex_{0}.err" -f [guid]::NewGuid().ToString("N"))
+    $promptFile = Join-Path $env:TEMP ("codex_{0}.prompt" -f [guid]::NewGuid().ToString("N"))
+    $messageFile = Join-Path $env:TEMP ("codex_{0}.message" -f [guid]::NewGuid().ToString("N"))
+    $timedOut = $false
+    $stdoutCursor = 0L
+    $stderrCursor = 0L
+
+    Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} start" -f $StepName, $Iteration, $attempt)
+    Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_start" -Iteration $Iteration -Attempt $attempt -Message "Launching codex exec."
+    Set-Content -Path $promptFile -Value $Prompt -Encoding UTF8
+
+    $procArgs = @()
+    $procArgs += @($CodexLaunchSpec.ArgPrefix)
+    $procArgs += "exec"
+    $procArgs += @($ExtraExecArgs)
+    $procArgs += "--color"
+    $procArgs += "never"
+    $procArgs += "--output-last-message"
+    $procArgs += $messageFile
+    $procArgs += "-"
+    $proc = Start-Process -FilePath $CodexLaunchSpec.FilePath -ArgumentList $procArgs -PassThru -NoNewWindow -RedirectStandardInput $promptFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+    $lastActivity = Get-Date
+    $lastLen = 0L
+
+    while (-not $proc.HasExited) {
+      Start-Sleep -Seconds $heartbeatSec
+      $now = Get-Date
+      if (Test-Path $outFile) {
+        $len = (Get-Item $outFile).Length
+        if ($len -gt $lastLen) {
+          $lastLen = $len
+          $lastActivity = $now
+        }
+      }
+      Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} alive" -f $StepName, $Iteration, $attempt)
+      Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_alive" -Iteration $Iteration -Attempt $attempt -Message "Process still running."
+
+      if ($ShowLiveOutput) {
+        $stdoutChunk = Read-NewStreamChunk -Path $outFile -Cursor $stdoutCursor
+        $stdoutCursor = [long]$stdoutChunk.Cursor
+        if (-not [string]::IsNullOrWhiteSpace($stdoutChunk.Text)) {
+          Write-Host $stdoutChunk.Text -NoNewline
+        }
+
+        $stderrChunk = Read-NewStreamChunk -Path $errFile -Cursor $stderrCursor
+        $stderrCursor = [long]$stderrChunk.Cursor
+        if (-not [string]::IsNullOrWhiteSpace($stderrChunk.Text)) {
+          Write-Host $stderrChunk.Text -NoNewline -ForegroundColor DarkYellow
+        }
+      }
+
+      if (((New-TimeSpan -Start $lastActivity -End $now).TotalMinutes) -ge $maxIdleMinutes) {
+        try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
+        $timedOut = $true
+        Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} timeout" -f $StepName, $Iteration, $attempt)
+        Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_timeout" -Iteration $Iteration -Attempt $attempt -Message "Stopped due to idle timeout."
+        break
+      }
+    }
+
+    try { $proc.WaitForExit() | Out-Null } catch {}
+
+    if ($ShowLiveOutput) {
+      $stdoutTail = Read-NewStreamChunk -Path $outFile -Cursor $stdoutCursor
+      if (-not [string]::IsNullOrWhiteSpace($stdoutTail.Text)) {
+        Write-Host $stdoutTail.Text -NoNewline
+      }
+      $stderrTail = Read-NewStreamChunk -Path $errFile -Cursor $stderrCursor
+      if (-not [string]::IsNullOrWhiteSpace($stderrTail.Text)) {
+        Write-Host $stderrTail.Text -NoNewline -ForegroundColor DarkYellow
+      }
+    }
+
+    $stdout = if (Test-Path $outFile) { Get-Content -Path $outFile -Raw } else { "" }
+    $stderr = if (Test-Path $errFile) { Get-Content -Path $errFile -Raw } else { "" }
+    $lastMessage = if (Test-Path $messageFile) { Get-Content -Path $messageFile -Raw } else { "" }
+    Remove-Item -Path $promptFile -ErrorAction SilentlyContinue
+    Remove-Item -Path $messageFile -ErrorAction SilentlyContinue
+    Remove-Item -Path $outFile -ErrorAction SilentlyContinue
+    Remove-Item -Path $errFile -ErrorAction SilentlyContinue
+
+    $effectiveOutput = if (-not [string]::IsNullOrWhiteSpace($lastMessage)) { $lastMessage } else { $stdout }
+    $exitCode = $null
+    try { $exitCode = $proc.ExitCode } catch {}
+    if (-not $timedOut -and -not [string]::IsNullOrWhiteSpace($effectiveOutput)) {
+      Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} success" -f $StepName, $Iteration, $attempt)
+      Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_success" -Iteration $Iteration -Attempt $attempt -Message "Received non-empty model output."
+      return $effectiveOutput.Trim()
+    }
+
+    $reason = if ($timedOut) { "timeout-no-output" } else { "nonzero-exit-or-empty-output" }
+    $exitDisplay = if ($null -eq $exitCode) { "NA" } else { [string]$exitCode }
+    Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} fail reason={3} exit={4} stderr={5}" -f $StepName, $Iteration, $attempt, $reason, $exitDisplay, ($stderr -replace '\s+', ' '))
+    Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_fail" -Iteration $Iteration -Attempt $attempt -Message ("reason={0}; exit={1}" -f $reason, $exitDisplay)
+
+    if ($attempt -lt $maxRetries) {
+      $sleepSec = if ($attempt -lt $backoff.Count) { [int]$backoff[$attempt] } else { 30 }
+      Start-Sleep -Seconds $sleepSec
+      continue
+    }
+
+    throw "codex exec failed at step '$StepName' (iteration=$Iteration). reason=$reason"
+  }
+
+  throw "Unexpected loop fallthrough."
+}
+
+if (-not $DryRun -and -not (Get-Command codex -ErrorAction SilentlyContinue)) {
+  throw "codex command not found in PATH."
+}
+$codexLaunchSpec = if (-not $DryRun) { Get-CodexLaunchSpec } else { $null }
+
+$templateFullPath = [System.IO.Path]::GetFullPath($TemplatePath)
+if (-not (Test-Path $templateFullPath)) {
+  $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+  $fallbackTemplatePath = Join-Path (Split-Path -Parent $scriptDir) "RESEARCH_NATIVE_LOOP_TEMPLATE.json"
+  if (Test-Path $fallbackTemplatePath) {
+    $templateFullPath = [System.IO.Path]::GetFullPath($fallbackTemplatePath)
+  } else {
+    throw "Template file not found: $templateFullPath"
+  }
+}
+
+$template = Get-Content -Path $templateFullPath -Raw | ConvertFrom-Json
+if ($template.template_id -ne "codex_native_research_loop_v1") {
+  throw "Unexpected template_id: $($template.template_id)"
+}
+if ([version]$template.version -lt [version]"1.1.0") {
+  throw "Template version must be >= 1.1.0. Found: $($template.version)"
+}
+if (-not [bool]$template.official_commands_only) {
+  throw "Template must enforce official_commands_only=true"
+}
+
+$resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
+if (-not (Test-Path $resolvedRepoRoot)) {
+  throw "RepoRoot does not exist: $resolvedRepoRoot"
+}
+
+$templateTaskDefault = [string]$template.inputs.task
+$templateDoneCriteriaDefault = [string]$template.inputs.done_criteria
+$templateProblemLinkDefault = if ($template.inputs.PSObject.Properties.Name -contains "default_problem_link") { [string]$template.inputs.default_problem_link } else { "" }
+$templateLiveOutput = if ($template.runtime_safety.PSObject.Properties.Name -contains "live_console_output") { [bool]$template.runtime_safety.live_console_output } else { $true }
+$blockerPatterns = if ($template.runtime_safety.PSObject.Properties.Name -contains "blocker_short_circuit_patterns") { @($template.runtime_safety.blocker_short_circuit_patterns) } else { @("blocked by policy", "read-only", "write operations are blocked") }
+$nestedExecCfg = if ($template.runtime_safety.PSObject.Properties.Name -contains "nested_codex_exec") { $template.runtime_safety.nested_codex_exec } else { $null }
+$qualityMajorMilestone = if ($template.runtime_safety.PSObject.Properties.Name -contains "major_quality_milestone") { [double]$template.runtime_safety.major_quality_milestone } else { 0.90 }
+$qualityFinalGate = if ($template.runtime_safety.PSObject.Properties.Name -contains "final_quality_gate") { [double]$template.runtime_safety.final_quality_gate } else { 0.95 }
+$stallWindow = if ($template.runtime_safety.PSObject.Properties.Name -contains "stall_non_improving_iterations") { [int]$template.runtime_safety.stall_non_improving_iterations } else { 3 }
+$scoreDropTrigger = if ($template.runtime_safety.PSObject.Properties.Name -contains "risk_spike_score_drop_threshold") { [double]$template.runtime_safety.risk_spike_score_drop_threshold } else { 0.05 }
+$burstIterations = if ($template.runtime_safety.PSObject.Properties.Name -contains "adaptive_burst_iterations") { [int]$template.runtime_safety.adaptive_burst_iterations } else { 2 }
+$reuseConfidenceThreshold = if ($template.runtime_safety.PSObject.Properties.Name -contains "reuse_confidence_threshold") { [double]$template.runtime_safety.reuse_confidence_threshold } else { 0.70 }
+$contextMode = if ($template.runtime_safety.PSObject.Properties.Name -contains "context_mode") { [string]$template.runtime_safety.context_mode } else { "rolling_thread" }
+$compressionCfg = if ($template.runtime_safety.PSObject.Properties.Name -contains "compression") { $template.runtime_safety.compression } else { $null }
+$contextCompressionEnabled = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "enabled") { [bool]$compressionCfg.enabled } else { $true }
+$compressionPromptChars = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "trigger_prompt_chars") { [int]$compressionCfg.trigger_prompt_chars } else { 30000 }
+$compressionStallIterations = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "trigger_stall_iterations") { [int]$compressionCfg.trigger_stall_iterations } else { 3 }
+$compressionDriftSignal = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "trigger_drift_signal") { [string]$compressionCfg.trigger_drift_signal } else { "direction_mismatch_rework" }
+$compressionForcedRefresh = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "forced_refresh") { [string]$compressionCfg.forced_refresh } else { "never" }
+$sourcePolicy = if ($template.inputs.PSObject.Properties.Name -contains "source_policy") { [string]$template.inputs.source_policy } else { "Primary-source-first, flexible for high-signal secondary sources." }
+
+$effectiveTask = if (-not [string]::IsNullOrWhiteSpace($Task)) { $Task } elseif (-not (Is-TemplatePlaceholder -Value $templateTaskDefault)) { $templateTaskDefault } else { "Complete research goals with validated evidence, synthesis, and actionable next steps." }
+$effectiveDoneCriteria = if (-not [string]::IsNullOrWhiteSpace($DoneCriteria)) { $DoneCriteria } elseif (-not (Is-TemplatePlaceholder -Value $templateDoneCriteriaDefault)) { $templateDoneCriteriaDefault } else { "Director final signoff with quality >= 0.95, and complete executive plus technical findings." }
+$effectiveProblemLink = if (-not [string]::IsNullOrWhiteSpace($ProblemLink)) { $ProblemLink } elseif (-not [string]::IsNullOrWhiteSpace($templateProblemLinkDefault)) { $templateProblemLinkDefault } else { "" }
+$effectiveLiveOutput = (-not $NoLiveOutput) -and $templateLiveOutput
+
+$effectiveRiskTier = if ($RiskTier) { $RiskTier } else { [string]$template.inputs.risk_tier }
+$templateMaxIterations = [int]$template.inputs.max_iterations
+$effectiveMaxIterations = if ($MaxIterations -gt 0) { $MaxIterations } elseif ($templateMaxIterations -gt 0) { $templateMaxIterations } else { 0 }
+$maxIterationsLabel = if ($effectiveMaxIterations -gt 0) { [string]$effectiveMaxIterations } else { "unlimited" }
+$nestedExecArgs = @()
+if ($null -ne $nestedExecCfg) {
+  $dangerMode = if ($nestedExecCfg.PSObject.Properties.Name -contains "dangerously_bypass_approvals_and_sandbox") { [bool]$nestedExecCfg.dangerously_bypass_approvals_and_sandbox } else { $false }
+  $skipRepoCheck = if ($nestedExecCfg.PSObject.Properties.Name -contains "skip_git_repo_check") { [bool]$nestedExecCfg.skip_git_repo_check } else { $false }
+  if ($dangerMode) { $nestedExecArgs += "--dangerously-bypass-approvals-and-sandbox" }
+  if ($skipRepoCheck) { $nestedExecArgs += "--skip-git-repo-check" }
+}
+
+$runRootDir = Resolve-PathSafe -Base $resolvedRepoRoot -PathSpec ([string]$template.artifacts.run_dir)
+$stateLeaf = Split-Path -Leaf ([string]$template.artifacts.state_file)
+$finalLeaf = Split-Path -Leaf ([string]$template.artifacts.final_report_file)
+$heartbeatLeaf = Split-Path -Leaf ([string]$template.artifacts.heartbeat_log_file)
+$blockerLeaf = Split-Path -Leaf ([string]$template.artifacts.blocker_report_file)
+$traceSpec = if ($template.artifacts.PSObject.Properties.Name -contains "trace_log_file") { [string]$template.artifacts.trace_log_file } else { "./.codex-loop/execution_trace.jsonl" }
+$traceLeaf = Split-Path -Leaf $traceSpec
+
+$runId = "research_{0}" -f (Get-Date -Format "yyyyMMdd_HHmmss")
+New-Item -ItemType Directory -Path $runRootDir -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $runRootDir "runs") -Force | Out-Null
+$lockFile = Join-Path $runRootDir "active.lock"
+Acquire-RunLock -LockFile $lockFile -RunId $runId
+$runDir = Join-Path (Join-Path $runRootDir "runs") $runId
+New-Item -ItemType Directory -Path $runDir -Force | Out-Null
+$stateFile = Join-Path $runDir $stateLeaf
+$finalReportFile = Join-Path $runDir $finalLeaf
+$heartbeatFile = Join-Path $runDir $heartbeatLeaf
+$blockerFile = Join-Path $runDir $blockerLeaf
+$traceFile = Join-Path $runDir $traceLeaf
+$contextSnapshotJsonFile = Join-Path $runDir "context_snapshot.json"
+$contextSnapshotMdFile = Join-Path $runDir "context_snapshot.md"
+$contextPressureFile = Join-Path $runDir "context_pressure.json"
+Set-Content -Path $heartbeatFile -Value "" -Encoding UTF8
+Set-Content -Path $traceFile -Value "" -Encoding UTF8
+if (Test-Path $blockerFile) {
+  Remove-Item -Path $blockerFile -Force -ErrorAction SilentlyContinue
+}
+
+$state = [ordered]@{
+  run_id = $runId
+  status = "running"
+  started_at = (Get-Date).ToString("s")
+  repo_root = $resolvedRepoRoot
+  run_root_dir = $runRootDir
+  run_dir = $runDir
+  risk_tier = $effectiveRiskTier
+  task = $effectiveTask
+  done_criteria = $effectiveDoneCriteria
+  trace_file = $traceFile
+  lock_file = $lockFile
+  nested_exec_args = $nestedExecArgs
+  max_iterations = $effectiveMaxIterations
+  current_iteration = 0
+  milestones = @("25", "50", "75", "100")
+  milestone_hits = @()
+  context_mode = $contextMode
+  rolling_context_bytes_est = 0
+  context_risk_score = 0.0
+  last_compression_iteration = 0
+  compression_count = 0
+  active_snapshot_file = ""
+  active_snapshot_markdown_file = ""
+  context_pressure_file = $contextPressureFile
+  next_direction = "none"
+  history = @()
+}
+Save-Json -Obj $state -Path $stateFile
+Set-Content -Path (Join-Path $runRootDir "latest_run.txt") -Value $runDir -Encoding UTF8
+
+$milestones = @(25, 50, 75, 100)
+$milestoneHit = @{}
+$rollingValidatedEvidence = New-Object System.Collections.ArrayList
+$rollingRejectedPaths = New-Object System.Collections.ArrayList
+$rollingOpenQuestions = New-Object System.Collections.ArrayList
+$rollingRecentSummaries = New-Object System.Collections.ArrayList
+$rollingRecentDirections = New-Object System.Collections.ArrayList
+$contextPressureHistory = New-Object System.Collections.ArrayList
+$lastSuccessfulStep = "template_loaded"
+$approved = $false
+$directorApprovedFinal = $false
+$blocked = $false
+$blockedReason = ""
+$qualityScore = 0.0
+$progressPct = 0
+$bestQualityScore = 0.0
+$lastQualityScore = -1.0
+$nonImprovingCount = 0
+$burstRemaining = 0
+$majorQualityMilestoneHit = $false
+$directorNote = "No director note yet."
+$summaryForUser = ""
+$residualRisk = "Loop has not reached approval yet."
+$coverage = ""
+$validationResult = "PARTIAL"
+
+$state.major_quality_milestone = $qualityMajorMilestone
+$state.final_quality_gate = $qualityFinalGate
+$state.stall_window = $stallWindow
+$state.burst_iterations = $burstIterations
+$state.reuse_confidence_threshold = $reuseConfidenceThreshold
+$state.context_compression_enabled = $contextCompressionEnabled
+$state.context_compression_prompt_chars = $compressionPromptChars
+$state.context_compression_stall_iterations = $compressionStallIterations
+$state.context_compression_drift_signal = $compressionDriftSignal
+$state.context_compression_forced_refresh = $compressionForcedRefresh
+Save-Json -Obj $state -Path $stateFile
+
+Push-Location $resolvedRepoRoot
+try {
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "start" -Message ("risk_tier={0}; max_iterations={1}; nested_exec_args={2}" -f $effectiveRiskTier, $maxIterationsLabel, ($nestedExecArgs -join " "))
+  Write-Heartbeat -HeartbeatFile $heartbeatFile -Message "run_id=$runId start"
+
+  $bootstrapPrompt = @"
+You are a startup analyst for a research loop.
+Ultimate goals: $effectiveTask
+Done criteria: $effectiveDoneCriteria
+Source policy: $sourcePolicy
+Goals doc: $PrdPath
+Plan doc: $DevDocPath
+Findings doc: $FindingsPath
+Problem link: $effectiveProblemLink
+
+Perform a repo-wide smart scan and return strict JSON:
+{
+  "baseline_progress_pct": 0-100,
+  "reuse_candidates": [{"item":"...","confidence":0.0-1.0}],
+  "open_gaps": ["..."],
+  "next_direction": "...",
+  "summary_for_user": "..."
+}
+"@
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "dispatch" -Iteration 0 -Message "Dispatching bootstrap merge prompt."
+  $bootstrapRaw = Invoke-CodexExecWithSafety -Prompt $bootstrapPrompt -StepName "bootstrap_merge" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+  $bootstrapFile = Join-Path $runDir "iter_0_bootstrap_merge.txt"
+  Set-Content -Path $bootstrapFile -Value $bootstrapRaw -Encoding UTF8
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "artifact_written" -Iteration 0 -Message ("Saved output to {0}" -f $bootstrapFile)
+  $lastSuccessfulStep = "bootstrap_merge"
+  $bootstrapBlock = Test-BlockedOutput -Text $bootstrapRaw -Patterns $blockerPatterns
+  if ($bootstrapBlock.blocked) {
+    $blocked = $true
+    $blockedReason = "Blocked marker detected in bootstrap output (pattern='$($bootstrapBlock.pattern)')."
+    $residualRisk = $blockedReason
+    $state.status = "blocked"
+    Save-Json -Obj $state -Path $stateFile
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "blocked_short_circuit" -Iteration 0 -Message $blockedReason
+    throw $blockedReason
+  }
+
+  $bootstrapSummary = ""
+  $reuseCandidates = @()
+  $bootstrapOpenGaps = @()
+  try {
+    $bootstrapJson = Parse-FirstJsonObject -Text $bootstrapRaw
+    $progressPct = if ($bootstrapJson.PSObject.Properties.Name -contains "baseline_progress_pct") { [math]::Max(0, [math]::Min(100, [int]$bootstrapJson.baseline_progress_pct)) } else { 0 }
+    $reuseCandidates = if ($bootstrapJson.PSObject.Properties.Name -contains "reuse_candidates") { @($bootstrapJson.reuse_candidates) } else { @() }
+    $bootstrapOpenGaps = if ($bootstrapJson.PSObject.Properties.Name -contains "open_gaps") { @($bootstrapJson.open_gaps) } else { @() }
+    if ($bootstrapJson.PSObject.Properties.Name -contains "next_direction") {
+      $state.next_direction = [string]$bootstrapJson.next_direction
+    }
+    $bootstrapSummary = if ($bootstrapJson.PSObject.Properties.Name -contains "summary_for_user") { [string]$bootstrapJson.summary_for_user } else { "Bootstrap completed." }
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "parsed" -Iteration 0 -Message ("baseline_progress={0}" -f $progressPct)
+  } catch {
+    $state.next_direction = "Start with highest-priority unresolved research gap."
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "parse_fallback" -Iteration 0 -Message "Bootstrap parse fallback."
+  }
+  $bootstrapSnapshotFile = Join-Path $runDir "bootstrap_snapshot.json"
+  $mergeBaselineFile = Join-Path $runDir "merge_baseline.json"
+  $reusedItemsFile = Join-Path $runDir "reused_items_verified.md"
+  Save-Json -Obj ([ordered]@{ baseline_progress_pct = $progressPct; summary = $bootstrapSummary; open_gaps = $bootstrapOpenGaps; raw_file = $bootstrapFile }) -Path $bootstrapSnapshotFile
+  Save-Json -Obj ([ordered]@{ reuse_confidence_threshold = $reuseConfidenceThreshold; reuse_candidates = $reuseCandidates }) -Path $mergeBaselineFile
+  $reuseLines = @("# Reused Items (Auto Merge Verification)", "", ("- threshold: {0}" -f $reuseConfidenceThreshold))
+  foreach ($candidate in $reuseCandidates) {
+    $itemName = if ($candidate.PSObject.Properties.Name -contains "item") { [string]$candidate.item } else { "unnamed-item" }
+    $confidence = if ($candidate.PSObject.Properties.Name -contains "confidence") { [double]$candidate.confidence } else { 0.0 }
+    $decision = if ($confidence -ge $reuseConfidenceThreshold) { "reused_and_verified" } else { "revalidate_in_loop" }
+    $reuseLines += ("- item: {0} | confidence: {1} | decision: {2}" -f $itemName, $confidence, $decision)
+  }
+  Set-Content -Path $reusedItemsFile -Value ($reuseLines -join [Environment]::NewLine) -Encoding UTF8
+  Add-RollingItem -List $rollingRecentSummaries -Item ("Bootstrap: {0}" -f $bootstrapSummary) -MaxItems 10
+  Add-RollingItem -List $rollingRecentDirections -Item $state.next_direction -MaxItems 10
+  foreach ($gap in $bootstrapOpenGaps) {
+    Add-RollingItem -List $rollingOpenQuestions -Item ([string]$gap) -MaxItems 16
+  }
+  $state.bootstrap_snapshot_file = $bootstrapSnapshotFile
+  $state.merge_baseline_file = $mergeBaselineFile
+  $state.reused_items_file = $reusedItemsFile
+  Save-Json -Obj $state -Path $stateFile
+
+  $commanderPrompt = @"
+You are DIRECTOR for a research loop.
+Ultimate goals: $effectiveTask
+Done criteria: $effectiveDoneCriteria
+Source policy: $sourcePolicy
+Baseline progress: $progressPct
+Bootstrap summary: $bootstrapSummary
+Goals doc: $PrdPath
+Plan doc: $DevDocPath
+Findings doc: $FindingsPath
+
+You may adjust planning docs if needed.
+Return strict JSON only:
+{
+  "plan_health": "good|needs_adjustment|critical",
+  "summary_for_user": "...",
+  "researcher_direction": "...",
+  "approved_final": true|false
+}
+"@
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "dispatch" -Iteration 0 -Message "Dispatching director preflight prompt."
+  $commanderRaw = Invoke-CodexExecWithSafety -Prompt $commanderPrompt -StepName "director_preflight" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+  $commanderFile = Join-Path $runDir "iter_0_director_preflight.txt"
+  Set-Content -Path $commanderFile -Value $commanderRaw -Encoding UTF8
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "artifact_written" -Iteration 0 -Message ("Saved output to {0}" -f $commanderFile)
+  $lastSuccessfulStep = "director_preflight"
+  $commanderBlock = Test-BlockedOutput -Text $commanderRaw -Patterns $blockerPatterns
+  if ($commanderBlock.blocked) {
+    $blocked = $true
+    $blockedReason = "Blocked marker detected in director preflight output (pattern='$($commanderBlock.pattern)')."
+    $residualRisk = $blockedReason
+    $state.status = "blocked"
+    Save-Json -Obj $state -Path $stateFile
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "blocked_short_circuit" -Iteration 0 -Message $blockedReason
+    throw $blockedReason
+  }
+  try {
+    $commanderJson = Parse-FirstJsonObject -Text $commanderRaw
+    if ($commanderJson.PSObject.Properties.Name -contains "researcher_direction") {
+      $state.next_direction = [string]$commanderJson.researcher_direction
+    }
+    if ($commanderJson.PSObject.Properties.Name -contains "summary_for_user") {
+      $directorNote = [string]$commanderJson.summary_for_user
+    }
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "parsed" -Iteration 0 -Message "Parsed director preflight JSON and updated next direction."
+  } catch {
+    $state.next_direction = "Start with highest-priority unresolved research question and update findings."
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "parse_fallback" -Iteration 0 -Message "Director preflight JSON parse failed, using fallback direction."
+  }
+  Add-RollingItem -List $rollingRecentSummaries -Item ("Director preflight: {0}" -f $directorNote) -MaxItems 10
+  Add-RollingItem -List $rollingRecentDirections -Item $state.next_direction -MaxItems 10
+
+  $i = 1
+  while ($true) {
+    if ($effectiveMaxIterations -gt 0 -and $i -gt $effectiveMaxIterations) {
+      break
+    }
+    $iterationLabel = if ($effectiveMaxIterations -gt 0) { "{0}/{1}" -f $i, $effectiveMaxIterations } else { "{0}/unlimited" -f $i }
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "start" -Iteration $i -Message ("Starting iteration {0}" -f $iterationLabel)
+    $state.current_iteration = $i
+    Save-Json -Obj $state -Path $stateFile
+    $previousDirection = [string]$state.next_direction
+
+    $activeSnapshotExcerpt = ""
+    if (-not [string]::IsNullOrWhiteSpace($state.active_snapshot_file) -and (Test-Path $state.active_snapshot_file)) {
+      $rawSnapshot = Get-Content -Path $state.active_snapshot_file -Raw
+      $activeSnapshotExcerpt = if ($rawSnapshot.Length -gt 4000) { $rawSnapshot.Substring(0, 4000) } else { $rawSnapshot }
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "context_snapshot" -Status "applied" -Iteration $i -Message ("Using active snapshot {0}" -f $state.active_snapshot_file)
+    }
+
+    $rollingContextPacket = [ordered]@{
+      mode = $contextMode
+      previous_direction = $previousDirection
+      director_note = $directorNote
+      recent_summaries = (Get-TailArray -List $rollingRecentSummaries -MaxItems 4)
+      recent_directions = (Get-TailArray -List $rollingRecentDirections -MaxItems 4)
+      validated_evidence = (Get-TailArray -List $rollingValidatedEvidence -MaxItems 8)
+      rejected_paths = (Get-TailArray -List $rollingRejectedPaths -MaxItems 8)
+      open_questions = (Get-TailArray -List $rollingOpenQuestions -MaxItems 10)
+      active_snapshot_file = $state.active_snapshot_file
+      active_snapshot_excerpt = $activeSnapshotExcerpt
+      last_quality_score = $qualityScore
+      progress_pct = $progressPct
+    }
+    $rollingContextJson = $rollingContextPacket | ConvertTo-Json -Depth 10
+    $state.rolling_context_bytes_est = $rollingContextJson.Length
+    Save-Json -Obj $state -Path $stateFile
+
+    $workerPrompt = @"
+You are RESEARCHER in a research CLI loop.
+Ultimate goals: $effectiveTask
+Done criteria: $effectiveDoneCriteria
+Iteration: $iterationLabel
+Goals doc: $PrdPath
+Plan doc: $DevDocPath
+Findings doc: $FindingsPath
+Source policy: $sourcePolicy
+Direction from evaluator: $($state.next_direction)
+Director post-note from last iteration: $directorNote
+Rolling context packet (JSON):
+$rollingContextJson
+
+Execute the next best research step now.
+Return JSON first, then short markdown.
+Required JSON:
+{
+  "approved_candidate": true|false,
+  "quality_score_self": 0.0-1.0,
+  "progress_pct_claim": 0-100,
+  "summary_for_user": "...",
+  "evidence_updates": ["..."],
+  "limitations": ["..."],
+  "next_direction": "..."
+}
+"@
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "dispatch" -Iteration $i -Message "Dispatching researcher prompt."
+    $workerRaw = Invoke-CodexExecWithSafety -Prompt $workerPrompt -StepName "researcher" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+    $workerFile = Join-Path $runDir ("iter_{0}_researcher.txt" -f $i)
+    Set-Content -Path $workerFile -Value $workerRaw -Encoding UTF8
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $workerFile)
+    $lastSuccessfulStep = "researcher_iter_$i"
+    $workerBlock = Test-BlockedOutput -Text $workerRaw -Patterns $blockerPatterns
+    if ($workerBlock.blocked) {
+      $blocked = $true
+      $blockedReason = "Blocked marker detected in researcher output (pattern='$($workerBlock.pattern)')."
+      $residualRisk = $blockedReason
+      $state.status = "blocked"
+      $state.history += [ordered]@{
+        iteration = $i
+        worker_file = $workerFile
+        reviewer_file = ""
+        approved = $false
+        quality_score = 0.0
+        progress_pct = $progressPct
+        next_direction = $state.next_direction
+        blocked_reason = $blockedReason
+      }
+      Save-Json -Obj $state -Path $stateFile
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "blocked_short_circuit" -Iteration $i -Message $blockedReason
+      throw $blockedReason
+    }
+
+    try {
+      $workerJson = Parse-FirstJsonObject -Text $workerRaw
+      if ($workerJson.PSObject.Properties.Name -contains "summary_for_user") {
+        Add-RollingItem -List $rollingRecentSummaries -Item ("Researcher iter_{0}: {1}" -f $i, [string]$workerJson.summary_for_user) -MaxItems 10
+      }
+      if ($workerJson.PSObject.Properties.Name -contains "next_direction") {
+        Add-RollingItem -List $rollingRecentDirections -Item ([string]$workerJson.next_direction) -MaxItems 10
+      }
+      if ($workerJson.PSObject.Properties.Name -contains "limitations") {
+        foreach ($lim in @($workerJson.limitations)) {
+          Add-RollingItem -List $rollingOpenQuestions -Item ([string]$lim) -MaxItems 16
+        }
+      }
+      if ($workerJson.PSObject.Properties.Name -contains "evidence_updates") {
+        foreach ($ev in @($workerJson.evidence_updates)) {
+          Add-RollingItem -List $rollingValidatedEvidence -Item ("candidate: {0}" -f [string]$ev) -MaxItems 20
+        }
+      }
+    } catch {
+      Add-RollingItem -List $rollingRecentSummaries -Item ("Researcher iter_{0}: parse fallback summary" -f $i) -MaxItems 10
+    }
+
+    $reviewerPrompt = @"
+You are EVALUATOR in a research CLI loop.
+Ultimate goals: $effectiveTask
+Done criteria: $effectiveDoneCriteria
+Iteration: $iterationLabel
+Previous direction: $previousDirection
+Rolling context packet (JSON):
+$rollingContextJson
+Researcher output:
+$workerRaw
+
+Return strict JSON only:
+{
+  "approved": true|false,
+  "quality_score": 0.0-1.0,
+  "progress_pct": 0-100,
+  "summary_for_user": "...",
+  "next_direction": "...",
+  "coverage": "...",
+  "residual_risk": "...",
+  "risk_level": "low|medium|high",
+  "enforce_compression": true|false,
+  "compression_reason": "...",
+  "context_risk_score": 0.0-1.0,
+  "snapshot_priority": "high|normal"
+}
+"@
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "dispatch" -Iteration $i -Message "Dispatching evaluator prompt."
+    $reviewerRaw = Invoke-CodexExecWithSafety -Prompt $reviewerPrompt -StepName "evaluator" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+    $reviewerFile = Join-Path $runDir ("iter_{0}_evaluator.txt" -f $i)
+    Set-Content -Path $reviewerFile -Value $reviewerRaw -Encoding UTF8
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $reviewerFile)
+    $lastSuccessfulStep = "evaluator_iter_$i"
+    $reviewerBlock = Test-BlockedOutput -Text $reviewerRaw -Patterns $blockerPatterns
+    if ($reviewerBlock.blocked) {
+      $blocked = $true
+      $blockedReason = "Blocked marker detected in evaluator output (pattern='$($reviewerBlock.pattern)')."
+      $residualRisk = $blockedReason
+      $state.status = "blocked"
+      $state.history += [ordered]@{
+        iteration = $i
+        worker_file = $workerFile
+        reviewer_file = $reviewerFile
+        approved = $false
+        quality_score = 0.0
+        next_direction = $state.next_direction
+        blocked_reason = $blockedReason
+      }
+      Save-Json -Obj $state -Path $stateFile
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "blocked_short_circuit" -Iteration $i -Message $blockedReason
+      throw $blockedReason
+    }
+
+    $reviewerJson = Parse-FirstJsonObject -Text $reviewerRaw
+    $approved = if ($reviewerJson.PSObject.Properties.Name -contains "approved") { [bool]$reviewerJson.approved } else { $false }
+    $qualityScore = if ($reviewerJson.PSObject.Properties.Name -contains "quality_score") { [double]$reviewerJson.quality_score } else { 0.0 }
+    $summaryForUser = if ($reviewerJson.PSObject.Properties.Name -contains "summary_for_user") { [string]$reviewerJson.summary_for_user } else { "Evaluator summary missing." }
+    $evaluatorDirection = if ($reviewerJson.PSObject.Properties.Name -contains "next_direction") { [string]$reviewerJson.next_direction } else { $state.next_direction }
+    $coverage = if ($reviewerJson.PSObject.Properties.Name -contains "coverage") { [string]$reviewerJson.coverage } else { $coverage }
+    $riskLevel = if ($reviewerJson.PSObject.Properties.Name -contains "risk_level") { [string]$reviewerJson.risk_level } else { "medium" }
+    $evaluatorEnforceCompression = if ($reviewerJson.PSObject.Properties.Name -contains "enforce_compression") { [bool]$reviewerJson.enforce_compression } else { $false }
+    $evaluatorCompressionReason = if ($reviewerJson.PSObject.Properties.Name -contains "compression_reason") { [string]$reviewerJson.compression_reason } else { "" }
+    $evaluatorContextRiskScore = if ($reviewerJson.PSObject.Properties.Name -contains "context_risk_score") { [double]$reviewerJson.context_risk_score } else { -1.0 }
+    $snapshotPriority = if ($reviewerJson.PSObject.Properties.Name -contains "snapshot_priority") { [string]$reviewerJson.snapshot_priority } else { "normal" }
+    $reportedProgressPct = if ($reviewerJson.PSObject.Properties.Name -contains "progress_pct") { [math]::Max(0, [math]::Min(100, [int]$reviewerJson.progress_pct)) } else { $progressPct }
+    if ($reportedProgressPct -gt $progressPct) { $progressPct = $reportedProgressPct }
+    if ($reviewerJson.PSObject.Properties.Name -contains "residual_risk") {
+      $residualRisk = [string]$reviewerJson.residual_risk
+    }
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "parsed" -Iteration $i -Message ("approved={0}; quality_score={1}; progress_pct={2}" -f $approved, $qualityScore, $progressPct)
+    $reviewerSummaryBlock = Test-BlockedOutput -Text ($summaryForUser + "`n" + $residualRisk) -Patterns $blockerPatterns
+    if ($reviewerSummaryBlock.blocked) {
+      $blocked = $true
+      $blockedReason = "Blocked marker detected in evaluator summary/risk (pattern='$($reviewerSummaryBlock.pattern)')."
+      $residualRisk = $blockedReason
+      $state.status = "blocked"
+      Save-Json -Obj $state -Path $stateFile
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "blocked_short_circuit" -Iteration $i -Message $blockedReason
+      throw $blockedReason
+    }
+    Add-RollingItem -List $rollingRecentSummaries -Item ("Evaluator iter_{0}: {1}" -f $i, $summaryForUser) -MaxItems 10
+    Add-RollingItem -List $rollingRecentDirections -Item $evaluatorDirection -MaxItems 10
+    if ($riskLevel -match "(?i)high") {
+      Add-RollingItem -List $rollingOpenQuestions -Item ("High risk flagged at iter_{0}: {1}" -f $i, $residualRisk) -MaxItems 16
+    }
+
+    if ($qualityScore -gt $bestQualityScore) {
+      $bestQualityScore = $qualityScore
+      $nonImprovingCount = 0
+    } else {
+      $nonImprovingCount += 1
+    }
+    $scoreDropTriggered = $false
+    if ($lastQualityScore -ge 0.0) {
+      $scoreDropTriggered = (($lastQualityScore - $qualityScore) -ge $scoreDropTrigger)
+    }
+    $lastQualityScore = $qualityScore
+
+    $rollingContextSizeEstimate = ($rollingContextJson.Length + $workerRaw.Length + $reviewerRaw.Length + $directorNote.Length + $summaryForUser.Length + $residualRisk.Length)
+    $sizeTriggered = $contextCompressionEnabled -and ($rollingContextSizeEstimate -ge $compressionPromptChars)
+    $compressionStallTriggered = $contextCompressionEnabled -and ($nonImprovingCount -ge $compressionStallIterations)
+    $reworkSignal = (($summaryForUser + "`n" + $residualRisk + "`n" + $workerRaw) -match "(?i)\brework\b|\bredo\b|\bre-open\b|\breopen\b|\brevisit\b|\brollback\b|\bundo\b")
+    $directionMismatch = (-not [string]::IsNullOrWhiteSpace($previousDirection)) -and (-not [string]::IsNullOrWhiteSpace($evaluatorDirection)) -and ($previousDirection -ne $evaluatorDirection)
+    $driftTriggered = $false
+    if ($compressionDriftSignal -eq "direction_mismatch_rework") {
+      $driftTriggered = ($directionMismatch -and $reworkSignal)
+    }
+    $compositeCompressionTrigger = $sizeTriggered -or $compressionStallTriggered -or $driftTriggered
+
+    $computedContextRiskScore = 0.0
+    if ($sizeTriggered) { $computedContextRiskScore += 0.4 }
+    if ($compressionStallTriggered) { $computedContextRiskScore += 0.25 }
+    if ($driftTriggered) { $computedContextRiskScore += 0.35 }
+    if ($riskLevel -match "(?i)high") { $computedContextRiskScore += 0.2 }
+    if ($computedContextRiskScore -gt 1.0) { $computedContextRiskScore = 1.0 }
+    $contextRiskScore = if ($evaluatorContextRiskScore -ge 0.0) { [math]::Max(0.0, [math]::Min(1.0, $evaluatorContextRiskScore)) } else { $computedContextRiskScore }
+    $enforceCompression = $contextCompressionEnabled -and ($evaluatorEnforceCompression -or $compositeCompressionTrigger)
+    $compressionReasonParts = @()
+    if ($sizeTriggered) { $compressionReasonParts += ("size>={0}" -f $compressionPromptChars) }
+    if ($compressionStallTriggered) { $compressionReasonParts += ("stall>={0}" -f $compressionStallIterations) }
+    if ($driftTriggered) { $compressionReasonParts += "drift_signal" }
+    if ($evaluatorEnforceCompression) { $compressionReasonParts += "evaluator_enforced" }
+    if (-not [string]::IsNullOrWhiteSpace($evaluatorCompressionReason)) { $compressionReasonParts += ("evaluator_reason:{0}" -f $evaluatorCompressionReason) }
+    if ($compressionReasonParts.Count -eq 0) { $compressionReasonParts += "none" }
+    $compressionReasonText = ($compressionReasonParts -join "; ")
+
+    $pressureRecord = [ordered]@{
+      iteration = $i
+      context_mode = $contextMode
+      prompt_chars_est = $rollingContextSizeEstimate
+      prompt_chars_threshold = $compressionPromptChars
+      size_triggered = $sizeTriggered
+      stall_triggered = $compressionStallTriggered
+      drift_triggered = $driftTriggered
+      evaluator_enforce_compression = $evaluatorEnforceCompression
+      composite_triggered = $compositeCompressionTrigger
+      enforce_compression = $enforceCompression
+      context_risk_score = $contextRiskScore
+      snapshot_priority = $snapshotPriority
+      reason = $compressionReasonText
+      ts = (Get-Date).ToString("o")
+    }
+    [void]$contextPressureHistory.Add($pressureRecord)
+    while ($contextPressureHistory.Count -gt 40) { $contextPressureHistory.RemoveAt(0) }
+    Save-Json -Obj ([ordered]@{ latest = $pressureRecord; history = @($contextPressureHistory.ToArray()) }) -Path $contextPressureFile
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "context_pressure_eval" -Status "computed" -Iteration $i -Message ("chars={0}; score={1}; enforce={2}; reason={3}" -f $rollingContextSizeEstimate, $contextRiskScore, $enforceCompression, $compressionReasonText)
+
+    if ($enforceCompression) {
+      $checkpointJson = Join-Path $runDir ("iter_{0}_context_checkpoint.json" -f $i)
+      $checkpointMd = Join-Path $runDir ("iter_{0}_context_checkpoint.md" -f $i)
+      $snapshotObj = [ordered]@{
+        run_id = $runId
+        iteration = $i
+        goals_state = [ordered]@{
+          task = $effectiveTask
+          done_criteria = $effectiveDoneCriteria
+          progress_pct = $progressPct
+          quality_score = $qualityScore
+        }
+        validated_evidence = @((Get-TailArray -List $rollingValidatedEvidence -MaxItems 10))
+        rejected_paths = @((Get-TailArray -List $rollingRejectedPaths -MaxItems 10))
+        open_questions = @((Get-TailArray -List $rollingOpenQuestions -MaxItems 12))
+        next_direction = $evaluatorDirection
+        confidence = [math]::Round([math]::Max(0.0, (1.0 - $contextRiskScore)), 2)
+        why_compressed = $compressionReasonText
+      }
+      Save-Json -Obj $snapshotObj -Path $checkpointJson
+      Save-Json -Obj $snapshotObj -Path $contextSnapshotJsonFile
+      $snapshotMd = @"
+# Context Snapshot (Iteration $i)
+
+- reason: $compressionReasonText
+- context_risk_score: $contextRiskScore
+- next_direction: $evaluatorDirection
+- progress_pct: $progressPct
+- quality_score: $qualityScore
+
+## Validated Evidence
+$(($snapshotObj.validated_evidence | ForEach-Object { "- $_" }) -join [Environment]::NewLine)
+
+## Rejected Paths
+$(($snapshotObj.rejected_paths | ForEach-Object { "- $_" }) -join [Environment]::NewLine)
+
+## Open Questions
+$(($snapshotObj.open_questions | ForEach-Object { "- $_" }) -join [Environment]::NewLine)
+"@
+      Set-Content -Path $checkpointMd -Value $snapshotMd -Encoding UTF8
+      Set-Content -Path $contextSnapshotMdFile -Value $snapshotMd -Encoding UTF8
+
+      $state.last_compression_iteration = $i
+      $state.compression_count = [int]$state.compression_count + 1
+      $state.active_snapshot_file = $contextSnapshotJsonFile
+      $state.active_snapshot_markdown_file = $contextSnapshotMdFile
+      $state.latest_context_checkpoint_json = $checkpointJson
+      $state.latest_context_checkpoint_markdown = $checkpointMd
+      $state.rolling_context_bytes_est = $rollingContextSizeEstimate
+      $state.context_risk_score = $contextRiskScore
+      Save-Json -Obj $state -Path $stateFile
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "compression_enforced" -Status "snapshot_written" -Iteration $i -Message ("json={0}; md={1}" -f $checkpointJson, $checkpointMd)
+
+      $rollingRecentSummaries.Clear()
+      $rollingRecentDirections.Clear()
+      Add-RollingItem -List $rollingRecentSummaries -Item ("Compression checkpoint iter_{0}: {1}" -f $i, $compressionReasonText) -MaxItems 10
+      Add-RollingItem -List $rollingRecentDirections -Item $evaluatorDirection -MaxItems 10
+    } else {
+      $state.rolling_context_bytes_est = $rollingContextSizeEstimate
+      $state.context_risk_score = $contextRiskScore
+      Save-Json -Obj $state -Path $stateFile
+    }
+
+    $milestonesCrossedNow = @()
+    foreach ($m in $milestones) {
+      if ($progressPct -ge $m -and -not $milestoneHit.ContainsKey($m)) {
+        $milestoneHit[$m] = $true
+        $state.milestone_hits += [string]$m
+        $milestonesCrossedNow += [string]$m
+      }
+    }
+    $quality090Triggered = $false
+    if (-not $majorQualityMilestoneHit -and $qualityScore -ge $qualityMajorMilestone) {
+      $majorQualityMilestoneHit = $true
+      $quality090Triggered = $true
+      $state.milestone_hits += "quality_090"
+    }
+    $riskHighTriggered = ($riskLevel -match "(?i)high")
+    $sourceConflictTriggered = (($summaryForUser + "`n" + $residualRisk) -match "(?i)source conflict|conflicting evidence|contradictory sources")
+    $stallTriggered = ($nonImprovingCount -ge $stallWindow)
+    if ($sourceConflictTriggered) {
+      Add-RollingItem -List $rollingRejectedPaths -Item ("iter_{0}: source conflict path rejected" -f $i) -MaxItems 12
+    }
+    if ($directionMismatch -and $reworkSignal) {
+      Add-RollingItem -List $rollingRejectedPaths -Item ("iter_{0}: direction mismatch and rework signal" -f $i) -MaxItems 12
+    }
+    $spikeTriggered = ($scoreDropTriggered -or $riskHighTriggered -or $sourceConflictTriggered)
+    if ($spikeTriggered -and $burstRemaining -le 0) {
+      $burstRemaining = $burstIterations
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_burst" -Status "start" -Iteration $i -Message "Adaptive burst started due to risk spike."
+    }
+    $directorMode = if (($milestonesCrossedNow.Count -gt 0) -or $quality090Triggered -or $stallTriggered -or ($burstRemaining -gt 0)) { "full" } else { "light" }
+
+    $directorPrompt = @"
+You are DIRECTOR in a research CLI loop.
+Mode: $directorMode
+Ultimate goals: $effectiveTask
+Done criteria: $effectiveDoneCriteria
+Iteration: $iterationLabel
+Quality score: $qualityScore
+Progress pct: $progressPct
+Evaluator risk level: $riskLevel
+Evaluator summary: $summaryForUser
+Evaluator direction: $evaluatorDirection
+Residual risk: $residualRisk
+Rolling context packet (JSON):
+$rollingContextJson
+Context pressure:
+- estimated_chars: $rollingContextSizeEstimate
+- context_risk_score: $contextRiskScore
+- compression_enabled: $contextCompressionEnabled
+- compression_decision_this_iteration: $enforceCompression
+- compression_reason: $compressionReasonText
+Goals doc: $PrdPath
+Plan doc: $DevDocPath
+Findings doc: $FindingsPath
+
+Post-iteration note only. Keep compact and actionable.
+Return strict JSON only:
+{
+  "mode": "light|full",
+  "note_for_researcher": "...",
+  "researcher_direction": "...",
+  "approved_final": true|false,
+  "plan_change_summary": "..."
+}
+"@
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "dispatch" -Iteration $i -Message ("Dispatching director post note mode={0}" -f $directorMode)
+    $directorRaw = Invoke-CodexExecWithSafety -Prompt $directorPrompt -StepName ("director_post_" + $directorMode) -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+    $directorFile = Join-Path $runDir ("iter_{0}_director_{1}.txt" -f $i, $directorMode)
+    Set-Content -Path $directorFile -Value $directorRaw -Encoding UTF8
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $directorFile)
+    $lastSuccessfulStep = "director_post_iter_$i"
+
+    $directorDirection = ""
+    try {
+      $directorJson = Parse-FirstJsonObject -Text $directorRaw
+      if ($directorJson.PSObject.Properties.Name -contains "note_for_researcher") { $directorNote = [string]$directorJson.note_for_researcher }
+      if ($directorJson.PSObject.Properties.Name -contains "researcher_direction") { $directorDirection = [string]$directorJson.researcher_direction }
+      if ($directorJson.PSObject.Properties.Name -contains "approved_final") { $directorApprovedFinal = [bool]$directorJson.approved_final }
+    } catch {
+      $directorNote = "Director parse fallback: keep evaluator direction and close evidence gaps."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($evaluatorDirection)) {
+      if (-not [string]::IsNullOrWhiteSpace($directorDirection) -and $directorDirection -ne $evaluatorDirection) {
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "direction_resolution" -Status "evaluator_tie_break" -Iteration $i -Message "Evaluator direction selected over director direction."
+      }
+      $state.next_direction = $evaluatorDirection
+    } elseif (-not [string]::IsNullOrWhiteSpace($directorDirection)) {
+      $state.next_direction = $directorDirection
+    }
+
+    if (($directorMode -eq "full") -and $burstRemaining -gt 0) {
+      $burstRemaining -= 1
+    }
+
+    $state.history += [ordered]@{
+      iteration = $i
+      worker_file = $workerFile
+      reviewer_file = $reviewerFile
+      director_file = $directorFile
+      approved = $approved
+      director_approved_final = $directorApprovedFinal
+      quality_score = $qualityScore
+      progress_pct = $progressPct
+      context_risk_score = $contextRiskScore
+      enforce_compression = $enforceCompression
+      next_direction = $state.next_direction
+    }
+    Save-Json -Obj $state -Path $stateFile
+
+    if ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate) {
+      $state.status = "approved"
+      Save-Json -Obj $state -Path $stateFile
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "early_stop_approved" -Iteration $i -Message ("Director signoff + quality gate ({0}) satisfied." -f $qualityFinalGate)
+      break
+    }
+    $i++
+  }
+
+  if ($blocked) {
+    $state.status = "blocked"
+  } elseif (-not ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate) -and $effectiveMaxIterations -gt 0) {
+    $state.status = "max_iterations_reached"
+    $residualRisk = "Iteration cap reached before approval."
+  } elseif (-not ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate)) {
+    $state.status = "in_progress_not_approved"
+  }
+
+  $state.ended_at = (Get-Date).ToString("s")
+  Save-Json -Obj $state -Path $stateFile
+
+  $validationResult = if ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate) { "PASS" } elseif ($blocked) { "FAIL_BLOCKED" } else { "PARTIAL" }
+  $report = @"
+# Research Native Loop Final Report
+
+- run_id: $runId
+- status: $($state.status)
+- risk_tier: $effectiveRiskTier
+- max_iterations: $maxIterationsLabel
+- completed_iterations: $($state.current_iteration)
+- approved: $approved
+- director_approved_final: $directorApprovedFinal
+- quality_score: $qualityScore
+- progress_pct: $progressPct
+
+## Executive Summary
+$summaryForUser
+
+## Technical Summary
+- Source policy: $sourcePolicy
+- Goals doc: $PrdPath
+- Plan doc: $DevDocPath
+- Findings doc: $FindingsPath
+- Coverage: $coverage
+- Context mode: $contextMode
+- Compression enabled: $contextCompressionEnabled
+- Compression count: $($state.compression_count)
+- Last compression iteration: $($state.last_compression_iteration)
+
+## Validation Actions and Results
+- Loaded and validated template v$($template.version): PASS
+- Enforced runtime safety (heartbeat/retry/no_silent_stop/lock): PASS
+- Wrote step-level trace stream to ${traceFile}: PASS
+- Auto merge bootstrap with baseline artifacts: PASS
+- Iterative director-researcher-evaluator loop execution: $validationResult
+
+## Coverage
+- Covered: bootstrap merge, director preflight, researcher execution, evaluator scoring, evaluator-driven context pressure checks, adaptive compression checkpoints (JSON+Markdown), director post notes, adaptive burst, 25/50/75/100 progress milestones, 0.90 quality milestone, and step-level execution tracing.
+- Not covered: external domain-expert verification beyond repository/runtime evidence.
+
+## Residual Risk
+$residualRisk
+"@
+  Set-Content -Path $finalReportFile -Value $report -Encoding UTF8
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "final_report_written" -Message ("Saved final report to {0}" -f $finalReportFile)
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "end" -Message ("status={0}; approved={1}; quality_score={2}" -f $state.status, $approved, $qualityScore)
+  Write-Host "Run completed. Final report: $finalReportFile"
+}
+catch {
+  $err = $_.Exception.Message
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "error" -Iteration $state.current_iteration -Message $err
+  if ([bool]$template.runtime_safety.pause_requires_blocker) {
+    Write-BlockerReport -BlockerFile $blockerFile -Reason $err -LastStep $lastSuccessfulStep -NextActionCommand ("powershell -ExecutionPolicy Bypass -File .\Research_Template\scripts\Research_native_loop.ps1 -TemplatePath ""{0}"" -Task ""{1}"" -DoneCriteria ""{2}""" -f $TemplatePath, $effectiveTask, $effectiveDoneCriteria)
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "blocker_report_written" -Iteration $state.current_iteration -Message ("Saved blocker report to {0}" -f $blockerFile)
+  }
+  throw
+}
+finally {
+  Release-RunLock -LockFile $lockFile -RunId $runId
+  Pop-Location
+}

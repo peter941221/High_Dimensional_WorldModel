@@ -1,0 +1,152 @@
+{
+  "template_id": "codex_native_research_loop_v1",
+  "version": "1.3.0",
+  "name": "Research Native Loop Template",
+  "description": "CLI-only iterative research orchestration with Director, Researcher, and Evaluator.",
+  "mode": "cli-only",
+  "official_commands_only": true,
+  "required_commands": [
+    "codex exec",
+    "codex review",
+    "codex resume"
+  ],
+  "inputs": {
+    "task": "Complete ultimate research goals with validated evidence and synthesis.",
+    "done_criteria": "Director final signoff with quality_score >= 0.95 and complete executive plus technical findings.",
+    "max_iterations": 0,
+    "risk_tier": "M",
+    "repo_root": ".",
+    "default_problem_link": "",
+    "source_policy": "Primary-source-first, but allow strong secondary signals when helpful."
+  },
+  "quick_run": {
+    "script_path": "./Research_Template/scripts/Research_native_loop.ps1",
+    "template_path": "./Research_Template/RESEARCH_NATIVE_LOOP_TEMPLATE.json",
+    "ai_action_on_trigger": "When user says run research template or run research loop, run defaults using RESEARCH_GOALS.md, RESEARCH_PLAN.md, and FINDINGS.md.",
+    "allow_empty_user_fields": [
+      "task",
+      "done_criteria",
+      "problem_link"
+    ]
+  },
+  "artifacts": {
+    "run_dir": "./Research_Template/runtime",
+    "state_file": "./Research_Template/runtime/state.json",
+    "final_report_file": "./Research_Template/runtime/final_report.md",
+    "heartbeat_log_file": "./Research_Template/runtime/heartbeat.log",
+    "blocker_report_file": "./Research_Template/runtime/blocker_report.md",
+    "trace_log_file": "./Research_Template/runtime/execution_trace.jsonl"
+  },
+  "runtime_safety": {
+    "no_silent_stop": true,
+    "live_console_output": true,
+    "context_mode": "rolling_thread",
+    "compression": {
+      "enabled": true,
+      "trigger_prompt_chars": 30000,
+      "trigger_stall_iterations": 3,
+      "trigger_drift_signal": "direction_mismatch_rework",
+      "forced_refresh": "never"
+    },
+    "max_idle_minutes": 8,
+    "heartbeat_interval_sec": 45,
+    "major_quality_milestone": 0.9,
+    "final_quality_gate": 0.95,
+    "stall_non_improving_iterations": 3,
+    "risk_spike_score_drop_threshold": 0.05,
+    "adaptive_burst_iterations": 2,
+    "reuse_confidence_threshold": 0.7,
+    "blocker_short_circuit_patterns": [
+      "blocked by policy",
+      "read-only",
+      "write operations are blocked",
+      "rejected by user approval settings",
+      "writing outside of the project",
+      "files changed on disk: 0",
+      "no file changes were applied"
+    ],
+    "nested_codex_exec": {
+      "dangerously_bypass_approvals_and_sandbox": true,
+      "skip_git_repo_check": true
+    },
+    "auto_retry_on_failure": {
+      "enabled": true,
+      "max_retries_per_step": 3,
+      "backoff_seconds": [
+        5,
+        15,
+        30
+      ]
+    },
+    "pause_requires_blocker": true,
+    "pause_blocker_contract": [
+      "blocker_reason",
+      "last_successful_step",
+      "next_action_command",
+      "resume_command"
+    ],
+    "resume_on_restart": true
+  },
+  "assistant_execution_contract": {
+    "trigger_phrases": [
+      "run research template",
+      "run research loop"
+    ],
+    "required_behavior": [
+      "Create run_dir if missing.",
+      "Create run-level isolated artifact folder under run_dir/runs/<run_id>.",
+      "Use active lock file to prevent concurrent runs.",
+      "Run bootstrap merge analysis before first research iteration.",
+      "Reuse completed prior work only after confidence-based verification.",
+      "Director preflight sets first research direction.",
+      "Each iteration runs Researcher then Evaluator then Director post-note.",
+      "Maintain rolling-thread context continuity across iterations using bounded context packets.",
+      "Evaluator can enforce adaptive compression checkpoints when context pressure rises.",
+      "When compression is enforced, write both context_snapshot.json and context_snapshot.md.",
+      "Director note is post-iteration only and compact/actionable by default.",
+      "Evaluator direction wins tie-break when evaluator and director differ.",
+      "Trigger Director full intervention on 25/50/75/100 progress milestones.",
+      "Trigger Director full intervention at quality_score >= 0.90 milestone.",
+      "Trigger Director full intervention on stall/risk-spike conditions.",
+      "Finalize only if director_approved_final=true and quality_score >= 0.95.",
+      "If blocked pattern appears, short-circuit and write blocker report.",
+      "Write lifecycle trace events to trace_log_file."
+    ]
+  },
+  "worker_prompt_template": [
+    "You are the Researcher in an iterative CLI loop.",
+    "Task: {{task}}",
+    "Done criteria: {{done_criteria}}",
+    "Current iteration: {{iteration}}/{{max_iterations}}",
+    "Direction: {{next_direction_or_none}}",
+    "Return JSON then a short markdown summary."
+  ],
+  "reviewer_prompt_template": [
+    "You are the Evaluator in an iterative CLI loop.",
+    "Evaluate researcher output for quality, progress, and risk.",
+    "Return strict JSON only with approved, quality_score, progress_pct, summary_for_user, next_direction, coverage, residual_risk, risk_level, enforce_compression, compression_reason, context_risk_score, snapshot_priority."
+  ],
+  "decision_rules": [
+    "IF director_approved_final=true AND quality_score>=0.95 THEN finalize",
+    "ELSE IF evaluator_enforce_compression=true OR composite_context_trigger=true THEN write compression checkpoint",
+    "ELSE IF blocked_pattern_detected THEN stop and write blocker report",
+    "ELSE IF no_output_duration > max_idle_minutes THEN retry OR write blocker report",
+    "ELSE IF step failed AND retry_count < max_retries_per_step THEN retry with backoff",
+    "ELSE IF max_iterations > 0 AND iteration >= max_iterations THEN stop and mark residual risk",
+    "ELSE continue with next_direction"
+  ],
+  "native_command_examples": {
+    "run_default": "powershell -ExecutionPolicy Bypass -File .\\Research_Template\\scripts\\Research_native_loop.ps1",
+    "run_dry": "powershell -ExecutionPolicy Bypass -File .\\Research_Template\\scripts\\Research_native_loop.ps1 -DryRun",
+    "optional_resume": "codex resume --last"
+  },
+  "final_output_contract": {
+    "must_include": [
+      "Risk Tier",
+      "Validation actions and results (pass/fail)",
+      "Coverage",
+      "Residual risk",
+      "If blocked: reason + reproducible follow-up command"
+    ]
+  }
+}
