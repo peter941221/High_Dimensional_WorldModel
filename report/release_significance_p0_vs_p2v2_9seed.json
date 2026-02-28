@@ -1,0 +1,85 @@
+{
+  "report_name": "release_significance_p0_vs_p2v2_9seed",
+  "a_prefix": "p0_freeze_9seed",
+  "b_prefix": "p2_v2_9seed",
+  "a_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\p0_freeze_9seed\\p0_summary.json",
+  "b_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\p2_v2_9seed\\p0_summary.json",
+  "seeds": [
+    11,
+    22,
+    33,
+    44,
+    55,
+    66,
+    77,
+    88,
+    99
+  ],
+  "method": "paired_exact_signflip",
+  "alpha": 0.05,
+  "rows": [
+    {
+      "kpi": "baseline_success_dim3",
+      "n": 9,
+      "a_mean": 0.7305555555555555,
+      "b_mean": 0.7305555555555555,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "baseline_success_dim4",
+      "n": 9,
+      "a_mean": 0.6555555555555554,
+      "b_mean": 0.6555555555555554,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "transfer_success_mean",
+      "n": 9,
+      "a_mean": 0.6300925925925926,
+      "b_mean": 0.6300925925925926,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "transfer_gain_mean",
+      "n": 9,
+      "a_mean": 0.016203703703703696,
+      "b_mean": 0.016203703703703696,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "robust_easy",
+      "n": 9,
+      "a_mean": 0.7333333333333333,
+      "b_mean": 0.7333333333333333,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "robust_medium",
+      "n": 9,
+      "a_mean": 0.24166666666666664,
+      "b_mean": 0.2916666666666667,
+      "delta_mean": 0.05000000000000003,
+      "p_value": 0.00390625,
+      "significant_0_05": true
+    },
+    {
+      "kpi": "robust_hard",
+      "n": 9,
+      "a_mean": 0.16666666666666666,
+      "b_mean": 0.15,
+      "delta_mean": -0.016666666666666663,
+      "p_value": 0.00390625,
+      "significant_0_05": true
+    }
+  ]
+}
