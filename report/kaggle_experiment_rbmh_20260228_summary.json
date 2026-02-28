@@ -1,0 +1,60 @@
+{
+  "runs": {
+    "rbmh_s11": {
+      "run_id": "kg_exp_rbmh_s11_20260228",
+      "seed": 11,
+      "kpi": {
+        "baseline_dim3": 0.8833333333333333,
+        "baseline_dim4": 0.8,
+        "baseline_dim6": 0.55,
+        "baseline_dim8": 0.36666666666666664,
+        "transfer_success_mean": 0.8444444444444444,
+        "transfer_gain_mean": -0.005555555555555518,
+        "robust_easy": 0.7291666666666666,
+        "robust_medium": 0.2375,
+        "robust_hard": 0.1375,
+        "ablation_best_model": "phys_residual",
+        "ablation_best_score": 0.9
+      }
+    },
+    "rbmh_s22": {
+      "run_id": "kg_exp_rbmh_s22_20260228",
+      "seed": 22,
+      "kpi": {
+        "baseline_dim3": 0.8333333333333334,
+        "baseline_dim4": 0.7666666666666667,
+        "baseline_dim6": 0.65,
+        "baseline_dim8": 0.38333333333333336,
+        "transfer_success_mean": 0.8444444444444444,
+        "transfer_gain_mean": 0.061111111111111116,
+        "robust_easy": 0.7291666666666666,
+        "robust_medium": 0.2375,
+        "robust_hard": 0.1375,
+        "ablation_best_model": "phys_residual",
+        "ablation_best_score": 0.9
+      }
+    }
+  },
+  "rbmh_mean_kpi": {
+    "baseline_dim3": 0.8583333333333334,
+    "baseline_dim4": 0.7833333333333334,
+    "baseline_dim6": 0.6000000000000001,
+    "baseline_dim8": 0.375,
+    "transfer_success_mean": 0.8444444444444444,
+    "transfer_gain_mean": 0.0277777777777778,
+    "robust_easy": 0.7291666666666666,
+    "robust_medium": 0.2375,
+    "robust_hard": 0.1375
+  },
+  "delta_vs_prev_high_budget_mean": {
+    "baseline_dim3": 0.0,
+    "baseline_dim4": 0.0,
+    "baseline_dim6": 0.0,
+    "baseline_dim8": 0.0,
+    "transfer_success_mean": 0.0,
+    "transfer_gain_mean": 0.0,
+    "robust_easy": -0.010833,
+    "robust_medium": 0.0225,
+    "robust_hard": -0.0325
+  }
+}

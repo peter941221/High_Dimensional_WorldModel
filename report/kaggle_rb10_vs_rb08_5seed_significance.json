@@ -1,0 +1,81 @@
+{
+  "report_name": "kaggle_rb10_vs_rb08_5seed_significance",
+  "a_prefix": "rb10",
+  "b_prefix": "rb08",
+  "a_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\rb10\\p0_summary.json",
+  "b_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\rb08\\p0_summary.json",
+  "seeds": [
+    11,
+    22,
+    33,
+    44,
+    55
+  ],
+  "method": "paired_exact_signflip",
+  "alpha": 0.05,
+  "rows": [
+    {
+      "kpi": "baseline_success_dim3",
+      "n": 5,
+      "a_mean": 0.8800000000000001,
+      "b_mean": 0.8800000000000001,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "baseline_success_dim4",
+      "n": 5,
+      "a_mean": 0.7466666666666667,
+      "b_mean": 0.7466666666666667,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "transfer_success_mean",
+      "n": 5,
+      "a_mean": 0.8477777777777777,
+      "b_mean": 0.8477777777777777,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "transfer_gain_mean",
+      "n": 5,
+      "a_mean": 0.03444444444444446,
+      "b_mean": 0.03444444444444446,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "robust_easy",
+      "n": 5,
+      "a_mean": 0.7291666666666666,
+      "b_mean": 0.7291666666666666,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "robust_medium",
+      "n": 5,
+      "a_mean": 0.2375,
+      "b_mean": 0.2375,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "robust_hard",
+      "n": 5,
+      "a_mean": 0.1375,
+      "b_mean": 0.1375,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "report_name": "kaggle_hiconf_hardonly_scale_curve_seed11",
+  "run_budget": {
+    "baseline_epochs": 24,
+    "transfer_pretrain_epochs": 16,
+    "transfer_finetune_epochs": 16,
+    "ablation_epochs": 16,
+    "robustness_episodes": 240,
+    "eval_episodes": 60,
+    "max_steps": 150
+  },
+  "scope": {
+    "profile": "conservative",
+    "difficulties": "hard_only",
+    "warmup_episodes": 200
+  },
+  "rows": [
+    {
+      "scale": "0.15",
+      "seed": 11,
+      "run_id": "kg_hicurve_s015_hard_s11_20260228",
+      "baseline_success_dim3": 0.8833333333333333,
+      "baseline_success_dim4": 0.8,
+      "transfer_success_mean": 0.8444444444444444,
+      "transfer_gain_mean": -0.005555555555555518,
+      "robust_easy": 0.7291666666666666,
+      "robust_medium": 0.21666666666666667,
+      "robust_hard": 0.1375
+    },
+    {
+      "scale": "0.20",
+      "seed": 11,
+      "run_id": "kg_hiconf_s020_hard_s11_20260228",
+      "baseline_success_dim3": 0.8833333333333333,
+      "baseline_success_dim4": 0.8,
+      "transfer_success_mean": 0.8444444444444444,
+      "transfer_gain_mean": -0.005555555555555518,
+      "robust_easy": 0.7291666666666666,
+      "robust_medium": 0.21666666666666667,
+      "robust_hard": 0.14166666666666666
+    },
+    {
+      "scale": "0.25",
+      "seed": 11,
+      "run_id": "kg_hicurve_s025_hard_s11_20260228",
+      "baseline_success_dim3": 0.8833333333333333,
+      "baseline_success_dim4": 0.8,
+      "transfer_success_mean": 0.8444444444444444,
+      "transfer_gain_mean": -0.005555555555555518,
+      "robust_easy": 0.7291666666666666,
+      "robust_medium": 0.21666666666666667,
+      "robust_hard": 0.14166666666666666
+    }
+  ]
+}
