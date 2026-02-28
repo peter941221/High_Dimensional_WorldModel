@@ -1,0 +1,9 @@
+﻿# Reused Items (Auto Merge Verification)
+
+- threshold: 0.7
+- item: report/kaggle_hifinal_hard020_vs_hard025_5seed_significance.json (paired 5-seed high-budget final decider; delta=0 across KPIs) | confidence: 0.96 | decision: reused_and_verified
+- item: report/kaggle_hiconf_hard020_10seed_summary.json (10-seed stability for hard_only+0.20 default) | confidence: 0.94 | decision: reused_and_verified
+- item: report/kaggle_next_hard002_vs_hard020_9seed_significance.json (paired 9-seed sensitivity; robust_hard p=0.00390625) | confidence: 0.91 | decision: reused_and_verified
+- item: report/release_significance_p0_vs_p2v2_9seed.json (paired release comparison across 9 seeds) | confidence: 0.88 | decision: reused_and_verified
+- item: results/p0_freeze/hifinal_hard020_5seed/p0_summary.json (seed-level KPI table reusable for synthesis) | confidence: 0.9 | decision: reused_and_verified
+- item: Research_Template/runtime/runs/*/bootstrap_snapshot.json merged item: prior findings draft | confidence: 0.8 | decision: reused_and_verified

@@ -1,0 +1,31 @@
+﻿
+{"ts":"2026-03-01T00:52:22.6183908+08:00","run_id":"research_20260301_005222","step":"run","status":"start","iteration":null,"attempt":null,"message":"risk_tier=M; max_iterations=1; nested_exec_args=--dangerously-bypass-approvals-and-sandbox --skip-git-repo-check"}
+{"ts":"2026-03-01T00:52:22.6323906+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"dispatch","iteration":0,"attempt":null,"message":"Dispatching bootstrap merge prompt."}
+{"ts":"2026-03-01T00:52:22.6938910+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"attempt_start","iteration":0,"attempt":0,"message":"Launching codex exec."}
+{"ts":"2026-03-01T00:53:07.7534498+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:53:52.8342546+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:54:37.8564360+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:55:22.8757968+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:56:07.9613508+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:56:52.9850514+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:56:53.0215547+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"attempt_success","iteration":0,"attempt":0,"message":"Received non-empty model output."}
+{"ts":"2026-03-01T00:56:53.0280520+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"artifact_written","iteration":0,"attempt":null,"message":"Saved output to C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_005222\\iter_0_bootstrap_merge.txt"}
+{"ts":"2026-03-01T00:56:53.0625518+08:00","run_id":"research_20260301_005222","step":"bootstrap_merge","status":"parsed","iteration":0,"attempt":null,"message":"baseline_progress=25"}
+{"ts":"2026-03-01T00:56:53.1055548+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"dispatch","iteration":0,"attempt":null,"message":"Dispatching director preflight prompt."}
+{"ts":"2026-03-01T00:56:53.1095529+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"attempt_start","iteration":0,"attempt":0,"message":"Launching codex exec."}
+{"ts":"2026-03-01T00:57:38.1470263+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:58:23.1598835+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:59:08.1778067+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T00:59:53.1913800+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T01:00:38.2156557+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T01:01:23.2701647+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"attempt_alive","iteration":0,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T01:01:23.2976615+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"attempt_success","iteration":0,"attempt":0,"message":"Received non-empty model output."}
+{"ts":"2026-03-01T01:01:23.3021643+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"artifact_written","iteration":0,"attempt":null,"message":"Saved output to C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_005222\\iter_0_director_preflight.txt"}
+{"ts":"2026-03-01T01:01:23.3066628+08:00","run_id":"research_20260301_005222","step":"director_preflight","status":"parsed","iteration":0,"attempt":null,"message":"Parsed director preflight JSON and updated next direction."}
+{"ts":"2026-03-01T01:01:23.3096648+08:00","run_id":"research_20260301_005222","step":"iteration","status":"start","iteration":1,"attempt":null,"message":"Starting iteration 1/1"}
+{"ts":"2026-03-01T01:01:23.3316617+08:00","run_id":"research_20260301_005222","step":"researcher","status":"dispatch","iteration":1,"attempt":null,"message":"Dispatching researcher prompt."}
+{"ts":"2026-03-01T01:01:23.3356652+08:00","run_id":"research_20260301_005222","step":"researcher","status":"attempt_start","iteration":1,"attempt":0,"message":"Launching codex exec."}
+{"ts":"2026-03-01T01:02:08.3736201+08:00","run_id":"research_20260301_005222","step":"researcher","status":"attempt_alive","iteration":1,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T01:02:53.3965172+08:00","run_id":"research_20260301_005222","step":"researcher","status":"attempt_alive","iteration":1,"attempt":0,"message":"Process still running."}
+{"ts":"2026-03-01T01:14:37.5048274+08:00","run_id":"research_20260301_005222","step":"run","status":"manual_recovery_interrupt","iteration":1,"attempt":null,"message":"Marked interrupted_timeout and wrote blocker_report.md after external timeout interruption."}
+{"ts":"2026-03-01T01:14:52.6733572+08:00","run_id":"research_20260301_005222","step":"run","status":"manual_recovery_interrupt","iteration":1,"attempt":null,"message":"Marked interrupted_timeout and wrote blocker_report.md after external timeout interruption."}

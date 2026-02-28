@@ -1,0 +1,1 @@
+﻿{"approved":false,"quality_score":0.75,"progress_pct":18,"summary_for_user":"dry run evaluator summary","next_direction":"dry run next direction","coverage":"dry run coverage","residual_risk":"dry run residual risk","risk_level":"medium","enforce_compression":false,"compression_reason":"dry run adaptive compression","context_risk_score":0.35,"snapshot_priority":"normal"}

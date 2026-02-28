@@ -916,3 +916,32 @@
   - `Research_Template/FINDINGS.md`
 - Prepared loop kickoff command using explicit arguments (`-RepoRoot .` and doc paths under `Research_Template`) to ensure artifacts are written under this repository.
 - Next execution checkpoint: commit+push doc/memory updates, then run research loop and commit+push generated runtime artifacts.
+
+## 2026-03-01 01:02:00 - Repo-wide smart scan baseline snapshot for research loop
+- Performed a repo-wide scan focused on `Research_Template` docs/runtime state, `report/*.json`, `results/p0_freeze/*`, `report/technical_report.md`, and `MEMORY.md`.
+- Baseline progress for loop bootstrap remains `25%` across prior run snapshots (`bootstrap_snapshot.json` and `state.json` history), with no director final signoff yet (`quality_score` max observed: `0.75`).
+- Confirmed high-confidence reusable evidence artifacts for upcoming loop iteration:
+  - `report/kaggle_hifinal_hard020_vs_hard025_5seed_significance.json`
+  - `report/kaggle_hiconf_hard020_10seed_summary.json`
+  - `report/kaggle_next_hard002_vs_hard020_9seed_significance.json`
+  - `report/release_significance_p0_vs_p2v2_9seed.json`
+- Noted current active run `research_20260301_005222` is alive but still at bootstrap-attempt stage in trace (`execution_trace.jsonl`), so bootstrap completion should be rechecked before long iterations.
+
+## 2026-03-01 01:15:20 - Research Template loop start, interruption recovery, and local dry-run completion
+- Started a real loop kickoff with explicit local arguments:
+  - `-TemplatePath .\Research_Template\RESEARCH_NATIVE_LOOP_TEMPLATE.json`
+  - `-RepoRoot C:\AI Projects\Fun Stuff\High_Dimensional_WorldModel`
+  - `-PrdPath .\Research_Template\RESEARCH_GOALS.md`
+  - `-DevDocPath .\Research_Template\RESEARCH_PLAN.md`
+  - `-FindingsPath .\Research_Template\FINDINGS.md`
+  - `-MaxIterations 1`
+- Real run ID: `research_20260301_005222`.
+  - Bootstrap and Director preflight completed with non-dry outputs and reusable evidence candidates.
+  - Researcher step was interrupted by external command timeout while nested `codex exec` was running.
+  - Recovery applied: state marked `interrupted_timeout`, blocker report written, trace appended with manual recovery event.
+- Completed a controlled local dry-run kickoff to verify full lifecycle and runtime paths:
+  - Dry-run ID: `research_20260301_011338`
+  - Final report generated at `Research_Template/runtime/runs/research_20260301_011338/final_report.md`.
+  - `latest_run.txt` now points to local workspace run path and `active.lock` is cleared.
+- Next recommended continuation command (non-dry):
+  - `powershell -ExecutionPolicy Bypass -File .\Research_Template\scripts\Research_native_loop.ps1 -TemplatePath .\Research_Template\RESEARCH_NATIVE_LOOP_TEMPLATE.json -RepoRoot . -PrdPath .\Research_Template\RESEARCH_GOALS.md -DevDocPath .\Research_Template\RESEARCH_PLAN.md -FindingsPath .\Research_Template\FINDINGS.md -MaxIterations 3`

@@ -1,0 +1,66 @@
+﻿{
+    "run_id":  "research_20260301_011338",
+    "status":  "max_iterations_reached",
+    "started_at":  "2026-03-01T01:13:38",
+    "repo_root":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel",
+    "run_root_dir":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime",
+    "run_dir":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338",
+    "risk_tier":  "M",
+    "task":  "Complete ultimate research goals with validated evidence and synthesis.",
+    "done_criteria":  "Director final signoff with quality_score \u003e= 0.95 and complete executive plus technical findings.",
+    "trace_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338\\execution_trace.jsonl",
+    "lock_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\active.lock",
+    "nested_exec_args":  [
+                             "--dangerously-bypass-approvals-and-sandbox",
+                             "--skip-git-repo-check"
+                         ],
+    "max_iterations":  1,
+    "current_iteration":  1,
+    "milestones":  [
+                       "25",
+                       "50",
+                       "75",
+                       "100"
+                   ],
+    "milestone_hits":  [
+                           "25"
+                       ],
+    "context_mode":  "rolling_thread",
+    "rolling_context_bytes_est":  1470,
+    "context_risk_score":  0.35,
+    "last_compression_iteration":  0,
+    "compression_count":  0,
+    "active_snapshot_file":  "",
+    "active_snapshot_markdown_file":  "",
+    "context_pressure_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338\\context_pressure.json",
+    "next_direction":  "dry run next direction",
+    "history":  [
+                    {
+                        "iteration":  1,
+                        "worker_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338\\iter_1_researcher.txt",
+                        "reviewer_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338\\iter_1_evaluator.txt",
+                        "director_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338\\iter_1_director_full.txt",
+                        "approved":  false,
+                        "director_approved_final":  false,
+                        "quality_score":  0.75,
+                        "progress_pct":  25,
+                        "context_risk_score":  0.35,
+                        "enforce_compression":  false,
+                        "next_direction":  "dry run next direction"
+                    }
+                ],
+    "major_quality_milestone":  0.9,
+    "final_quality_gate":  0.95,
+    "stall_window":  3,
+    "burst_iterations":  2,
+    "reuse_confidence_threshold":  0.7,
+    "context_compression_enabled":  true,
+    "context_compression_prompt_chars":  30000,
+    "context_compression_stall_iterations":  3,
+    "context_compression_drift_signal":  "direction_mismatch_rework",
+    "context_compression_forced_refresh":  "never",
+    "bootstrap_snapshot_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338\\bootstrap_snapshot.json",
+    "merge_baseline_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338\\merge_baseline.json",
+    "reused_items_file":  "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\Research_Template\\runtime\\runs\\research_20260301_011338\\reused_items_verified.md",
+    "ended_at":  "2026-03-01T01:13:39"
+}

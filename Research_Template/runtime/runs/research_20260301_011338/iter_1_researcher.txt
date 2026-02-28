@@ -1,0 +1,1 @@
+﻿{"approved_candidate":false,"quality_score_self":0.7,"progress_pct_claim":20,"summary_for_user":"dry run researcher summary","evidence_updates":["none"],"limitations":["none"],"next_direction":"continue"}
