@@ -1,0 +1,95 @@
+{
+  "run_id_prefix": "kaggle_smoke_hard020_2seed",
+  "seeds": [
+    11,
+    22
+  ],
+  "rows": [
+    {
+      "seed": 11,
+      "run_id": "kg_smoke_hard020_s11_20260228",
+      "baseline_success_dim3": 0.125,
+      "baseline_success_dim4": 0.0,
+      "transfer_success_mean": 0.125,
+      "transfer_gain_mean": 0.0,
+      "robust_easy": 0.8,
+      "robust_medium": 0.15,
+      "robust_hard": 0.15
+    },
+    {
+      "seed": 22,
+      "run_id": "kg_smoke_hard020_s22_20260228",
+      "baseline_success_dim3": 0.125,
+      "baseline_success_dim4": 0.0,
+      "transfer_success_mean": 0.125,
+      "transfer_gain_mean": 0.0,
+      "robust_easy": 0.8,
+      "robust_medium": 0.15,
+      "robust_hard": 0.15
+    }
+  ],
+  "summary": {
+    "baseline_success_dim3": {
+      "mean": 0.125,
+      "std": 0.0,
+      "min": 0.125,
+      "max": 0.125
+    },
+    "baseline_success_dim4": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0
+    },
+    "transfer_success_mean": {
+      "mean": 0.125,
+      "std": 0.0,
+      "min": 0.125,
+      "max": 0.125
+    },
+    "transfer_gain_mean": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0
+    },
+    "robust_easy": {
+      "mean": 0.8,
+      "std": 0.0,
+      "min": 0.8,
+      "max": 0.8
+    },
+    "robust_medium": {
+      "mean": 0.15,
+      "std": 0.0,
+      "min": 0.15,
+      "max": 0.15
+    },
+    "robust_hard": {
+      "mean": 0.15,
+      "std": 0.0,
+      "min": 0.15,
+      "max": 0.15
+    }
+  },
+  "meta": {
+    "source": "kaggle_outputs/High_Dimensional_WorldModel/results",
+    "budget": {
+      "baseline_epochs": 1,
+      "transfer_pretrain_epochs": 1,
+      "transfer_finetune_epochs": 1,
+      "ablation_epochs": 1,
+      "robustness_episodes": 20,
+      "eval_episodes": 8,
+      "max_steps": 60
+    },
+    "robustness_randomization": {
+      "enabled": true,
+      "scale": 0.2,
+      "profile": "conservative",
+      "difficulties": "hard_only",
+      "warmup_episodes": 20,
+      "warmup_epochs": 0
+    }
+  }
+}
