@@ -600,3 +600,49 @@ Decision boundary map (locked)
   - On completion, sync artifacts locally, rebuild `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`, then rerun:
     - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 9: Relaunch s77/s88/s99-r2 + 9-seed Meta-Strict Refresh)
+- Mode: Kaggle-first execution completion + local synthesis refresh.
+- Risk Tier: M
+- Concrete step executed:
+  - Relaunched remaining ON replacement slugs with identical matched settings and deterministic embedded bootstrap (`--no-code-dataset`, fixed run_id+seed mapping):
+    - `high-dimensional-worldmodel-guidance-on-s77-r2` -> `run_id=p_guidance_matched_on_9seed_s77`, `seed=77`
+    - `high-dimensional-worldmodel-guidance-on-s88-r2` -> `run_id=p_guidance_matched_on_9seed_s88`, `seed=88`
+    - `high-dimensional-worldmodel-guidance-on-s99-r2` -> `run_id=p_guidance_matched_on_9seed_s99`, `seed=99`
+  - Polled to terminal states and downloaded outputs/logs for all three slugs.
+  - Synced per-seed ON artifacts to local `results/` for seeds `77/88/99`.
+  - Rebuilt `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`.
+  - Re-ran requested meta-strict paired report:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+- Validation actions/results (PASS unless noted):
+  - Dispatch:
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s77-r2 ... prepare/push` -> PASS
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s88-r2 ... prepare/push` -> PASS
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s99-r2 ... prepare/push` -> PASS
+  - Poll/watch:
+    - `s77-r2`: `status=complete` -> PASS
+    - `s88-r2`: `status=complete` -> PASS
+    - `s99-r2`: initial watch blocked by transient Kaggle API reset during precheck, retried status -> `status=complete` -> PASS
+  - Output retrieval:
+    - `python kaggle_job_manager.py --owner peter941221 --slug ... --output-dir tmp_kaggle_pull_guidance_on_s{77,88,99}_r2 output` -> PASS
+  - Summary/regression:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing ...` -> PASS (`p0_summary.json` saved, 9 rows)
+    - `python experiments/significance_report.py ... guidance_train_matched_off_vs_on_9seed_significance ... --meta-strict` -> PASS
+- New decisive evidence:
+  - Logs confirm deterministic offline bootstrap usage for all relaunched seeds:
+    - `Embedded project bundle present: True`
+    - `Using embedded offline project bundle fallback.`
+    - `Loaded run config from: /kaggle/working/High_Dimensional_WorldModel/kaggle/run_config.json`
+    - `Saved run summary: /kaggle/working/hyperdream_kaggle_summary.json`
+  - No `git clone` DNS-failure signature in `s77-r2/s88-r2/s99-r2` completion logs.
+  - Report artifact: `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+    - Seeds: `[11,22,33,44,55,66,77,88,99]` (`n=9`)
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - only allowed diff key: `training_guidance`
+    - no KPI significant at `alpha=0.05`
+- Residual risk / note:
+  - During summary rebuild, seed `55` local artifacts were missing and were regenerated locally by `run_p0_baseline_freeze.py` under matched flags; this preserves metric completeness but mixes provenance (Kaggle for `66/77/88/99`, local for `55`) unless seed55 is later resynced from a successful Kaggle completion.
+- Precise next direction:
+  - Optional provenance hardening: relaunch/sync `s55-r2` to replace locally regenerated seed55 with Kaggle-produced artifacts under the same config.
+  - Then freeze final closure narrative around the updated 9-seed matched ON/OFF result (`meta-strict passed`, no significant KPI deltas) and refresh executive/technical synthesis wording accordingly.
+

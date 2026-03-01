@@ -311,3 +311,33 @@ Last Compressed: 2026-03-01
   - Rebuild `p_guidance_matched_on_9seed` summary and rerun:
     - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
 
+## Recent Work (2026-03-01, Researcher Loop Iteration 9)
+- Concrete next-best step executed (pending ON relaunch closure + report refresh):
+  - Relaunched Kaggle slugs `s77-r2/s88-r2/s99-r2` with identical matched config and deterministic embedded bootstrap (`--no-code-dataset`, fixed run_id+seed mapping).
+  - Polled to terminal completion for all three slugs (with one transient Kaggle API reset retried on `s99-r2`).
+  - Downloaded outputs/logs to:
+    - `tmp_kaggle_pull_guidance_on_s77_r2/`
+    - `tmp_kaggle_pull_guidance_on_s88_r2/`
+    - `tmp_kaggle_pull_guidance_on_s99_r2/`
+  - Synced local ON artifacts for seeds `77/88/99` into `results/baseline|transfer|robustness/p_guidance_matched_on_9seed_s{seed}/`.
+  - Rebuilt ON summary and regenerated 9-seed meta-strict report:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` (rows=9, seeds `[11,22,33,44,55,66,77,88,99]`)
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+- Decisive evidence added:
+  - Completion logs for `s77-r2/s88-r2/s99-r2` each contain:
+    - `Embedded project bundle present: True`
+    - `Using embedded offline project bundle fallback.`
+    - `Loaded run config from: /kaggle/working/High_Dimensional_WorldModel/kaggle/run_config.json`
+    - `Saved run summary: /kaggle/working/hyperdream_kaggle_summary.json`
+  - No git DNS clone failure signature observed in these completed runs.
+  - Meta-strict significance report outcomes (`guidance_train_matched_off_vs_on_9seed_significance`):
+    - `paired_n=9`
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]` (allowed key only: `training_guidance`)
+    - no KPI significant at alpha `0.05`.
+- Important note:
+  - `run_p0_baseline_freeze.py --skip-existing` regenerated seed `55` locally due missing local artifacts at rebuild time; this preserves complete 9-seed summary but mixes artifact provenance unless seed55 is later replaced from Kaggle output.
+- Next-direction lock (precise):
+  - Optional provenance hardening: rerun/sync `s55-r2` completion artifact under the same embedded-bootstrap matched config to remove mixed-provenance concern.
+  - Then refresh executive/technical synthesis wording using the new 9-seed meta-strict result as current bounded evidence.
+

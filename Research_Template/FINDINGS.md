@@ -1050,3 +1050,47 @@ Iteration 5 recovery map
       [Next: relaunch replacement slugs + sync on completion]
 ```
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 9: s77/s88/s99-r2 Completed + 9-seed Significance Refreshed)
+- Mode: Kaggle-first execution closure for pending ON seeds.
+- Risk Tier: M
+- Validation actions (PASS unless noted):
+  - Relaunch with matched embedded-bootstrap config (`--no-code-dataset`, fixed run_id+seed):
+    - `high-dimensional-worldmodel-guidance-on-s77-r2` (`run_id=p_guidance_matched_on_9seed_s77`, `seed=77`)
+    - `high-dimensional-worldmodel-guidance-on-s88-r2` (`run_id=p_guidance_matched_on_9seed_s88`, `seed=88`)
+    - `high-dimensional-worldmodel-guidance-on-s99-r2` (`run_id=p_guidance_matched_on_9seed_s99`, `seed=99`)
+    - prepare/push for each -> PASS
+  - Terminal polling:
+    - `s77-r2` -> `complete`
+    - `s88-r2` -> `complete`
+    - `s99-r2` -> `complete` (after one transient Kaggle API reset/retry)
+  - Output retrieval/sync:
+    - `python kaggle_job_manager.py --owner peter941221 --slug ... --output-dir tmp_kaggle_pull_guidance_on_s{77,88,99}_r2 output` -> PASS
+    - Synced local artifacts:
+      - `results/baseline/p_guidance_matched_on_9seed_s77|s88|s99/baseline.json`
+      - `results/transfer/p_guidance_matched_on_9seed_s77|s88|s99/transfer.json`
+      - `results/robustness/p_guidance_matched_on_9seed_s77|s88|s99/robustness.json`
+  - Summary/report refresh:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing ...` -> PASS
+      - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` now has 9 rows (`[11,22,33,44,55,66,77,88,99]`)
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict` -> PASS
+- New evidence:
+  - `tmp_kaggle_pull_guidance_on_s77_r2/high-dimensional-worldmodel-guidance-on-s77-r2.log` shows:
+    - `Embedded project bundle present: True`
+    - `Using embedded offline project bundle fallback.`
+    - `Loaded run config from: /kaggle/working/High_Dimensional_WorldModel/kaggle/run_config.json`
+    - `Saved run summary: /kaggle/working/hyperdream_kaggle_summary.json`
+  - Same signatures are present in `s88-r2` and `s99-r2` logs.
+  - No git DNS clone failure signature appears in these three completion logs.
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`:
+    - `n=9` paired seeds (`[11,22,33,44,55,66,77,88,99]`)
+    - `meta_check.passed=true`, `unexpected_diff_keys=[]`
+    - only allowed diff key: `training_guidance`
+    - no KPI significant at `alpha=0.05`.
+- Interpretation lock:
+  - The previously blocked 9-seed matched ON/OFF meta-strict refresh is now unblocked and completed.
+  - Under matched settings with meta-strict guard passing, training-time guidance (`guided_blend` vs `model_only`) shows no statistically significant KPI deltas at current alpha.
+- Coverage:
+  - Covered end-to-end pending operational chain: relaunch -> completion poll -> output download -> local sync -> 9-seed summary rebuild -> meta-strict significance regeneration.
+- Residual risk:
+  - Summary rebuild regenerated seed `55` locally due missing local files at refresh time; this creates mixed provenance unless seed55 is later replaced by a completed Kaggle artifact under identical settings.
+
