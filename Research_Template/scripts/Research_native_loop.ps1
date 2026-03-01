@@ -1481,7 +1481,8 @@ Iteration protocol:
 $iterationProtocolText
 - Do not run nested orchestration loops (`Research_native_loop.ps1` / `start_research.bat`).
 - Do not edit files under `Research_Template/runtime/` (loop-managed logs/locks/artifacts).
-- Kaggle is optional; use it only when it materially helps the current step.
+- Prefer Kaggle-first for experiment execution when feasible (free, fast, and reproducible); use local runs when Kaggle is not suitable for the current step.
+- If you choose local instead of Kaggle, briefly explain why and what would trigger moving that step to Kaggle.
 
 Output format:
 - Prefer JSON first and then short markdown.

@@ -137,6 +137,7 @@
       "Each iteration runs Researcher then Evaluator then Director post-note when role_mode=full.",
       "In researcher_only mode, skip Director and Evaluator and run only Researcher each iteration.",
       "In researcher_only mode, iteration 1 recovers memory then executes the next concrete step; iteration 2+ reviews previous iteration output then executes the next concrete step.",
+      "In researcher_only mode, encourage Kaggle-first execution for experiments when feasible (free, fast, reproducible), with explicit rationale when local-only execution is chosen.",
       "Maintain rolling-thread context continuity across iterations using bounded context packets.",
       "In researcher_only mode, perform a scoped git commit per iteration when new iteration-local file deltas exist.",
       "Evaluator can enforce adaptive compression checkpoints when context pressure rises.",
