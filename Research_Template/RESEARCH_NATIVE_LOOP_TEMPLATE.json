@@ -1,6 +1,6 @@
 {
   "template_id": "codex_native_research_loop_v1",
-  "version": "1.3.1",
+  "version": "1.3.3",
   "name": "Research Native Loop Template",
   "description": "CLI-only iterative research orchestration with Director, Researcher, and Evaluator.",
   "mode": "cli-only",
@@ -13,7 +13,7 @@
   "inputs": {
     "task": "Complete ultimate research goals with validated evidence and synthesis.",
     "done_criteria": "Director final signoff with quality_score >= 0.95 and complete executive plus technical findings.",
-    "max_iterations": 0,
+    "max_iterations": 4,
     "risk_tier": "M",
     "repo_root": ".",
     "default_problem_link": "",
@@ -52,6 +52,10 @@
     "heartbeat_interval_sec": 15,
     "live_output_poll_ms": 800,
     "console_status_interval_sec": 8,
+    "continue_after_approval": false,
+    "min_iterations_before_approval_stop": 3,
+    "approval_streak_required": 2,
+    "require_evaluator_approved_for_stop": true,
     "major_quality_milestone": 0.9,
     "final_quality_gate": 0.95,
     "stall_non_improving_iterations": 3,

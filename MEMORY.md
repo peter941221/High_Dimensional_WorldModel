@@ -1201,3 +1201,50 @@ eport/director_final_technical.md
   - Iteration work focused on maintenance/state hygiene (pointer/state/lock checks), not new causal evidence generation.
   - Optional Path A (`>=9` paired seeds OFF vs ON) remained unexecuted in that run.
   - Researcher/evaluator/director flow was effective for orchestration/gating, but objective pressure was mostly toward closure maintenance rather than net-new science.
+## 2026-03-01 11:02:00 - WezTerm command usage clarification for BAT launchers
+- Diagnosed user launch errors in WezTerm PowerShell:
+  - typo risk (`start_reseach.bat` vs `start_research.bat`)
+  - missing `./` (current directory is not in PowerShell command search path)
+  - path with spaces needs quoting + call operator `&`.
+- Provided canonical commands for both `start_research.bat` and `monitor_research.bat` from current folder and absolute paths.
+
+## 2026-03-01 11:10:00 - Director loop checkpoint reaffirmed approved closure package
+- Re-validated `Research_Template/RESEARCH_GOALS.md`, `Research_Template/RESEARCH_PLAN.md`, and `Research_Template/FINDINGS.md` against runtime gate artifacts.
+- Confirmed done criteria remain satisfied: `director_approved_final=true`, `quality_score=0.96` (>=0.95), and complete executive + technical final findings present.
+- Director decision this cycle: keep `approved_final=true`; no mandatory plan/doc adjustment required.
+- Remaining work is optional only: Path A decisiveness upgrade (>=9 paired seeds for guidance OFF vs ON), stronger dimension ranking separation, and broader external-validity expansion.
+## 2026-03-01 11:17:00 - Runtime integrity checkpoint under live loop lock
+- Verified `Research_Template/runtime/active.lock` references live loop run `research_20260301_111322` (`pid=16040`) and confirmed process command line maps to active `Research_native_loop.ps1`.
+- Confirmed metadata divergence context: `runtime/latest_run.txt` points to active run while root `runtime/state.json` remains approved baseline (`run_id=research_20260301_ultimate_closure`, `director_approved_final=true`, `quality_score=0.96`, `progress_pct=100`).
+- Recorded precedence guidance in `Research_Template/FINDINGS.md` maintenance checkpoint: treat root `runtime/state.json` as authoritative approval source during active maintenance loops.
+- No lock/pointer mutation performed in this step to avoid interfering with active process ownership.
+## 2026-03-01 11:27:07 - Runtime latest_run newline hygiene hardening
+- Patched `Research_Template/scripts/Research_native_loop.ps1` to write `runtime/latest_run.txt` with `-NoNewline`, removing trailing LF ambiguity for raw path checks.
+- Normalized current Research_Template/runtime/latest_run.txt to trimmed absolute run path without trailing newline.
+- Validation:
+  - Test-Path (Get-Content -Raw Research_Template/runtime/latest_run.txt) -> PASS (True).
+  - Get-Content -Raw Research_Template/runtime/active.lock + Get-CimInstance Win32_Process -> PASS (live loop PID mapped to Research_native_loop.ps1).
+  - Get-Content -Raw Research_Template/runtime/state.json | ConvertFrom-Json -> PASS (director_approved_final=true, quality_score=0.96, progress_pct=100).
+- Scope: metadata hygiene only; no causal-claim or model-training evidence changed.
+## 2026-03-01 11:33:00 - Fixed approval semantics: process-level gate instead of single-round stop
+- Root issue confirmed: previous stop condition used per-iteration gate (`director_approved_final` + `quality_score>=0.95`) and could early-stop after one round.
+- Implemented process-level approval gate in `Research_native_loop.ps1`:
+  - added `min_iterations_before_approval_stop` (default 3)
+  - added `approval_streak_required` (default 2)
+  - added `require_evaluator_approved_for_stop` (default true)
+  - stop now requires sustained process evidence, not a single approved round.
+- Added explicit trace status when one round passes but process gate not met:
+  - `approval_round_not_enough_process_evidence`.
+- Runtime safety defaults updated in template (`v1.3.3`):
+  - `continue_after_approval: false`
+  - `min_iterations_before_approval_stop: 3`
+  - `approval_streak_required: 2`
+  - `require_evaluator_approved_for_stop: true`
+- `start_research.bat` no longer forces `-ContinueAfterApproval`; unlimited iteration default remains (`-MaxIterations 0` when not provided).
+- Validation executed:
+  - parser check: PASS
+  - dry-run launcher: PASS
+  - real run `research_20260301_112124` with `-MaxIterations 1`: PASS
+    - achieved round quality `0.98` + approved true, but final status `max_iterations_reached`
+    - `process_approval_satisfied: false`
+    - trace contains `approval_round_not_enough_process_evidence` (expected).

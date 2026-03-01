@@ -9,6 +9,8 @@ param(
   [Alias("PlanPath")][string]$DevDocPath = ".\Research_Template\RESEARCH_PLAN.md",
   [string]$FindingsPath = ".\Research_Template\FINDINGS.md",
   [string]$ProblemLink = "",
+  [switch]$ContinueAfterApproval,
+  [switch]$StopOnApproval,
   [switch]$DryRun,
   [switch]$NoLiveOutput
 )
@@ -599,6 +601,9 @@ $blockerPatterns = if ($template.runtime_safety.PSObject.Properties.Name -contai
 $nestedExecCfg = if ($template.runtime_safety.PSObject.Properties.Name -contains "nested_codex_exec") { $template.runtime_safety.nested_codex_exec } else { $null }
 $qualityMajorMilestone = if ($template.runtime_safety.PSObject.Properties.Name -contains "major_quality_milestone") { [double]$template.runtime_safety.major_quality_milestone } else { 0.90 }
 $qualityFinalGate = if ($template.runtime_safety.PSObject.Properties.Name -contains "final_quality_gate") { [double]$template.runtime_safety.final_quality_gate } else { 0.95 }
+$minIterationsBeforeApprovalStop = if ($template.runtime_safety.PSObject.Properties.Name -contains "min_iterations_before_approval_stop") { [int]$template.runtime_safety.min_iterations_before_approval_stop } else { 3 }
+$approvalStreakRequired = if ($template.runtime_safety.PSObject.Properties.Name -contains "approval_streak_required") { [int]$template.runtime_safety.approval_streak_required } else { 2 }
+$requireEvaluatorApprovedForStop = if ($template.runtime_safety.PSObject.Properties.Name -contains "require_evaluator_approved_for_stop") { [bool]$template.runtime_safety.require_evaluator_approved_for_stop } else { $true }
 $stallWindow = if ($template.runtime_safety.PSObject.Properties.Name -contains "stall_non_improving_iterations") { [int]$template.runtime_safety.stall_non_improving_iterations } else { 3 }
 $scoreDropTrigger = if ($template.runtime_safety.PSObject.Properties.Name -contains "risk_spike_score_drop_threshold") { [double]$template.runtime_safety.risk_spike_score_drop_threshold } else { 0.05 }
 $burstIterations = if ($template.runtime_safety.PSObject.Properties.Name -contains "adaptive_burst_iterations") { [int]$template.runtime_safety.adaptive_burst_iterations } else { 2 }
@@ -611,6 +616,12 @@ $compressionStallIterations = if ($null -ne $compressionCfg -and $compressionCfg
 $compressionDriftSignal = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "trigger_drift_signal") { [string]$compressionCfg.trigger_drift_signal } else { "direction_mismatch_rework" }
 $compressionForcedRefresh = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "forced_refresh") { [string]$compressionCfg.forced_refresh } else { "never" }
 $sourcePolicy = if ($template.inputs.PSObject.Properties.Name -contains "source_policy") { [string]$template.inputs.source_policy } else { "Primary-source-first, flexible for high-signal secondary sources." }
+$templateContinueAfterApproval = if ($template.runtime_safety.PSObject.Properties.Name -contains "continue_after_approval") { [bool]$template.runtime_safety.continue_after_approval } else { $false }
+$effectiveContinueAfterApproval = $templateContinueAfterApproval
+if ($ContinueAfterApproval) { $effectiveContinueAfterApproval = $true }
+if ($StopOnApproval) { $effectiveContinueAfterApproval = $false }
+if ($minIterationsBeforeApprovalStop -lt 1) { $minIterationsBeforeApprovalStop = 1 }
+if ($approvalStreakRequired -lt 1) { $approvalStreakRequired = 1 }
 
 $effectiveTask = if (-not [string]::IsNullOrWhiteSpace($Task)) { $Task } elseif (-not (Is-TemplatePlaceholder -Value $templateTaskDefault)) { $templateTaskDefault } else { "Complete research goals with validated evidence, synthesis, and actionable next steps." }
 $effectiveDoneCriteria = if (-not [string]::IsNullOrWhiteSpace($DoneCriteria)) { $DoneCriteria } elseif (-not (Is-TemplatePlaceholder -Value $templateDoneCriteriaDefault)) { $templateDoneCriteriaDefault } else { "Director final signoff with quality >= 0.95, and complete executive plus technical findings." }
@@ -677,6 +688,10 @@ $state = [ordered]@{
   lock_file = $lockFile
   nested_exec_args = $nestedExecArgs
   max_iterations = $effectiveMaxIterations
+  continue_after_approval = $effectiveContinueAfterApproval
+  min_iterations_before_approval_stop = $minIterationsBeforeApprovalStop
+  approval_streak_required = $approvalStreakRequired
+  require_evaluator_approved_for_stop = $requireEvaluatorApprovedForStop
   current_iteration = 0
   milestones = @("25", "50", "75", "100")
   milestone_hits = @()
@@ -692,7 +707,7 @@ $state = [ordered]@{
   history = @()
 }
 Save-Json -Obj $state -Path $stateFile
-Set-Content -Path (Join-Path $runRootDir "latest_run.txt") -Value $runDir -Encoding UTF8
+Set-Content -Path (Join-Path $runRootDir "latest_run.txt") -Value $runDir -Encoding UTF8 -NoNewline
 
 $milestones = @(25, 50, 75, 100)
 $milestoneHit = @{}
@@ -709,6 +724,8 @@ $blocked = $false
 $blockedReason = ""
 $qualityScore = 0.0
 $progressPct = 0
+$approvalStreak = 0
+$processApprovalSatisfied = $false
 $bestQualityScore = 0.0
 $lastQualityScore = -1.0
 $nonImprovingCount = 0
@@ -916,6 +933,10 @@ Rolling context packet (JSON):
 $rollingContextJson
 
 Execute the next best research step now.
+Important constraints:
+- Do NOT invoke `Research_native_loop.ps1`, `start_research.bat`, or any nested "run research loop/template" command from inside this loop.
+- Do NOT start another orchestration loop recursively.
+- Perform one concrete next-best research action, then return results.
 Return JSON first, then short markdown.
 Required JSON:
 {
@@ -1296,28 +1317,58 @@ Return strict JSON only:
     }
     Save-Json -Obj $state -Path $stateFile
 
-    if ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate) {
-      $state.status = "approved"
-      Save-Json -Obj $state -Path $stateFile
-      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "early_stop_approved" -Iteration $i -Message ("Director signoff + quality gate ({0}) satisfied." -f $qualityFinalGate)
-      break
+    $iterationGatePass = ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate)
+    if ($requireEvaluatorApprovedForStop) {
+      $iterationGatePass = ($iterationGatePass -and $approved)
+    }
+    if ($iterationGatePass) {
+      $approvalStreak += 1
+    } else {
+      $approvalStreak = 0
+    }
+
+    $stopGateMet = ($iterationGatePass -and $i -ge $minIterationsBeforeApprovalStop -and $approvalStreak -ge $approvalStreakRequired)
+    $state.approval_streak = $approvalStreak
+    $state.process_approval_satisfied = $stopGateMet
+    Save-Json -Obj $state -Path $stateFile
+
+    if ($stopGateMet) {
+      $processApprovalSatisfied = $true
+      if ($effectiveContinueAfterApproval) {
+        $state.status = "approved_continuing"
+        Save-Json -Obj $state -Path $stateFile
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "approval_reached_continue_mode" -Iteration $i -Message ("Process gate satisfied (q>={0}, streak>={1}, min_iter>={2}); continuing due to continue_after_approval mode." -f $qualityFinalGate, $approvalStreakRequired, $minIterationsBeforeApprovalStop)
+      } else {
+        $state.status = "approved"
+        Save-Json -Obj $state -Path $stateFile
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "early_stop_approved_process_gate" -Iteration $i -Message ("Process gate satisfied (q>={0}, streak>={1}, min_iter>={2})." -f $qualityFinalGate, $approvalStreakRequired, $minIterationsBeforeApprovalStop)
+        break
+      }
+    } elseif ($iterationGatePass) {
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "approval_round_not_enough_process_evidence" -Iteration $i -Message ("Current round met quality gate, but process gate not met yet (streak={0}/{1}, iter={2}/{3})." -f $approvalStreak, $approvalStreakRequired, $i, $minIterationsBeforeApprovalStop)
     }
     $i++
   }
 
   if ($blocked) {
     $state.status = "blocked"
-  } elseif (-not ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate) -and $effectiveMaxIterations -gt 0) {
+  } elseif ($processApprovalSatisfied) {
+    if ($effectiveContinueAfterApproval) {
+      $state.status = "approved_continuing"
+    } else {
+      $state.status = "approved"
+    }
+  } elseif (-not $processApprovalSatisfied -and $effectiveMaxIterations -gt 0) {
     $state.status = "max_iterations_reached"
     $residualRisk = "Iteration cap reached before approval."
-  } elseif (-not ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate)) {
+  } elseif (-not $processApprovalSatisfied) {
     $state.status = "in_progress_not_approved"
   }
 
   $state.ended_at = (Get-Date).ToString("s")
   Save-Json -Obj $state -Path $stateFile
 
-  $validationResult = if ($directorApprovedFinal -and $qualityScore -ge $qualityFinalGate) { "PASS" } elseif ($blocked) { "FAIL_BLOCKED" } else { "PARTIAL" }
+  $validationResult = if ($processApprovalSatisfied) { "PASS" } elseif ($blocked) { "FAIL_BLOCKED" } else { "PARTIAL" }
   $report = @"
 # Research Native Loop Final Report
 
@@ -1330,6 +1381,9 @@ Return strict JSON only:
 - director_approved_final: $directorApprovedFinal
 - quality_score: $qualityScore
 - progress_pct: $progressPct
+- process_approval_satisfied: $processApprovalSatisfied
+- approval_streak: $approvalStreak / required $approvalStreakRequired
+- min_iterations_before_approval_stop: $minIterationsBeforeApprovalStop
 
 ## Executive Summary
 $summaryForUser
