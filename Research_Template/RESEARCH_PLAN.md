@@ -41,6 +41,9 @@
 - `python experiments/evidence_closure_report.py --report-name director_evidence_closure_final`
 - JSON parse/integrity checks on final closure and causality-lock artifacts
 - Runtime final report/state packaging checks
+- Maintenance-only revalidation (2026-03-01 iteration 1/3):
+  - JSON load checks for canonical artifacts
+  - Regression: `pytest -q` (`50 passed, 1 warning`)
 
 ## Risks and Mitigations
 - Risk: guidance training-time causality remains inconclusive.

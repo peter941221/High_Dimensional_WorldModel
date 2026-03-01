@@ -86,10 +86,15 @@
     "reuse_confidence_threshold": 0.7,
     "blocker_short_circuit_patterns": [
       "blocked by policy",
-      "read-only",
       "write operations are blocked",
       "rejected by user approval settings",
       "writing outside of the project",
+      "file system is read-only",
+      "filesystem is read-only",
+      "read-only file system",
+      "read-only filesystem",
+      "repository is read-only",
+      "environment is read-only",
       "files changed on disk: 0",
       "no file changes were applied"
     ],

@@ -30,6 +30,17 @@
   - `report/guidance_off_vs_on_7seed_significance.json` (`n=7`, key transfer KPIs `p=0.015625`).
 - Interpretation caveat: the compared pipelines differ in domain randomization settings; treat this as a pipeline comparison, not an isolated guidance-only training ablation.
 
+## Iteration Update (2026-03-01 Iteration 1/3 Maintenance Revalidation)
+- Mode: maintenance-only (Path B closure remains canonical; no new experiments).
+- Risk Tier: L
+- Validation PASS:
+  - Canonical JSON artifacts load successfully.
+  - Regression test: `pytest -q` (`50 passed, 1 warning`).
+- Residual risk unchanged:
+  - Guidance OFF vs ON training-time causality remains confounded (pipeline differences); Optional Path A matched-setting ablation remains the clean upgrade path if decisiveness is required.
+- Next direction unchanged:
+  - Keep repo in closed state; only run Optional Path A if stronger training-time guidance causality is required (start with 2-seed smoke `--dry-run` + `--meta-check`, then scale to `n>=9` paired seeds).
+
 ## Key Findings
 1. `scale=0.20` remains preferred over `0.25` under final paired evidence (no measurable gain from `0.25`).
 2. Matched-compute ranking remains `4D ~= 5D > 6D ~= 8D`, with no pairwise significance at alpha 0.05.
