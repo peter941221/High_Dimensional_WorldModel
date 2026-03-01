@@ -215,6 +215,27 @@ Keep Path B        Run to 9 seeds (or matched-setting ablation)
 2. Optional Path A (pipeline-only decisiveness, optional): if you still care about the *end-to-end* pipeline delta (`p_guidance_off_*` vs `p2_v2_*`), add the missing seeds (`88`, `99`) to reach `n=9` and re-run `significance_report.py`, but do **not** upgrade training-time causality language from this alone.
 3. Keep causal language bounded until matched-setting evidence is produced; treat current OFF vs ON paired significance as pipeline-level evidence.
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 13: Closure-Freeze Continuity Checkpoint)
+- Mode: freeze-preserving continuity (no new training or Kaggle dispatch).
+- Risk Tier: L
+- Validation PASS:
+  - Revalidated `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`:
+    - seeds `[11,22,33,44,55,66,77,88,99]`
+    - matched meta unchanged (`training_guidance=guided_blend`, `eval_policy_mode=model_only`, `domain_rand=true`)
+  - Revalidated `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`:
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - significant KPI count `0` at `alpha=0.05`
+  - Process check: `git status --short` empty at checkpoint start.
+- Interpretation lock:
+  - Closure package remains internally consistent and reproducible under the frozen decision frame.
+  - Scientific interpretation remains bounded: non-significant matched ON/OFF result at `n=9` is not an equivalence claim.
+- Why no Kaggle execution:
+  - Thread direction is explicitly frozen; additional runs would not change closure acceptance criteria without a new equivalence-focused mandate.
+  - Reopen trigger: explicit equivalence protocol request with predefined equivalence margin and larger paired sample size.
+- Residual risk:
+  - Effect-size uncertainty remains under current `n=9` paired design; equivalence-grade claims still require dedicated design and higher power.
+
 ## Iteration Update (2026-03-01 Researcher Loop Iteration 6: Replacement ON Slugs r1)
 - Mode: Kaggle-first replacement dispatch and failure-signature refresh.
 - Risk Tier: M

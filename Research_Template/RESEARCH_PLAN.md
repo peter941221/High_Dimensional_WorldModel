@@ -740,3 +740,33 @@ Decision boundary map (locked)
   - Current inference remains power-limited by paired `n=9`; non-significance is not an equivalence proof.
 - Precise next direction:
   - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired `n`).
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 13: Freeze Checkpoint + Documentation Continuity)
+- Mode: freeze-preserving checkpoint (no new Kaggle/local runs by design).
+- Risk Tier: L
+- Concrete next-best step executed:
+  - Reviewed iteration-12 researcher artifacts and continued with the locked freeze direction.
+  - Revalidated canonical closure evidence artifacts:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+  - Recorded iteration-13 continuity updates in plan/findings/memory artifacts.
+- Validation actions/results:
+  - JSON integrity check on `p0_summary.json` -> PASS:
+    - seeds `[11,22,33,44,55,66,77,88,99]`
+    - `meta.training_guidance=guided_blend`
+    - `meta.eval_policy_mode=model_only`
+    - `meta.domain_rand=true`
+  - JSON integrity check on 9-seed significance artifact -> PASS:
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - significant KPI count `0` at `alpha=0.05`
+  - Process gate check -> PASS:
+    - `git status --short` empty
+    - checkpoint base commit before this iteration: `58cb93f`
+- Why no Kaggle execution this step:
+  - The current thread direction is explicitly frozen; no new evidence generation is required unless an equivalence-focused protocol is requested.
+  - Trigger to move back to Kaggle execution: explicit request for equivalence testing with predefined margin and larger paired sample size.
+- Residual risk:
+  - Statistical power bound is unchanged at paired `n=9`; non-significance remains bounded-null evidence, not equivalence proof.
+- Precise next direction:
+  - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired `n`, then execute paired ON/OFF runs under matched settings).
