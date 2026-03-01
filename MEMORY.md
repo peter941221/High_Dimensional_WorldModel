@@ -200,3 +200,23 @@ Last Compressed: 2026-03-01
   - Poll/download outputs for `s55/s66/s77/s88/s99`.
   - After synchronization, rebuild `p_guidance_matched_on_9seed` summary and run:
     - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+
+## Recent Work (2026-03-01, Researcher Loop Iteration 5)
+- Concrete next-best step executed (poll/download + unblock attempt):
+  - Polled ON kernels `s55/s66/s77/s88/s99`; initial state was all `ERROR`.
+  - Pulled per-seed logs and confirmed shared failure path:
+    - dataset mount absent (`/kaggle/input/high-dimensional-worldmodel-src`)
+    - fallback clone failed (`Could not resolve host: github.com`).
+- Recovery actions completed this iteration:
+  - Patched `kaggle/run_kaggle_job.py` to add `prepare_from_kernel_bundle()` fallback before repo clone.
+  - Syntax validation PASS: `python -m py_compile kaggle/run_kaggle_job.py`.
+  - Re-dispatched ON seeds with matched settings; performed additional targeted retries using raw `kaggle kernels push` to avoid repeated dataset-version churn.
+- End-of-iteration remote state snapshot:
+  - `s55=error`, `s66=error`, `s77=error`, `s88=error`, `s99=error`.
+- Evidence notes:
+  - Pulled kernel source confirms patched fallback is present in pushed scripts.
+  - No new local ON artifacts were ingested yet, so paired significance remains unchanged this iteration.
+- Next-direction lock (precise):
+  - Relaunch all five seeds on replacement slugs with identical run config (keep `run_id` and seed fixed) and avoid repeated immediate dataset re-versioning between launches.
+  - After local sync of ON `55/66/77/88/99`, rebuild ON summary and regenerate meta-strict `guidance_train_matched_off_vs_on_9seed_significance`.
+

@@ -461,3 +461,36 @@ Decision boundary map (locked)
   - Once outputs are synchronized locally, rebuild ON summary and run:
     - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120 --training-guidance guided_blend --eval-policy-mode model_only --domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 --robustness-domain-rand-difficulties hard_only`
     - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 5: Poll/Sync Attempt + Kaggle Recovery)
+- Mode: Kaggle-first execution recovery (one-step unblock for A2 output synchronization).
+- Risk Tier: M
+- Concrete step executed:
+  - Polled status for ON seeds `55/66/77/88/99`:
+    - initial probe showed all five in `ERROR`.
+  - Downloaded kernel logs for each failed slug and identified shared root cause:
+    - `Dataset mount not found: /kaggle/input/high-dimensional-worldmodel-src`
+    - fallback `git clone` failed due DNS/network: `Could not resolve host: github.com`.
+  - Added a network-independent fallback in Kaggle runner:
+    - updated `kaggle/run_kaggle_job.py` to attempt `prepare_from_kernel_bundle()` before `ensure_repo()`.
+    - validated syntax: `python -m py_compile kaggle/run_kaggle_job.py` (PASS).
+  - Re-dispatched all ON slugs with matched config, then performed targeted retries:
+    - first retry via manager `prepare+push` (all slugs pushed to v2).
+    - observed mixed state (`s55/s66/s77` still error, `s88/s99` running then error/rerun cycle).
+    - second retry for failed slugs using `prepare + kaggle kernels push` (no extra dataset version bump).
+    - latest state at end of iteration: `s88=error`, `s99=error`, `s55/s66/s77=error`.
+- Validation actions/results:
+  - `python kaggle_job_manager.py --owner peter941221 --slug ... status` for each seed -> PASS (status retrieval works).
+  - `python kaggle_job_manager.py --owner peter941221 --slug ... output` for failed seeds -> PASS (logs retrieved).
+  - `kaggle kernels pull ...` confirms patched runner is present in pushed code (contains `prepare_from_kernel_bundle`).
+  - Sync objective not yet met: no new completed ON result artifacts were downloaded locally.
+- Coverage and residual risk:
+  - Covered full poll/download/diagnose loop and executed a concrete recovery attempt in the same iteration.
+  - Residual risk remains high for persistent dataset mount instability across all five ON slugs (`s55/s66/s77/s88/s99`).
+  - 9-seed meta-strict significance refresh remains blocked until ON outputs are synchronized locally.
+- Precise next direction:
+  - Launch replacement Kaggle slugs for all failed ON seeds (`55/66/77/88/99`) using identical `run_id` + seed settings, and avoid immediate repeated dataset re-version churn between launches.
+  - Poll replacement slugs and download outputs immediately on completion, then sync locally.
+  - Once at least seeds `55/66/77/88/99` are locally ingested, rebuild ON summary and run:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+

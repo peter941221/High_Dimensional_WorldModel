@@ -844,3 +844,53 @@ Iteration 4 flow (A2 dispatch completion)
                  v
 [Next: sync outputs locally -> rebuild ON summary -> meta-strict 9-seed significance]
 ```
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 5: Poll/Sync Attempt + Kaggle Recovery)
+- Mode: execution + diagnosis (Kaggle-first).
+- Risk Tier: M
+- Validation actions (PASS unless noted):
+  - Status polling for ON slugs:
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s{55,66,77,88,99} status`
+  - Output retrieval for failed runs:
+    - `python kaggle_job_manager.py --owner peter941221 --slug ... output --output-dir tmp_kaggle_pull_guidance_on_s*_v{2,3}`
+  - Code-level recovery patch:
+    - `kaggle/run_kaggle_job.py` updated with `prepare_from_kernel_bundle()` fallback.
+    - `python -m py_compile kaggle/run_kaggle_job.py` -> PASS.
+  - Re-dispatch recovery:
+    - Manager-based `prepare+push` across all 5 seeds -> PASS (kernel v2 pushed).
+    - Targeted raw push retries (`prepare` + `kaggle kernels push -p .kaggle_kernel_build`) for failing seeds -> PASS (kernel v3 pushed).
+- Evidence updates:
+  - Failure signature captured across failed slugs:
+    - `Dataset mount not found: /kaggle/input/high-dimensional-worldmodel-src`
+    - `fatal: unable to access 'https://github.com/peter941221/High_Dimensional_WorldModel.git/': Could not resolve host: github.com`
+  - Patched runner confirmed present in pushed kernel source:
+    - `prepare_from_kernel_bundle` appears in pulled code for `s55` and `s88`.
+  - Latest observed statuses (end of iteration):
+    - `s55=error`, `s66=error`, `s77=error`, `s88=error`, `s99=error`.
+- Interpretation:
+  - Poll/download objective was partially executed and yielded actionable root-cause evidence.
+  - Full synchronization objective remains open because no new completed ON result bundles were ingested this iteration.
+- Coverage:
+  - Covered remote status, output log capture, root-cause isolation, runner fallback hardening, and controlled re-dispatch.
+- Residual risk:
+  - Slug-specific or timing-related dataset mount instability currently affects all five ON slugs (`s55/s66/s77/s88/s99`).
+  - Causal upgrade remains blocked until ON seed outputs are fully synchronized and 9-seed meta-strict significance is regenerated.
+
+```text
+Iteration 5 recovery map
+
+[Poll statuses 55/66/77/88/99]
+              |
+              v
+[All error] -> [Download logs] -> [Root cause: dataset mount missing + git DNS fail]
+                                      |
+                                      v
+                         [Patch runner fallback + re-dispatch]
+                                      |
+                                      v
+      [Current: all s55/s66/s77/s88/s99 = error]
+                                      |
+                                      v
+      [Next: relaunch replacement slugs + sync on completion]
+```
+

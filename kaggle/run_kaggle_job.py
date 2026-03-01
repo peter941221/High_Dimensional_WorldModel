@@ -154,6 +154,25 @@ def prepare_from_dataset(cfg: dict) -> Path | None:
     return None
 
 
+def prepare_from_kernel_bundle() -> Path | None:
+    # Kaggle script kernels already ship repository files in /kaggle/src.
+    # Use that bundle as a network-free fallback when dataset mount is unavailable.
+    bundle_roots = [
+        Path(__file__).resolve().parent,
+        Path.cwd(),
+        Path("/kaggle/src"),
+    ]
+    for root in bundle_roots:
+        if (root / "experiments").exists() and (root / "configs").exists():
+            if PROJECT_DIR.exists():
+                shutil.rmtree(PROJECT_DIR)
+            PROJECT_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(root, PROJECT_DIR, dirs_exist_ok=True)
+            log(f"Using kernel bundled source fallback: {root}")
+            return PROJECT_DIR
+    return None
+
+
 def ensure_repo() -> Path:
     if (PROJECT_DIR / ".git").exists():
         subprocess.run(["git", "-C", str(PROJECT_DIR), "fetch", "origin"], check=True)
@@ -339,7 +358,7 @@ def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
 
 def main() -> None:
     cfg = load_config()
-    root = prepare_from_dataset(cfg) or ensure_repo()
+    root = prepare_from_dataset(cfg) or prepare_from_kernel_bundle() or ensure_repo()
     # Reload after dataset extraction/repo ready so runtime-mounted config can override defaults.
     cfg = load_config(extra_candidates=[root / "kaggle" / "run_config.json"])
 
