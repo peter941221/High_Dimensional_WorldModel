@@ -1,6 +1,6 @@
 {
   "template_id": "codex_native_research_loop_v1",
-  "version": "1.3.7",
+  "version": "1.3.8",
   "name": "Research Native Loop Template",
   "description": "CLI-only iterative research orchestration with Director, Researcher, and Evaluator.",
   "mode": "cli-only",
@@ -40,6 +40,8 @@
   "runtime_safety": {
     "no_silent_stop": true,
     "live_console_output": true,
+    "codex_exec_emit_json_events": true,
+    "idle_timeout_respects_child_processes": true,
     "context_mode": "rolling_thread",
     "compression": {
       "enabled": true,
@@ -48,7 +50,7 @@
       "trigger_drift_signal": "direction_mismatch_rework",
       "forced_refresh": "never"
     },
-    "max_idle_minutes": 30,
+    "max_idle_minutes": 120,
     "heartbeat_interval_sec": 15,
     "live_output_poll_ms": 800,
     "console_status_interval_sec": 8,
@@ -66,7 +68,7 @@
       "strict_json_contract": false,
       "auto_commit_each_iteration": {
         "enabled": true,
-        "auto_push": false,
+        "auto_push": true,
         "exclude_paths": [
           "Research_Template/runtime/"
         ]

@@ -717,6 +717,16 @@ function Invoke-CodexExecWithSafety {
     try { $consoleStatusSec = [int]$Template.runtime_safety.console_status_interval_sec } catch {}
   }
   if ($consoleStatusSec -lt 1) { $consoleStatusSec = 1 }
+  $emitJsonEvents = $false
+  if ($Template.runtime_safety.PSObject.Properties.Name -contains "codex_exec_emit_json_events") {
+    try { $emitJsonEvents = [bool]$Template.runtime_safety.codex_exec_emit_json_events } catch {}
+  }
+  $emitJsonEvents = $emitJsonEvents -and $ShowLiveOutput
+
+  $idleTimeoutRespectsChildren = $true
+  if ($Template.runtime_safety.PSObject.Properties.Name -contains "idle_timeout_respects_child_processes") {
+    try { $idleTimeoutRespectsChildren = [bool]$Template.runtime_safety.idle_timeout_respects_child_processes } catch {}
+  }
 
   for ($attempt = 0; $attempt -le $maxRetries; $attempt++) {
     $safeStepName = ($StepName -replace '[^A-Za-z0-9_-]', '_')
@@ -754,6 +764,9 @@ function Invoke-CodexExecWithSafety {
     $procArgs += "never"
     $procArgs += "--output-last-message"
     $procArgs += $messageFile
+    if ($emitJsonEvents) {
+      $procArgs += "--json"
+    }
     $procArgs += "-"
     $proc = Start-Process -FilePath $CodexLaunchSpec.FilePath -ArgumentList $procArgs -PassThru -NoNewWindow -RedirectStandardInput $promptFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile
     $attemptStart = Get-Date
@@ -810,7 +823,25 @@ function Invoke-CodexExecWithSafety {
       }
 
       if (((New-TimeSpan -Start $lastActivity -End $now).TotalMinutes) -ge $maxIdleMinutes) {
-        try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
+        if ($idleTimeoutRespectsChildren) {
+          $childPids = @()
+          try {
+            $children = Get-CimInstance Win32_Process -Filter ("ParentProcessId = {0}" -f $proc.Id) -ErrorAction SilentlyContinue
+            if ($null -ne $children) {
+              $childPids = @($children | Select-Object -ExpandProperty ProcessId -ErrorAction SilentlyContinue)
+            }
+          } catch {}
+          if ($childPids.Count -gt 0) {
+            $lastActivity = $now
+            $msg = ("Idle timeout reached but child processes still running (child_pids={0}); extending idle window." -f ($childPids -join ","))
+            Write-Host ("[{0}] status {1}" -f $now.ToString("HH:mm:ss"), $msg) -ForegroundColor DarkCyan
+            Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_child_activity" -Iteration $Iteration -Attempt $attempt -Message $msg
+            continue
+          }
+        }
+
+        # On timeout, kill the whole process tree to avoid orphaned long-running jobs.
+        try { & taskkill /PID $proc.Id /T /F 2>$null | Out-Null } catch { try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {} }
         $timedOut = $true
         Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} timeout" -f $StepName, $Iteration, $attempt)
         Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_timeout" -Iteration $Iteration -Attempt $attempt -Message "Stopped due to idle timeout."

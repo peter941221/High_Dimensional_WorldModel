@@ -1,24 +1,24 @@
 # Project Memory (Compressed Canonical)
 
 ## Purpose
-- Preserve only durable decisions, canonical evidence baselines, and trigger-based next actions.
-- Avoid high-churn runtime logs that do not improve future decision quality.
+- Preserve durable decisions, canonical baselines, and trigger-based next actions.
+- Avoid high-churn runtime/log details (pids, lock snapshots, etc).
 
-## Stable Project Decisions
+## Stable Decisions
 - Research scope remains simulation-first and repository-contained (`envs`, `physics`, `models`, `training`, `experiments`).
 - Claims stay bounded to simulation evidence unless external validation is explicitly added.
-- Reproducibility and paired-seed significance checks are required before major claim upgrades.
+- Reproducibility and paired-seed significance checks (with meta-check confound guards) are required before major claim upgrades.
 
 ## Canonical Baseline (Path B Closure)
 - Canonical closure run: `research_20260301_ultimate_closure`.
 - Canonical authority file: `Research_Template/runtime/state.json`.
 - Locked closure status: `director_approved_final=true`, `quality_score=0.96`, `progress_pct=100`.
-- Current lock decision: Path B remains canonical; guidance OFF vs ON causality is still inconclusive at current power.
+- Canonical decision: keep Path B closure frozen unless Trigger A/B fires.
 
 ## Locked Findings (Do Not Drift Without New Evidence)
-- Robustness operating default: `scale=0.20`, `profile=conservative`, `difficulties=hard_only`.
-- Dimension-effect statement remains weak-order: `4D ~= 5D > 6D ~= 8D` under matched-compute evidence.
-- Guidance OFF vs ON training-time causality remains unproven due to confounds (domain-randomization settings differ between OFF vs ON pipelines), despite stronger paired evidence with more seeds (e.g., `n=7` yields `p=0.015625` on key transfer KPIs in `report/guidance_off_vs_on_7seed_significance.json`).
+- Robustness operating default: `domain-rand-scale=0.20`, `profile=conservative`, `difficulties=hard_only`.
+- Dimension-effect statement remains weak-order: `4D ~= 5D > 6D ~= 8D` under matched-compute evidence (no decisive pairwise winner at alpha=0.05).
+- Training-time guidance OFF vs ON causality remains inconclusive because existing OFF vs ON comparisons are pipeline-confounded (non-guidance settings differ).
 
 ## Canonical Artifacts
 - `report/director_final_executive.md`
@@ -29,78 +29,42 @@
 - `Research_Template/runtime/state.json`
 
 ## Open Risks
-- Guidance OFF vs ON causal isolation risk remains unresolved (current paired evidence is significant at `n=7` but is a pipeline comparison, not a matched guidance-only ablation).
-- Ranking confidence risk for source-dimension ordering remains weak-order only.
+- Guidance OFF vs ON causal isolation risk remains unresolved (confounds).
+- Ranking confidence risk for source-dimension ordering remains weak-order only (power-limited).
 - External-validity risk remains because evidence is simulation-only.
 
 ## Trigger-Based Next Actions
-- Trigger A: If guidance causality decisiveness is required, complete Optional Path A (add missing paired seeds up to `n>=9` and/or run a matched-setting guidance-only ON vs OFF ablation).
+- Trigger A (decisive training-time guidance causality needed):
+  - Run Optional Path A matched-setting ablation (toggle ONLY `--training-guidance`; keep `--eval-policy-mode model_only`).
+  - Enforce meta-strict: `--meta-check --meta-allow-diff training_guidance --meta-strict`.
+  - Power planning for `paired_exact_signflip` (all-aligned): p = 1/2^(n-1). `n=6 -> 0.03125`; `n=9 -> 0.00390625`.
 - Trigger B: If contradictory primary evidence appears, reopen synthesis and re-run claim-evidence matrix.
 - Trigger C: If scope expands beyond simulation, add explicit external-validation protocol first.
-- Trigger D: If runtime integrity anomalies appear, run lock/pointer/state hygiene checks.
+- Trigger D: If runtime/tooling anomalies appear, run lock/state hygiene checks + minimal regressions.
 
-## Loop Template Decisions (2026-03-01)
-- Default loop mode is `researcher_only`.
-- Iteration protocol:
-  - Round 1: recover memory/context, select next step, execute.
-  - Round 2+: review previous round artifact, select next step, execute.
-- Per iteration outputs include both machine JSON and human-readable markdown.
-- Iteration auto-commit is enabled with scoped path policy and runtime-path exclusion:
-  - Commit only iteration-local deltas (prefer `files_touched`, fallback to git delta).
-  - Exclude `Research_Template/runtime/` from auto-commit.
-  - Auto-push remains disabled by default.
-
-## Compression Log
-- 2026-03-01: Compressed historical high-churn memory into canonical durable memory.
-
-## Iteration Progress (2026-03-01, researcher-only, iteration 1/1)
-- Recovered context from `MEMORY.md`, `RESEARCH_GOALS.md`, `RESEARCH_PLAN.md`, and `FINDINGS.md`.
-- Decision held: keep Path B closure frozen as canonical for this iteration; Optional Path A remains trigger-based (only if stronger causal decisiveness is required).
-- Revalidated canonical authority and package integrity:
-  - `Research_Template/runtime/state.json` still reports `director_approved_final=true`, `quality_score=0.96`, `progress_pct=100`.
-  - Canonical SHA256 fingerprints remain unchanged for runtime final package and director final artifacts.
-  - No post-closure `report/` evidence drift detected past closure boundary.
-- Active loop hygiene snapshot: `active.lock` currently points to live run `research_20260301_163804`; this is compatible with keeping root canonical closure unchanged.
-- Open risks unchanged: guidance OFF vs ON training-time causality remains inconclusive at 5 paired seeds (`p=0.0625`); source-dimension ranking remains weak-order; external validity remains simulation-bounded.
-- Repo-wide smart scan (2026-03-01):
-  - Validation PASS: `pytest -q` (50 passed; 1 warning from Torch/CUDA NVML deprecation).
-  - Validation PASS: JSON parse/load for canonical artifacts (`Research_Template/runtime/state.json`, `report/director_evidence_closure_final.json`, `report/guidance_off_vs_on_causality_lock_final.json`, `report/guidance_off_vs_on_5seed_significance_finallock.json`).
-  - Observed runtime: `Research_Template/runtime/active.lock` indicates live loop run `research_20260301_171951` with `pid=1872` (PowerShell process present at scan time); canonical baseline remains unchanged in `Research_Template/runtime/state.json`.
-
-## Iteration Progress (2026-03-01, researcher-only, iteration 1/2)
-- Added explicit seed-power math for `paired_exact_signflip` planning: all-aligned `p = 1/2^(n-1)`; `n=6 => 0.03125`, `n=9 => 0.00390625`. Conservative 1-discordant bound: `n=9`, 8/9 sign agreement => two-sided sign-test `p = 0.0390625`.
-- Documented Optional Path A stop rule + decision flow in `Research_Template/RESEARCH_PLAN.md` and `Research_Template/FINDINGS.md` without changing canonical closure artifacts.
-- Clarified that `p_guidance_off_*` vs `p2_v2_*` is pipeline-confounded (domain-rand scope/scale/difficulty differ), so upgrading *training-time guidance causality* requires a matched-setting guidance-only ON vs OFF ablation (hold `--eval-policy-mode model_only`, toggle `--training-guidance` only).
-- Validation PASS (maintenance-only): JSON load of canonical artifacts + `pytest -q` (50 passed; 1 warning).
-
-## Iteration Progress (2026-03-01, researcher-only, iteration 2/2)
-- Found that `p_guidance_off` seed runs already existed for seeds `66` and `77` under `results/{baseline,transfer,robustness}/p_guidance_off_5seed_s{seed}`; regenerated missing robustness output for seed `77`.
-- Added `experiments/build_p0_summary_from_runs.py` to build `results/p0_freeze/<prefix>/p0_summary.json` from existing per-seed outputs (no retraining).
-- Built `results/p0_freeze/p_guidance_off_7seed/p0_summary.json` and generated `report/guidance_off_vs_on_7seed_significance.json` vs `p2_v2_9seed`.
-  - Result: `n=7` paired exact sign-flip yields `p=0.015625` on key transfer KPIs (statistically significant).
-  - Remaining caveat: comparison is still confounded by differing domain-randomization settings; canonical Path B closure remains unchanged.
-
-## Iteration Progress (2026-03-01, researcher-only, iteration 2/2 - Optional Path A Tooling)
-- Added `--dry-run` to `experiments/run_p0_baseline_freeze.py` to print planned commands/outputs without executing training (supports low-risk smoke validation before compute).
-- Added `--out-dir` + `--meta-check/--meta-allow-diff/--meta-strict` to `experiments/significance_report.py` to explicitly detect/guard confounds when comparing prefixes.
-- Updated Optional Path A documentation to include a 2-seed smoke recipe and a strict meta guardrail for matched-setting guidance-only OFF vs ON.
-- Validation PASS: `pytest -q` (50 passed, 1 warning).
-
-## Iteration Progress (2026-03-01, researcher-only, iteration 1/3)
-- Maintenance-only revalidation: canonical closure artifacts load successfully; `pytest -q` PASS (50 passed, 1 warning).
-- Optional Path A preflight (no training): executed matched OFF/ON 2-seed smoke `--dry-run` and normalized planned-command diff; only allowed differences are run-id and training-guidance (match=True). Artifacts under `results/analysis_smoke/` (git-ignored).
-- Meta-check guardrail validated on known-confounded pipeline comparison (`p_guidance_off_7seed` vs `p2_v2_9seed`): `meta_check.passed=false` with unexpected diffs in domain-rand and eval settings, confirming confound detection.
-- Next direction: keep canonical closure frozen; if training-time guidance causality is needed, run non-dry 2-seed matched smoke then enforce `--meta-check --meta-allow-diff training_guidance --meta-strict` before scaling to `n>=9` paired seeds.
-
-## Iteration Progress (2026-03-01, researcher-only, iteration 2/3)
-- Optional Path A smoke2 (non-dry) executed for matched OFF vs ON (seeds `11 22`) using `experiments/run_p0_baseline_freeze.py` with identical settings except `--training-guidance` (`model_only` vs `guided_blend`) and fixed `--eval-policy-mode model_only`.
-- Summary artifacts produced:
+## Recent Work (2026-03-01)
+- Optional Path A preflight:
+  - Matched OFF/ON dry-run command plans normalized and verified to differ only in run-id and training_guidance.
+  - Meta-check guard validated on a known-confounded pipeline comparison (expected fail).
+- Optional Path A smoke2 executed (seeds 11,22):
   - OFF: `results/p0_freeze/p_guidance_matched_off_smoke2/p0_summary.json`
   - ON: `results/p0_freeze/p_guidance_matched_on_smoke2/p0_summary.json`
-- Meta-strict paired report executed (writes to git-ignored `results/analysis_smoke/`):
-  - `results/analysis_smoke/guidance_train_matched_off_vs_on_smoke2_significance.json`
-  - `meta_check.passed=true` with only allowed diff key `training_guidance`.
-- Smoke2 outcomes are non-significant (all `p=1.0` at `n=2`) and should be treated as wiring validation only; decisive causal language still requires `n>=9` paired seeds under matched settings.
-- Canonical closure remains frozen (no changes to `report/` final artifacts and no edits under `Research_Template/runtime/`).
+  - Meta-strict paired report written under `results/analysis_smoke/` (git-ignored); meta_check.passed=true.
+- Scale-up attempt status:
+  - OFF n=9 complete: `results/p0_freeze/p_guidance_matched_off_9seed/p0_summary.json`
+  - ON n=9 incomplete:
+    - baseline: seeds `11 22 33 44` present under `results/baseline/`
+    - transfer+robustness: seeds `11 22 33` present under `results/{transfer,robustness}/`
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` not yet present
+  - Resume command (same matched settings; toggle only training-guidance):
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing ...`
+
+## Research Loop Notes (Template)
+- Default role mode: researcher_only (iteration 1 memory recovery; iteration 2+ review previous artifact).
+- Per-iteration artifacts:
+  - machine output: `Research_Template/runtime/runs/<run_id>/iter_<n>_researcher.txt`
+  - human summary: `Research_Template/runtime/runs/<run_id>/iter_<n>_researcher.md`
+- Auto-commit each iteration is enabled; auto-push is enabled by default as of template v1.3.8.
 
 Last Compressed: 2026-03-01
+

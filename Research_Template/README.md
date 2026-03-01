@@ -13,7 +13,19 @@ This folder is a portable bundle for running the Codex native research loop in a
 ## Quick Use
 1. Place this entire `Research_Template` folder under your workspace root.
 2. Fill in `RESEARCH_GOALS.md`, `RESEARCH_PLAN.md`, and `FINDINGS.md`.
-3. In Codex chat, use one short phrase:
+3. Foreground one-click start (recommended):
+
+```bat
+.\Research_Template\start_research.bat
+```
+
+4. (Optional) In another terminal pane, monitor the latest run:
+
+```bat
+.\Research_Template\monitor_research.bat
+```
+
+5. In Codex chat, use one short phrase:
 
 ```text
 run research template
@@ -31,6 +43,21 @@ run research loop
 powershell -ExecutionPolicy Bypass -File .\Research_Template\scripts\Research_native_loop.ps1
 ```
 
+## WezTerm Usage (Two-Pane Workflow)
+Pane A (run loop in foreground):
+
+```powershell
+cd "C:\path\to\your\workspace"
+.\Research_Template\start_research.bat
+```
+
+Pane B (live monitor for trace + researcher stdout/stderr + heartbeat):
+
+```powershell
+cd "C:\path\to\your\workspace"
+.\Research_Template\monitor_research.bat
+```
+
 ## Portability Notes
 - The script now auto-detects the correct workspace root from the template path when current shell directory is different.
 - The script validates that required docs exist before execution:
@@ -44,6 +71,7 @@ If `Research_Template` is not present in a workspace, AI should prompt you to pl
 
 ## Runtime Visibility and Tracing
 - Live execution output is streamed by default in CLI.
+- If you started a run with `-NoLiveOutput`, use `monitor_research.bat` to see progress.
 - Step-level trace file:
   - `.\Research_Template\runtime\runs\<run_id>\execution_trace.jsonl`
 - Heartbeat log:
@@ -75,3 +103,10 @@ If `Research_Template` is not present in a workspace, AI should prompt you to pl
   - `.\Research_Template\runtime\active.lock`
 - Latest run pointer:
   - `.\Research_Template\runtime\latest_run.txt`
+
+## Stop / Cleanup
+- Stop the active loop run (kills process tree from `active.lock`):
+
+```bat
+.\Research_Template\stop_research.bat
+```
