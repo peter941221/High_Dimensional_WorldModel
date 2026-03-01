@@ -265,10 +265,58 @@ Iteration 6 replacement flow
              [Download logs from r1 slugs]
                          |
                          v
- [Observed: git DNS clone failure persists; dataset-mount error absent]
+[Observed: git DNS clone failure persists; dataset-mount error absent]
                          |
                          v
       [Next: instrument fallback path -> diagnostic r2 -> fix bootstrap]
+```
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 7: Diagnostic s55-r2 Startup Path Closure)
+- Mode: Kaggle-first diagnosis (single-slug replacement probe).
+- Risk Tier: M
+- Validation actions (PASS unless noted):
+  - Runner diagnostics patch:
+    - Updated `kaggle/run_kaggle_job.py` to emit startup path inventory and explicit fallback reasons.
+    - `python -m py_compile kaggle/run_kaggle_job.py` -> PASS.
+  - Diagnostic launch (same run identity):
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s55-r2 --run-id p_guidance_matched_on_9seed_s55 --seed 55 ... --no-code-dataset prepare` -> PASS
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s55-r2 ... --no-code-dataset push` -> PASS
+  - Status + logs:
+    - status transitioned `running -> error`.
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s55-r2 --output-dir tmp_kaggle_pull_guidance_on_s55_r2 output` -> PASS.
+- New decisive evidence:
+  - `tmp_kaggle_pull_guidance_on_s55_r2/high-dimensional-worldmodel-guidance-on-s55-r2.log` confirms:
+    - `Config toggles: use_code_dataset=False ...`
+    - `/kaggle/src` and `/kaggle/working` both fail bundle-root checks (`has_experiments=False`, `has_configs=False`, `has_kaggle=False`).
+    - `Dataset bootstrap disabled by config: use_code_dataset=false`.
+    - `Kernel bundle fallback unavailable across all candidate roots.`
+    - fallback reaches `git clone` and fails with DNS: `Could not resolve host: github.com`.
+- Interpretation lock:
+  - `prepare_from_kernel_bundle()` is not failing due to logic defect; Kaggle script runtime does not include the repository tree needed by that fallback.
+  - Without dataset mount or embedded offline bundle, execution remains blocked on external git network resolution.
+- Coverage:
+  - Closed the open question "why prepare_from_kernel_bundle is not taking effect" with direct runtime diagnostics.
+  - Preserved run identity (`run_id` + `seed`) for apples-to-apples failure attribution.
+- Residual risk:
+  - No new completed ON artifacts were synchronized locally in this iteration.
+  - 9-seed ON summary rebuild and meta-strict significance refresh remain blocked until a deterministic non-git bootstrap path is implemented and successfully executed.
+
+```text
+Iteration 7 diagnosis map
+
+[Launch s55-r2 with same run_id+seed, no-code-dataset]
+                        |
+                        v
+      [Runner startup diagnostics emitted from Kaggle runtime]
+                        |
+                        v
+   [/kaggle/src has no experiments/configs -> bundle fallback rejects]
+                        |
+                        v
+     [dataset bootstrap disabled -> ensure_repo git clone fallback]
+                        |
+                        v
+            [git DNS failure -> kernel ERROR]
 ```
 
 ## Maintenance Checkpoint (2026-03-01)

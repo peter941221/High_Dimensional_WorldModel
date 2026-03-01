@@ -526,3 +526,40 @@ Decision boundary map (locked)
   - Launch one diagnostic replacement slug (`s55-r2`) with identical run config and collect logs to confirm whether script kernels expose bundled repo files.
   - Based on that evidence, implement one deterministic source bootstrap path that does not require external git DNS, then relaunch remaining ON seeds and resume poll/download sync.
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 7: Startup Diagnostics + s55-r2 Confirmation)
+- Mode: Kaggle-first diagnosis closure for bootstrap-path causality.
+- Risk Tier: M
+- Concrete step executed:
+  - Patched `kaggle/run_kaggle_job.py` with explicit startup diagnostics:
+    - runtime path inventory (`__file__`, cwd, `/kaggle/src`, `/kaggle/input`)
+    - bundle root checks (`has_experiments`, `has_configs`, `has_kaggle`)
+    - explicit fallback-reason logs for dataset disabled/empty slug and kernel-bundle rejection.
+  - Launched diagnostic replacement slug with identical seed/run mapping:
+    - `high-dimensional-worldmodel-guidance-on-s55-r2` -> `run_id=p_guidance_matched_on_9seed_s55`, `seed=55`.
+    - kept `--no-code-dataset` to isolate non-dataset startup behavior.
+- Validation actions/results:
+  - Local syntax gate: `python -m py_compile kaggle/run_kaggle_job.py` -> PASS.
+  - Kaggle dispatch:
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s55-r2 ... prepare` -> PASS
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s55-r2 ... push` -> PASS
+  - Status probes:
+    - initial `running`, then transitions to `error`.
+  - Log retrieval:
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s55-r2 --output-dir tmp_kaggle_pull_guidance_on_s55_r2 output` -> PASS.
+- Decisive evidence captured from `tmp_kaggle_pull_guidance_on_s55_r2/high-dimensional-worldmodel-guidance-on-s55-r2.log`:
+  - `use_code_dataset=False` was active (by design for this diagnostic launch).
+  - Bundle-root diagnostics show no source tree in script runtime:
+    - `/kaggle/src`: `has_experiments=False`, `has_configs=False`, `has_kaggle=False`
+    - `/kaggle/working`: `has_experiments=False`, `has_configs=False`, `has_kaggle=False`
+  - Runner logs explicit fallback path:
+    - `Dataset bootstrap disabled by config: use_code_dataset=false`
+    - `Kernel bundle fallback unavailable across all candidate roots.`
+    - then `git clone` fails with DNS (`Could not resolve host: github.com`).
+- Locked interpretation:
+  - `prepare_from_kernel_bundle()` is not a no-op bug; it is correctly bypassed because Kaggle script runtime lacks repository directories.
+  - Current non-dataset startup path is deterministically blocked by external git DNS dependency.
+- Precise next direction:
+  - Implement deterministic non-git bootstrap in `kaggle/run_kaggle_job.py` + `kaggle_job_manager.py` by embedding an offline project bundle payload at prepare time and extracting it at runtime before `ensure_repo()`.
+  - Validate with one probe slug (`s66-r2`), then relaunch `s77-r2/s88-r2/s99-r2` under the same run_id+seed mapping.
+  - After any successful ON completions are synced locally, rebuild ON summary and rerun 9-seed meta-strict significance refresh.
+

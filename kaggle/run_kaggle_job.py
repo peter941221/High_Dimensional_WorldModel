@@ -108,12 +108,45 @@ def dataset_mount_path(dataset_slug: str) -> Path:
     return Path("/kaggle/input") / dataset_slug
 
 
+def log_startup_diagnostics(cfg: dict) -> None:
+    log("Startup path diagnostics begin.")
+    log(f"Python executable: {sys.executable}")
+    log(f"CWD: {Path.cwd()}")
+    log(f"__file__: {Path(__file__).resolve()}")
+    log(f"PROJECT_DIR target: {PROJECT_DIR}")
+    log(f"/kaggle/src exists: {Path('/kaggle/src').exists()}")
+    log(f"/kaggle/input exists: {Path('/kaggle/input').exists()}")
+    log(
+        "Config toggles: "
+        f"use_code_dataset={cfg.get('use_code_dataset')} "
+        f"code_dataset_slug={cfg.get('code_dataset_slug')} "
+        f"code_bundle_filename={cfg.get('code_bundle_filename')}"
+    )
+    bundle_roots = [
+        Path(__file__).resolve().parent,
+        Path.cwd(),
+        Path("/kaggle/src"),
+    ]
+    for root in bundle_roots:
+        log(
+            "Bundle root candidate: "
+            f"{root} "
+            f"exists={root.exists()} "
+            f"has_experiments={(root / 'experiments').exists()} "
+            f"has_configs={(root / 'configs').exists()} "
+            f"has_kaggle={(root / 'kaggle').exists()}"
+        )
+    log("Startup path diagnostics end.")
+
+
 def prepare_from_dataset(cfg: dict) -> Path | None:
     if not to_bool(cfg.get("use_code_dataset", True)):
+        log("Dataset bootstrap disabled by config: use_code_dataset=false")
         return None
 
     slug = str(cfg.get("code_dataset_slug", "")).strip()
     if not slug:
+        log("Dataset bootstrap skipped: empty code_dataset_slug")
         return None
 
     mount_dir = dataset_mount_path(slug)
@@ -163,13 +196,24 @@ def prepare_from_kernel_bundle() -> Path | None:
         Path("/kaggle/src"),
     ]
     for root in bundle_roots:
-        if (root / "experiments").exists() and (root / "configs").exists():
+        has_experiments = (root / "experiments").exists()
+        has_configs = (root / "configs").exists()
+        has_kaggle = (root / "kaggle").exists()
+        if has_experiments and has_configs:
             if PROJECT_DIR.exists():
                 shutil.rmtree(PROJECT_DIR)
             PROJECT_DIR.mkdir(parents=True, exist_ok=True)
             shutil.copytree(root, PROJECT_DIR, dirs_exist_ok=True)
             log(f"Using kernel bundled source fallback: {root}")
             return PROJECT_DIR
+        log(
+            "Kernel bundle root rejected: "
+            f"{root} "
+            f"has_experiments={has_experiments} "
+            f"has_configs={has_configs} "
+            f"has_kaggle={has_kaggle}"
+        )
+    log("Kernel bundle fallback unavailable across all candidate roots.")
     return None
 
 
@@ -358,6 +402,7 @@ def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
 
 def main() -> None:
     cfg = load_config()
+    log_startup_diagnostics(cfg)
     root = prepare_from_dataset(cfg) or prepare_from_kernel_bundle() or ensure_repo()
     # Reload after dataset extraction/repo ready so runtime-mounted config can override defaults.
     cfg = load_config(extra_candidates=[root / "kaggle" / "run_config.json"])

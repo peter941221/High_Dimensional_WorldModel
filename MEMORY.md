@@ -245,3 +245,35 @@ Last Compressed: 2026-03-01
   - Add diagnostic instrumentation in `kaggle/run_kaggle_job.py` to log candidate startup paths and explicit fallback failure reasons.
   - Launch one diagnostic replacement slug (`s55-r2`) with same run config, collect logs, then implement a deterministic non-git bootstrap path and relaunch remaining seeds.
 
+## Recent Work (2026-03-01, Researcher Loop Iteration 7)
+- Concrete next-best step executed (diagnostic closure on startup path causality):
+  - Patched `kaggle/run_kaggle_job.py` with explicit startup diagnostics:
+    - path inventory (`__file__`, cwd, `/kaggle/src`, `/kaggle/input`)
+    - bundle root checks and rejection reasons for `prepare_from_kernel_bundle()`
+    - explicit dataset bootstrap skip reason when `use_code_dataset=false`.
+  - Validation PASS:
+    - `python -m py_compile kaggle/run_kaggle_job.py`
+  - Launched diagnostic replacement slug with identical run identity:
+    - `high-dimensional-worldmodel-guidance-on-s55-r2`
+    - `run_id=p_guidance_matched_on_9seed_s55`, `seed=55`
+    - launched with `--no-code-dataset` to isolate non-dataset fallback behavior.
+  - Remote validation PASS:
+    - `prepare` + `push` succeeded.
+    - status transitioned `running -> error`.
+    - log download succeeded to `tmp_kaggle_pull_guidance_on_s55_r2/`.
+- Decisive evidence from `tmp_kaggle_pull_guidance_on_s55_r2/high-dimensional-worldmodel-guidance-on-s55-r2.log`:
+  - `Config toggles: use_code_dataset=False ...`
+  - bundle root diagnostics show no repo tree in runtime script environment:
+    - `/kaggle/src`: `has_experiments=False`, `has_configs=False`, `has_kaggle=False`
+    - `/kaggle/working`: `has_experiments=False`, `has_configs=False`, `has_kaggle=False`
+  - `Kernel bundle fallback unavailable across all candidate roots.`
+  - fallback to `ensure_repo()` clone still fails DNS:
+    - `Could not resolve host: github.com`
+- Locked interpretation:
+  - `prepare_from_kernel_bundle()` not taking effect is now explained by runtime file layout, not code-flow defect.
+  - Deterministic non-git bootstrap still required to unblock ON seeds `66/77/88/99`.
+- Next-direction lock (precise):
+  - Implement deterministic non-git bootstrap path by embedding/extracting an offline project bundle before `ensure_repo()`.
+  - Probe with one replacement (`s66-r2`), then relaunch `s77-r2/s88-r2/s99-r2`.
+  - On successful completions, sync outputs and rerun 9-seed meta-strict significance refresh.
+
