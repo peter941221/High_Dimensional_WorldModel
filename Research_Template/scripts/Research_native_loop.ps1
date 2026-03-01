@@ -190,12 +190,12 @@ function Parse-FirstJsonObject {
   }
 
   # Prefer fenced ```json blocks to avoid accidentally matching later braces in markdown.
-  $fenceIdx = $raw.IndexOf("```json", [System.StringComparison]::OrdinalIgnoreCase)
+  $fenceIdx = $raw.IndexOf('```json', [System.StringComparison]::OrdinalIgnoreCase)
   if ($fenceIdx -ge 0) {
     $lineEnd = $raw.IndexOf("`n", $fenceIdx)
     if ($lineEnd -ge 0) {
       $jsonStart = $lineEnd + 1
-      $fenceEnd = $raw.IndexOf("```", $jsonStart, [System.StringComparison]::Ordinal)
+      $fenceEnd = $raw.IndexOf('```', $jsonStart, [System.StringComparison]::Ordinal)
       if ($fenceEnd -gt $jsonStart) {
         $jsonText = $raw.Substring($jsonStart, $fenceEnd - $jsonStart).Trim()
         if (-not [string]::IsNullOrWhiteSpace($jsonText)) {
