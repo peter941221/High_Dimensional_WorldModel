@@ -122,6 +122,31 @@ function Get-TailArray {
   return @($List.ToArray()[$start..($List.Count - 1)])
 }
 
+function Clamp-ContextText {
+  param(
+    [string]$Text,
+    [int]$MaxChars = 1200
+  )
+  if ($null -eq $Text) { return "" }
+  $value = [string]$Text
+  if ($value.Length -le $MaxChars) { return $value }
+  return ($value.Substring(0, $MaxChars) + " ...[truncated]")
+}
+
+function Get-TailArrayClamped {
+  param(
+    [System.Collections.ArrayList]$List,
+    [int]$MaxItems = 4,
+    [int]$MaxCharsPerItem = 1200
+  )
+  $tail = Get-TailArray -List $List -MaxItems $MaxItems
+  $out = @()
+  foreach ($item in $tail) {
+    $out += (Clamp-ContextText -Text ([string]$item) -MaxChars $MaxCharsPerItem)
+  }
+  return @($out)
+}
+
 function Read-NewStreamChunk {
   param(
     [string]$Path,
@@ -900,23 +925,35 @@ Return strict JSON only:
       Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "context_snapshot" -Status "applied" -Iteration $i -Message ("Using active snapshot {0}" -f $state.active_snapshot_file)
     }
 
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "context_packet" -Status "build_start" -Iteration $i -Message "Building rolling context packet."
     $rollingContextPacket = [ordered]@{
       mode = $contextMode
-      previous_direction = $previousDirection
-      director_note = $directorNote
-      recent_summaries = (Get-TailArray -List $rollingRecentSummaries -MaxItems 4)
-      recent_directions = (Get-TailArray -List $rollingRecentDirections -MaxItems 4)
-      validated_evidence = (Get-TailArray -List $rollingValidatedEvidence -MaxItems 8)
-      rejected_paths = (Get-TailArray -List $rollingRejectedPaths -MaxItems 8)
-      open_questions = (Get-TailArray -List $rollingOpenQuestions -MaxItems 10)
+      previous_direction = (Clamp-ContextText -Text $previousDirection -MaxChars 1600)
+      director_note = (Clamp-ContextText -Text $directorNote -MaxChars 1600)
+      recent_summaries = (Get-TailArrayClamped -List $rollingRecentSummaries -MaxItems 4 -MaxCharsPerItem 1000)
+      recent_directions = (Get-TailArrayClamped -List $rollingRecentDirections -MaxItems 4 -MaxCharsPerItem 1000)
+      validated_evidence = (Get-TailArrayClamped -List $rollingValidatedEvidence -MaxItems 8 -MaxCharsPerItem 1000)
+      rejected_paths = (Get-TailArrayClamped -List $rollingRejectedPaths -MaxItems 8 -MaxCharsPerItem 1000)
+      open_questions = (Get-TailArrayClamped -List $rollingOpenQuestions -MaxItems 10 -MaxCharsPerItem 1000)
       active_snapshot_file = $state.active_snapshot_file
-      active_snapshot_excerpt = $activeSnapshotExcerpt
+      active_snapshot_excerpt = (Clamp-ContextText -Text $activeSnapshotExcerpt -MaxChars 2000)
       last_quality_score = $qualityScore
       progress_pct = $progressPct
     }
     $rollingContextJson = $rollingContextPacket | ConvertTo-Json -Depth 10
+    if ($rollingContextJson.Length -gt 20000) {
+      $rollingContextPacket.recent_summaries = @((Get-TailArrayClamped -List $rollingRecentSummaries -MaxItems 2 -MaxCharsPerItem 600))
+      $rollingContextPacket.recent_directions = @((Get-TailArrayClamped -List $rollingRecentDirections -MaxItems 2 -MaxCharsPerItem 600))
+      $rollingContextPacket.validated_evidence = @((Get-TailArrayClamped -List $rollingValidatedEvidence -MaxItems 4 -MaxCharsPerItem 600))
+      $rollingContextPacket.rejected_paths = @((Get-TailArrayClamped -List $rollingRejectedPaths -MaxItems 4 -MaxCharsPerItem 600))
+      $rollingContextPacket.open_questions = @((Get-TailArrayClamped -List $rollingOpenQuestions -MaxItems 6 -MaxCharsPerItem 600))
+      $rollingContextPacket.active_snapshot_excerpt = (Clamp-ContextText -Text $activeSnapshotExcerpt -MaxChars 1000)
+      $rollingContextJson = $rollingContextPacket | ConvertTo-Json -Depth 10
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "context_packet" -Status "trimmed" -Iteration $i -Message ("Rolling context JSON exceeded cap; trimmed to {0} chars." -f $rollingContextJson.Length)
+    }
     $state.rolling_context_bytes_est = $rollingContextJson.Length
     Save-Json -Obj $state -Path $stateFile
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "context_packet" -Status "build_done" -Iteration $i -Message ("Rolling context packet size={0} chars." -f $rollingContextJson.Length)
 
     $workerPrompt = @"
 You are RESEARCHER in a research CLI loop.

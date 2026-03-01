@@ -1248,3 +1248,41 @@ eport/director_final_technical.md
     - achieved round quality `0.98` + approved true, but final status `max_iterations_reached`
     - `process_approval_satisfied: false`
     - trace contains `approval_round_not_enough_process_evidence` (expected).
+## 2026-03-01 11:40:00 - Director checkpoint reconfirmed closure package is still approved
+- Re-validated goals/plan/findings consistency: `Research_Template/RESEARCH_GOALS.md`, `Research_Template/RESEARCH_PLAN.md`, `Research_Template/FINDINGS.md`.
+- Re-validated runtime gate artifacts: `Research_Template/runtime/final_report.md` and `Research_Template/runtime/state.json`.
+- Confirmed done criteria remain satisfied with `director_approved_final=true`, `quality_score=0.96`, `progress_pct=100`, and executive+technical finals present.
+- Director decision: keep approval finalized (`approved_final=true`), with optional non-blocking Path A decisiveness upgrade only.
+## 2026-03-01 11:43:00 - Active-run liveness and pointer-state divergence checkpoint
+- Verified active loop run remains live:
+  - `Research_Template/runtime/active.lock` => `run_id=research_20260301_113951`, `pid=14620`.
+  - `Get-Process -Id 14620` => PowerShell process alive (`HasExited=False`) with matching start time.
+- Verified pointer alignment for active loop ownership:
+  - `Research_Template/runtime/latest_run.txt` points to `...\\runs\\research_20260301_113951`.
+  - Active run `state.json` status is `running` at iteration `1/4`.
+- Reconfirmed baseline approval artifact remains intact and separate:
+  - Root `Research_Template/runtime/state.json` still reports approved baseline (`run_id=research_20260301_ultimate_closure`, `director_approved_final=true`, `quality_score=0.96`, `progress_pct=100`).
+- Interpretation: current pointer/state divergence is expected during live maintenance execution and does not invalidate approved closure evidence; no lock mutation performed.
+
+## 2026-03-01 11:58:31 - Runtime hygiene re-check preserved approved Path B baseline
+- Re-validated runtime lock/pointer/state without mutating active lock ownership.
+- active.lock: run_id=research_20260301_115446, pid=4200; process alive and command line matches Research_native_loop.ps1.
+- latest_run.txt points to active run path research_20260301_115446 while root runtime/state.json remains approved baseline (run_id=research_20260301_ultimate_closure, director_approved_final=true, quality_score=0.96, progress_pct=100).
+- Updated Research_Template/FINDINGS.md with a new maintenance checkpoint documenting commands, PASS results, coverage, and residual risk.
+- Path B final baseline remains authoritative; no causal claim expansion performed.
+
+## 2026-03-01 12:01:00 - Fixed iteration-transition silent stall with context clamp + trace markers
+- Investigated user-reported pane silence/stall for run `research_20260301_113951`:
+  - process alive but trace/heartbeat frozen after `iteration=2 context_snapshot applied`.
+- Added guardrails in `Research_native_loop.ps1`:
+  - `Clamp-ContextText` and `Get-TailArrayClamped` to cap oversized rolling-context items.
+  - hard cap/trimming path when rolling context JSON exceeds 20k chars.
+  - explicit trace markers around context build:
+    - `context_packet.build_start`
+    - `context_packet.build_done`
+    - `context_packet.trimmed` (if capped)
+- Validation:
+  - parser check PASS.
+  - real run `research_20260301_115446` showed `context_packet` markers and continued streaming through researcher/evaluator (no transition freeze).
+- Cleanup:
+  - stopped internal validation run and removed active lock.
