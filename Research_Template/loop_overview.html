@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research Template Loop Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --bg: #071827;
+    --bg2: #05101a;
+    --surface: #0c2236;
+    --surface2: #0a1b2a;
+    --border: rgba(230, 241, 255, 0.12);
+    --border2: rgba(230, 241, 255, 0.22);
+    --text: #e6f1ff;
+    --text-dim: rgba(230, 241, 255, 0.72);
+
+    --accent: #63d6ff;
+    --accent2: #fbbf24;
+    --danger: #fb7185;
+    --ok: #34d399;
+
+    --grid: rgba(230, 241, 255, 0.06);
+    --grid2: rgba(230, 241, 255, 0.03);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    color: var(--text);
+    font-family: var(--font-body);
+    background:
+      radial-gradient(900px 600px at 15% 10%, rgba(99, 214, 255, 0.10) 0%, transparent 55%),
+      radial-gradient(800px 520px at 85% 90%, rgba(251, 191, 36, 0.08) 0%, transparent 52%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px),
+      radial-gradient(900px 600px at 15% 10%, rgba(99, 214, 255, 0.10) 0%, transparent 55%),
+      radial-gradient(800px 520px at 85% 90%, rgba(251, 191, 36, 0.08) 0%, transparent 52%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+    background-size: 28px 28px, 28px 28px, auto, auto, auto;
+    background-position: 0 0, 0 0, 0 0, 0 0, 0 0;
+    padding: 36px 22px 44px;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: 36px;
+    letter-spacing: -0.8px;
+    line-height: 1.08;
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    margin-bottom: 22px;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .card {
+    background: linear-gradient(180deg, rgba(12, 34, 54, 0.92) 0%, rgba(10, 27, 42, 0.92) 100%);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 16px;
+    min-width: 0;
+  }
+
+  .card h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.2px;
+    color: var(--text);
+  }
+
+  .card p {
+    margin: 0 0 10px;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    background: rgba(99, 214, 255, 0.10);
+    border: 1px solid rgba(99, 214, 255, 0.22);
+    padding: 4px 8px;
+    border-radius: 999px;
+  }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(99,214,255,0.10); }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: rgba(230, 241, 255, 0.06);
+    border: 1px solid rgba(230, 241, 255, 0.10);
+    border-radius: 6px;
+    padding: 1px 6px;
+  }
+
+  pre {
+    margin: 10px 0 0;
+    padding: 12px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(5, 16, 26, 0.55);
+    overflow: auto;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  ul {
+    margin: 10px 0 0;
+    padding-left: 18px;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  li { margin: 6px 0; }
+
+  .mermaid-wrap {
+    position: relative;
+    margin-top: 16px;
+    background: rgba(12, 34, 54, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 12px;
+    overflow: auto;
+  }
+
+  .mermaid-wrap .mermaid {
+    display: flex;
+    justify-content: center;
+    transform-origin: top center;
+    transition: transform 0.18s ease;
+  }
+
+  .zoom-controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 2px;
+    z-index: 10;
+    background: rgba(5, 16, 26, 0.65);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 2px;
+    backdrop-filter: blur(6px);
+  }
+
+  .zoom-controls button {
+    width: 30px;
+    height: 30px;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 8px;
+  }
+
+  .zoom-controls button:hover { background: rgba(99, 214, 255, 0.12); }
+
+  .mermaid-wrap.is-zoomed { cursor: grab; }
+  .mermaid-wrap.is-zoomed.is-panning { cursor: grabbing; }
+
+  .footer {
+    margin-top: 16px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  @media (max-width: 980px) {
+    .row { grid-template-columns: 1fr; }
+    h1 { font-size: 30px; }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge"><span class="dot"></span> Research Template Loop (researcher-only default)</div>
+    <h1>Loop Overview: start, stream, commit, repeat</h1>
+    <div class="subtitle">
+      Workspace: C:\AI Projects\Fun Stuff\High_Dimensional_WorldModel | Generated: 2026-03-01
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h2>What You Run (WezTerm)</h2>
+        <p>Run the loop in one pane, and (optionally) tail its logs in another pane. The loop is not restricted to the template folder; it runs at the repo root and can edit any tracked files in this workspace.</p>
+        <pre>cd "C:\AI Projects\Fun Stuff\High_Dimensional_WorldModel"
+
+:: start in foreground (streams status + output by default)
+.\Research_Template\start_research.bat
+
+:: or limit iterations
+.\Research_Template\start_research.bat -MaxIterations 2
+
+:: tail logs in another pane
+.\Research_Template\monitor_research.bat</pre>
+        <ul>
+          <li><code>start_research.bat</code> defaults to unlimited iterations (equivalent to <code>-MaxIterations 0</code>).</li>
+          <li>Use <code>-NoLiveOutput</code> if you want the loop quiet, then rely on the monitor.</li>
+          <li>If a run is already active, <code>start_research.bat</code> attaches the monitor instead of failing.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Key Files</h2>
+        <ul>
+          <li><code>Research_Template/scripts/Research_native_loop.ps1</code>: the orchestrator.</li>
+          <li><code>Research_Template/RESEARCH_NATIVE_LOOP_TEMPLATE.json</code>: defaults (role mode, streaming, retries, commit).</li>
+          <li><code>Research_Template/runtime/</code>: local-only run artifacts (ignored by git).</li>
+          <li><code>MEMORY.md</code>: human + loop memory log (committed by default).</li>
+        </ul>
+        <p class="footer">Tip: The monitor reads <code>runtime/latest_run.txt</code> to find the newest run directory.</p>
+      </div>
+    </div>
+
+    <div class="mermaid-wrap">
+      <div class="zoom-controls">
+        <button onclick="zoomDiagram(this, 1.12)">+</button>
+        <button onclick="zoomDiagram(this, 0.89)">-</button>
+        <button onclick="resetZoom(this)">&#8634;</button>
+      </div>
+      <pre class="mermaid">
+flowchart TD
+  A[ start_research.bat ] --> B{ active.lock exists? }
+  B -->|yes| M[ monitor_research.bat ]
+  B -->|no| C[ Research_native_loop.ps1 ]
+
+  C --> D[ Acquire-RunLock (active.lock) ]
+  D --> E[ Bootstrap merge: reuse baseline artifacts ]
+
+  E --> F[ Build iteration prompt (i=1 recover + do; i>=2 review + do) ]
+  F --> G[ codex exec (child process) ]
+
+  G --> H[ Parse JSON (fenced json or balanced braces) ]
+  H --> I[ Write artifacts: iter_i_researcher.txt + iter_i_researcher.md ]
+  I --> J[ Auto-commit per files_touched (exclude runtime) ]
+
+  J --> K{ Stop? }
+  K -->|MaxIterations reached| L[ Write final_report.md, update state.json, release lock ]
+  K -->|Continue| F
+      </pre>
+    </div>
+
+    <div class="row" style="margin-top: 16px;">
+      <div class="card">
+        <h2>Streaming Model Output</h2>
+        <p>The loop always captures Codex stdout/stderr into per-step files. When live output is enabled, the loop tails those files to the console so it feels like chat. If you see long quiet periods, it usually means the researcher is running a long command (training/eval/pytest) that prints rarely.</p>
+        <ul>
+          <li>Live output: default when you run <code>start_research.bat</code>.</li>
+          <li>Quiet run: pass <code>-NoLiveOutput</code> and use the monitor.</li>
+          <li>Monitor: <code>monitor_research.bat</code> tails both the JSONL trace and the latest researcher stderr log.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Auto-Commit Rules</h2>
+        <p>Each iteration can auto-commit. This is designed to keep progress incremental and reproducible.</p>
+        <ul>
+          <li>Primary selection: <code>files_touched</code> from the researcher JSON, committed even if the repo started dirty.</li>
+          <li>Fallback: git status delta for new/changed paths.</li>
+          <li>Hard exclude: <code>Research_Template/runtime/</code>.</li>
+        </ul>
+        <p class="footer">If you want auto-push, set <code>auto_push</code> in the template JSON.</p>
+      </div>
+    </div>
+
+    <div class="footer">
+      Generated for High_Dimensional_WorldModel. This file is self-contained and intended for quick onboarding.
+    </div>
+  </div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  import elkLayouts from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk/dist/mermaid-layout-elk.esm.min.mjs';
+
+  mermaid.registerLayoutLoaders(elkLayouts);
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    look: 'classic',
+    layout: 'elk',
+    themeVariables: {
+      primaryColor: '#0c2236',
+      primaryBorderColor: '#63d6ff',
+      primaryTextColor: '#e6f1ff',
+      secondaryColor: '#0a1b2a',
+      secondaryBorderColor: '#fbbf24',
+      secondaryTextColor: '#e6f1ff',
+      tertiaryColor: '#0a1b2a',
+      tertiaryBorderColor: '#34d399',
+      tertiaryTextColor: '#e6f1ff',
+      lineColor: 'rgba(230,241,255,0.60)',
+      fontSize: '14px',
+      fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+    }
+  });
+</script>
+<script>
+  function updateZoomState(wrap) {
+    var target = wrap.querySelector('.mermaid');
+    var zoom = parseFloat(target.dataset.zoom || '1');
+    wrap.classList.toggle('is-zoomed', zoom > 1);
+  }
+
+  function zoomDiagram(btn, factor) {
+    var wrap = btn.closest('.mermaid-wrap');
+    var target = wrap.querySelector('.mermaid');
+    var current = parseFloat(target.dataset.zoom || '1');
+    var next = Math.min(Math.max(current * factor, 0.3), 5);
+    target.dataset.zoom = next;
+    target.style.transform = 'scale(' + next + ')';
+    updateZoomState(wrap);
+  }
+
+  function resetZoom(btn) {
+    var wrap = btn.closest('.mermaid-wrap');
+    var target = wrap.querySelector('.mermaid');
+    target.dataset.zoom = '1';
+    target.style.transform = 'scale(1)';
+    updateZoomState(wrap);
+  }
+
+  document.querySelectorAll('.mermaid-wrap').forEach(function(wrap) {
+    wrap.addEventListener('wheel', function(e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      var target = wrap.querySelector('.mermaid');
+      var current = parseFloat(target.dataset.zoom || '1');
+      var factor = e.deltaY < 0 ? 1.1 : 0.9;
+      var next = Math.min(Math.max(current * factor, 0.3), 5);
+      target.dataset.zoom = next;
+      target.style.transform = 'scale(' + next + ')';
+      updateZoomState(wrap);
+    }, { passive: false });
+
+    var startX, startY, scrollL, scrollT;
+    wrap.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.zoom-controls')) return;
+      var target = wrap.querySelector('.mermaid');
+      if (parseFloat(target.dataset.zoom || '1') <= 1) return;
+      wrap.classList.add('is-panning');
+      startX = e.clientX;
+      startY = e.clientY;
+      scrollL = wrap.scrollLeft;
+      scrollT = wrap.scrollTop;
+    });
+
+    window.addEventListener('mousemove', function(e) {
+      if (!wrap.classList.contains('is-panning')) return;
+      wrap.scrollLeft = scrollL - (e.clientX - startX);
+      wrap.scrollTop = scrollT - (e.clientY - startY);
+    });
+
+    window.addEventListener('mouseup', function() {
+      wrap.classList.remove('is-panning');
+    });
+  });
+</script>
+</body>
+</html>
