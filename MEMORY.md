@@ -1097,3 +1097,84 @@
 - Temp cleanup now only applies when step artifact persistence is not configured.
 - Validation:
   - PowerShell parser check on `Research_native_loop.ps1` -> PASS (`parse_ok`).
+## 2026-03-01 10:19:00 - Active lock recovery for hidden no-live-output run
+- Diagnosed lock error from `active.lock`:
+  - run_id: `research_20260301_101257`
+  - pid: `19996`
+  - process command line confirmed the loop was still active and launched with `-NoLiveOutput`.
+- Root cause of user-facing block:
+  - second start attempt while previous loop still running (single-run lock worked as designed).
+  - previous run used `-NoLiveOutput`, so stream looked quiet.
+- Recovery performed:
+  - terminated loop process tree (`19996` parent + child `13128`).
+  - removed `Research_Template/runtime/active.lock`.
+- Post-recovery validation:
+  - `-DryRun -MaxIterations 1` foreground start succeeded (`research_20260301_101747`).
+
+## 2026-03-01 10:27:40 - Final closure cycle executed (Path B causality lock + packaged runtime report)
+- Executed final guidance OFF vs ON lock rerun:
+  - python experiments/significance_report.py --a-prefix p_guidance_off_5seed --b-prefix p2_v2_5seed --report-name guidance_off_vs_on_5seed_significance_finallock (PASS)
+- Regenerated director evidence closure artifact:
+  - python experiments/evidence_closure_report.py --report-name director_evidence_closure_final (PASS)
+- Created explicit causality lock artifacts:
+  - 
+eport/guidance_off_vs_on_causality_lock_final.json
+  - 
+eport/guidance_off_vs_on_causality_lock_final.md
+- Updated final synthesis docs to non-draft final state:
+  - 
+eport/director_final_executive.md
+  - 
+eport/director_final_technical.md
+- Updated project research docs:
+  - Research_Template/FINDINGS.md
+  - Research_Template/RESEARCH_PLAN.md
+- Packaged runtime final artifacts with explicit gate fields:
+  - Research_Template/runtime/final_report.md
+  - Research_Template/runtime/state.json
+  - Research_Template/runtime/runs/research_20260301_ultimate_closure/final_report.md
+- Final lock decision:
+  - Path B selected; training-time guidance causality downgraded to inconclusive (p=0.0625 at 5 paired seeds) with bounded claim language.
+
+## 2026-03-01 - Maintenance checkpoint: signoff gate re-verified (no claim changes)
+- Re-verified runtime signoff gate artifacts:
+  - Research_Template/runtime/final_report.md (`director_approved_final: true`, `quality_score: 0.96`, `progress_pct: 100`)
+  - Research_Template/runtime/state.json (`"director_approved_final": true`, `"quality_score": 0.96`)
+- Re-verified final synthesis presence:
+  - report/director_final_executive.md (exists)
+  - report/director_final_technical.md (exists)
+- Updated maintenance record in:
+  - Research_Template/FINDINGS.md (added `Maintenance Checkpoint (2026-03-01)`)
+- Kept claims locked:
+  - Training-time guidance causality remains inconclusive at 5 paired seeds (`p=0.0625`), with optional Path A (>=9 paired seeds) unchanged.
+## 2026-03-01 10:30:30 - Unstuck hidden run and cleared lock for visible foreground relaunch
+- User reported terminal appears stuck.
+- Diagnosed active run `research_20260301_102435` (pid `12120`) still progressing in trace, but launched with `-NoLiveOutput -MaxIterations 1`, so foreground looked quiet.
+- Confirmed trace progression through `director_preflight` into `researcher` before stop.
+- Recovery actions:
+  - stopped process tree for pid `12120`.
+  - removed `Research_Template/runtime/active.lock`.
+- Outcome:
+  - lock gate cleared; ready to relaunch with visible streaming mode (without `-NoLiveOutput`).
+## 2026-03-01 10:31:30 - Final cleanup of orphan no-live-output loop processes
+- After initial lock clear, another orphan loop process appeared (`pid=124`, `run_id=research_20260301_102933`) with `-NoLiveOutput -MaxIterations 1`.
+- Confirmed it was detached/orphaned (`parent pid` no longer alive), likely from prior wrapped launch.
+- Stopped the orphan process tree (`124`, children `19556`, `18816`).
+- Removed `Research_Template/runtime/active.lock` again.
+- Verified no remaining `powershell.exe` process command line containing `Research_native_loop.ps1`.
+## 2026-03-01 10:33:13 - Director maintenance decision checkpoint
+- Re-validated Research_Template goal/plan/findings alignment and runtime signoff gates.
+- Confirmed done criteria remain satisfied: director_approved_final=true, quality_score=0.96, and executive/technical final artifacts present.
+- Director decision: keep final approval true; recommend optional Path A (>=9 paired seeds) only as a decisiveness/causality-strengthening follow-up.
+## 2026-03-01 10:40:00 - Added dedicated monitor launcher for live loop visibility
+- Added `Research_Template/monitor_research.bat` as a separate monitor entrypoint (independent from starter).
+- Added `Research_Template/scripts/Monitor_research_stream.ps1` to stream:
+  - lifecycle trace from `execution_trace.jsonl`
+  - latest researcher stderr from `iter_*_researcher_attempt_*_stderr.log`
+- Monitor behavior:
+  - auto-resolves latest run via `runtime/latest_run.txt` when `-RunDir` is not provided.
+  - supports `-PollMs` and optional `-DurationSec`.
+- Validation executed:
+  - `monitor_research.bat --help` (PASS)
+  - PowerShell parser check on monitor script (PASS)
+  - `monitor_research.bat -DurationSec 3 -PollMs 400` (PASS, streamed trace/researcher output)
