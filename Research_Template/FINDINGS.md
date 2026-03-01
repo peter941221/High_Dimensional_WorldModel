@@ -690,3 +690,26 @@ Optional Path A closure gate (Iteration 3/3)
                          [Optionally resume seed44 only for   [Run full matched
                           bookkeeping/recovery validation]      n>=9 + meta-strict]
 ```
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 1: Matched Overlap Refresh)
+- Mode: analysis-only (no new training launched).
+- Risk Tier: L
+- Validation actions:
+  - Enumerated available ON seed directories:
+    - baseline: `s11,s22,s33,s44`
+    - transfer: `s11,s22,s33`
+    - robustness: `s11,s22,s33`
+  - Re-ran meta-strict paired significance:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_overlap_refresh_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+- Evidence:
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap_refresh_significance.json`
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap_refresh_significance.md`
+- Results:
+  - Seeds used by intersection remain `[11,22,33]` (`n=3`).
+  - `meta_check.passed=true`, `unexpected_diff_keys=[]`.
+  - No KPI reaches significance at alpha `0.05`; causality remains inconclusive.
+- Coverage:
+  - Confirms there has been no hidden overlap expansion since the previous overlap3 report.
+  - Confirms matched-setting diff guard still passes with only `training_guidance` differing.
+- Residual risk:
+  - Power remains insufficient until matched OFF/ON overlap increases substantially (target `n>=9` for decisive update).

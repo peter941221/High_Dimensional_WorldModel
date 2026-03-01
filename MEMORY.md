@@ -102,3 +102,27 @@
     - Choice B: full matched `n>=9` run for causality decisiveness.
 
 Last Compressed: 2026-03-01
+
+## Recent Work (2026-03-01, Researcher Loop Iteration 1)
+- Memory/context recovery completed against canonical docs:
+  - `Research_Template/RESEARCH_GOALS.md`
+  - `Research_Template/RESEARCH_PLAN.md`
+  - `Research_Template/FINDINGS.md`
+- Concrete step executed (analysis-only refresh; no training):
+  - Recomputed matched-setting OFF vs ON significance with meta-strict guard:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_overlap_refresh_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+- New evidence artifacts:
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap_refresh_significance.json`
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap_refresh_significance.md`
+- Locked outcomes from this step:
+  - Overlap seeds remain `[11,22,33]` (`n=3`); no expansion detected.
+  - `meta_check.passed=true` and only allowed diff key is `training_guidance`.
+  - No KPI significant at alpha `0.05`; training-time guidance causality remains inconclusive.
+- Execution venue note:
+  - Local chosen (not Kaggle) because this is a quick report recomputation over existing local artifacts.
+  - Move to Kaggle when launching full matched OFF/ON training at `n>=9` seeds for causal decisiveness.
+- Next-direction lock (precise):
+  - Keep closure artifacts as canonical baseline.
+  - Optional Path A only if decisiveness is required now:
+    - Path A1: seed44 minimal resume for bookkeeping overlap expansion.
+    - Path A2: full matched OFF/ON at `n>=9` with meta-strict significance regeneration for causal upgrade.

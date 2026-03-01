@@ -338,3 +338,25 @@ Decision boundary map (locked)
                        [Optional seed44 minimal resume]  [Run full matched path]
                        [bookkeeping/recovery only]       [causal upgrade candidate]
 ```
+
+## Iteration Update (2026-03-01 Researcher Loop: Overlap Refresh)
+- Mode: analysis-only refresh (no new training).
+- Risk Tier: L
+- Concrete step executed:
+  - Re-ran matched-setting paired significance with meta-strict guard:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_overlap_refresh_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+  - Output artifacts:
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap_refresh_significance.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap_refresh_significance.md`
+- Results:
+  - Overlap seeds remain `[11, 22, 33]` (`n=3`).
+  - `meta_check.passed=true`; only allowed diff key is `training_guidance`.
+  - No KPI significant at alpha `0.05` (power-limited).
+- Why local (not Kaggle) in this step:
+  - This step is pure report recomputation on already-local artifacts and completes in seconds.
+  - Trigger to move to Kaggle: launching full matched OFF/ON training to `n>=9` seeds for causal decisiveness.
+- Next direction:
+  - Keep closure artifacts as canonical baseline.
+  - Execute Optional Path A only if decisiveness is required now: either
+    1) seed44 minimal resume for overlap bookkeeping, or
+    2) full matched OFF/ON `n>=9` with meta-strict recheck for causal upgrade.
