@@ -1827,3 +1827,23 @@ Iteration 5 recovery map
   - Statistical power bound remains unchanged (n=9 paired); interpretation remains bounded non-significant, not equivalence.
 - Next direction:
   - Keep closure frozen; reopen only for explicit equivalence-protocol request (predefined equivalence margin + larger paired sample), then run matched paired ON/OFF executions and formal equivalence analysis.
+
+## Iteration 47 - Freeze Continuity Invariant Revalidation (2026-03-01)
+- Risk Tier: L
+- Scope: freeze-preserving continuity checkpoint (no new Kaggle/local experiment runs).
+- Executed checks:
+  - Reviewed previous researcher artifacts:
+    - Research_Template/runtime/runs/research_20260301_221812/iter_46_researcher.txt
+    - Research_Template/runtime/runs/research_20260301_221812/iter_46_researcher.md
+  - Verified results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json seeds remain [11,22,33,44,55,66,77,88,99] with matched meta (training_guidance=guided_blend, eval_policy_mode=model_only, domain_rand=true).
+  - Verified results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json reports meta_check.passed=true, unexpected_diff_keys=[], and significant KPI count 0 at alpha=0.05 (rows[*].significant_0_05).
+  - Verified clean git state at checkpoint start (git status --short returned empty).
+- Result:
+  - Frozen closure evidence remains stable and reproducible for final executive + technical narrative.
+- Why local validation (not Kaggle) this iteration:
+  - Direction is a freeze checkpoint, so only artifact integrity validation was required; no new experiment generation existed to offload.
+  - Move back to Kaggle when an explicit equivalence protocol is requested (predefined margin + larger paired n).
+- Residual risk:
+  - Statistical power bound remains unchanged (n=9 paired); interpretation remains bounded non-significant, not equivalence.
+- Next direction:
+  - Keep closure frozen; reopen only for explicit equivalence-protocol request (predefined equivalence margin + larger paired sample), then run matched paired ON/OFF executions and formal equivalence analysis.

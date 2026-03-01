@@ -1206,3 +1206,27 @@ Last Compressed: 2026-03-01
   - Non-significance remains bounded-null evidence, not an equivalence proof.
 - Next-direction lock (precise):
   - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired n), then execute matched paired ON/OFF runs and formal equivalence analysis.
+
+## Recent Work (2026-03-01, Researcher Loop Iteration 47)
+- Concrete next-best step executed (freeze continuity + invariant revalidation):
+  - Reviewed iteration-46 researcher artifacts and continued under the same frozen direction.
+  - Revalidated canonical evidence:
+    - results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json
+    - results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json
+  - Updated continuity records in:
+    - Research_Template/RESEARCH_PLAN.md
+    - Research_Template/FINDINGS.md
+    - Research_Template/RESEARCH_GOALS.md
+    - MEMORY.md
+- Validation/evidence lock:
+  - Process gate check: clean git state at checkpoint start (git status --short empty).
+  - p0_summary.json remains seeded [11,22,33,44,55,66,77,88,99] with matched meta (training_guidance=guided_blend, eval_policy_mode=model_only, domain_rand=true).
+  - guidance_train_matched_off_vs_on_9seed_significance.json remains meta_check.passed=true, unexpected_diff_keys=[], significant KPI count 0 at alpha 0.05 (rows[*].significant_0_05).
+- Why no Kaggle execution this step:
+  - This iteration is a freeze checkpoint with no new evidence-generation requirement.
+  - Trigger to return to Kaggle: explicit equivalence-focused protocol request with predefined margin and larger paired n.
+- Locked interpretation:
+  - Closure package remains frozen and internally consistent; no new evidence generation required at current acceptance state.
+  - Non-significance remains bounded-null evidence, not an equivalence proof.
+- Next-direction lock (precise):
+  - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired n), then execute matched paired ON/OFF runs and formal equivalence analysis.
