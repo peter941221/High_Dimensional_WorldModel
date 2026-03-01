@@ -958,3 +958,134 @@
   - Dry-run from external cwd `C:\` (absolute script/template path): PASS.
   - Cross-project portability smoke using copied bundle under `C:\AI Projects\Fun Stuff\Template_Portability_Smoke_20260301_1`: PASS.
   - Confirmed generated state/final-report paths correctly bind to target workspace root and no active lock remains after run.
+
+## 2026-03-01 08:55:00 - Evidence-closing non-dry iteration (ranking + mechanism attribution)
+- Executed new closure pipeline script:
+  - `python experiments/evidence_closure_report.py --report-name director_evidence_closure_iter1`
+- New artifacts generated:
+  - `report/director_evidence_closure_iter1.json`
+  - `report/director_evidence_closure_iter1.md`
+- Matched-compute transfer ranking completed from hard020 10-seed cohort:
+  - source dims `4/5/6/8` to 3D, paired sign-flip significance.
+  - ranking by mean transfer gain: `4D ~= 5D > 6D ~= 8D` (small deltas, no pairwise significance at 0.05).
+  - compute invariants verified (`pretrain=16`, `finetune=16`, `gradient_steps=128`, `eval_episodes=60`).
+- Controlled mechanism attribution produced:
+  - Latent representation: aggregated 10-seed ablation (`gru/mlp/phys_residual/rssm`) from same cohort; `phys_residual` ranked best and beat `gru/rssm` significantly in paired comparisons.
+  - Guidance policy: fresh non-dry checkpoint-fixed ablation (9 seeds, `p2_v2_9seed` checkpoints, 20 episodes) comparing `model_only` vs `guided_blend` vs `guide_only`; guidance modes significantly outperformed model-only across easy/medium/hard.
+  - Domain randomization: linked and summarized paired-significance evidence from:
+    - `report/release_significance_p0_vs_p2v2_9seed.json`
+    - `report/kaggle_next_hard002_vs_hard020_9seed_significance.json`
+- Validation executed:
+  - `python experiments/evidence_closure_report.py --report-name director_evidence_closure_iter1` (PASS)
+  - `python -m py_compile experiments/evidence_closure_report.py` (PASS)
+- Documentation update:
+  - `Research_Template/FINDINGS.md` updated with 2026-03-01 iteration findings and next actions.
+- Residual gaps for final signoff:
+  - dimension ranking remains weak-order (not statistically separated);
+  - guidance attribution is inference/checkpoint-fixed, not yet full training-time off/on paired-significance.
+
+## 2026-03-01 08:56:45 - Evidence-closure reproducibility rerun (non-dry)
+- Executed an additional non-dry closure rerun with timestamped report name:
+  - `python experiments/evidence_closure_report.py --report-name director_evidence_closure_20260301_iter1`
+- New artifacts generated:
+  - `report/director_evidence_closure_20260301_iter1.json`
+  - `report/director_evidence_closure_20260301_iter1.md`
+- Validation executed:
+  - `python experiments/evidence_closure_report.py --report-name director_evidence_closure_20260301_iter1` (PASS)
+  - `python -m py_compile experiments/evidence_closure_report.py` (PASS)
+  - metric parity check vs previous closure artifact:
+    - `python -c "..."` comparing `matched_compute_ranking` and `mechanism_attribution` sections (PASS, identical metrics).
+- Confirmed key closure metrics remain stable:
+  - matched-compute ranking unchanged: `4D ~= 5D > 6D ~= 8D` (pairwise p-min `0.21875`).
+  - latent ranking unchanged: `phys_residual > mlp > gru > rssm`.
+  - guidance attribution unchanged: `guided_blend` and `guide_only` both significantly beat `model_only` on easy/medium/hard.
+## 2026-03-01 09:12:00 - Director checkpoint: final-mile gate alignment
+- Reviewed `Research_Template/RESEARCH_GOALS.md`, `RESEARCH_PLAN.md`, `FINDINGS.md`, and closure artifacts under `report/`.
+- Confirmed current signoff blocker is not baseline evidence availability, but final-mile closure gaps:
+  - missing dedicated executive artifact for final decision communication;
+  - unresolved decisive/causal closure for training-time guidance on/off.
+- Updated `Research_Template/RESEARCH_GOALS.md` success criteria to require director signoff package with `quality_score >= 0.95` and explicit executive+technical artifacts.
+- Updated `Research_Template/RESEARCH_PLAN.md` with `Final-Mile Director Gate` section:
+  - executive artifact target (`report/director_final_executive.md`),
+  - decisive significance closure experiment (guidance off vs on, paired seeds),
+  - technical synthesis target (`report/director_final_technical.md`),
+  - explicit score-promotion check to `quality_score >= 0.95`.
+- Added validation commands in plan for `evidence_closure_report.py` and `significance_report.py` to support reproducible closure.
+
+## 2026-03-01 09:31:00 - Director checkpoint: closure sprint enforcement
+- Revalidated bootstrap baseline from `research_20260301_092613/boostrap_snapshot.json` semantics (`baseline_progress_pct=68`) and open final-mile gaps.
+- Confirmed required done-gate artifacts are still missing:
+  - `report/director_final_executive.md` (not found)
+  - `report/director_final_technical.md` (not found)
+- Confirmed loop quality gate is still blocked by dry-run evaluator pattern (`quality_score=0.75` across recent runtime reports).
+- Updated `Research_Template/RESEARCH_PLAN.md` with `Director Closure Sprint Protocol (Blocking -> Ready)`:
+  - enforce non-dry evaluator path,
+  - produce both final synthesis artifacts,
+  - run training-time guidance OFF vs ON paired significance (>=5 seeds),
+  - rerun final packaging to reach `quality_score >= 0.95` and `approved_final=true`.
+- Validation executed:
+  - `Test-Path report/director_final_executive.md` -> `False`
+  - `Test-Path report/director_final_technical.md` -> `False`
+  - `Get-Content -Raw Research_Template/runtime/runs/research_20260301_092613/bootstrap_snapshot.json` (PASS)
+
+## 2026-03-01 09:30:10 - Stopped foreground real-run audit + one-click launcher
+- Audited stopped real run `research_20260301_090545` from runtime artifacts.
+  - Completed successfully: `bootstrap_merge` and `director_preflight` (parsed outputs persisted).
+  - In-progress at stop time: `researcher` step attempt 0 (`attempt_alive` heartbeats present, no evaluator/director-post yet).
+  - No `final_report.md` and no `blocker_report.md` in that run directory (expected for manual stop mid-iteration).
+- Added one-click foreground launcher:
+  - `Research_Template/start_research.bat`
+  - Uses explicit template/docs paths and runs in foreground by default.
+  - Supports passthrough args via `%*` (e.g., `-DryRun -MaxIterations 1`).
+- Validation:
+  - `start_research.bat -DryRun -MaxIterations 1` -> PASS, produced final report at:
+    - `Research_Template/runtime/runs/research_20260301_092940/final_report.md`
+
+## 2026-03-01 09:31:00 - Manual stop audit for run research_20260301_090545 + launcher creation
+- Audited run `research_20260301_090545` after user-requested stop.
+  - Completed steps: bootstrap merge + director preflight (artifacts valid).
+  - Incomplete steps: researcher/evaluator/director-post/final report (not produced before stop).
+- Normalized runtime bookkeeping for stopped run:
+  - `state.json` status -> `interrupted_by_user`
+  - added `blocker_report.md`
+  - appended trace event `manual_stop_by_user`.
+- Added one-click foreground launcher:
+  - `Research_Template/start_research.bat`
+  - supports argument passthrough (`%*`).
+- Validation:
+  - `start_research.bat -DryRun -MaxIterations 1` -> PASS.
+
+## 2026-03-01 09:43:40 - Director closure docs completed; final causal/test gate still pending
+- Reviewed current research loop status and closure artifacts:
+  - Active non-dry run exists: `Research_Template/runtime/runs/research_20260301_093828` (progressed beyond bootstrap; preflight in-flight during audit).
+  - Historical completed final reports remain dry-run stubs (`quality_score=0.75`, `director_approved_final=False`), so final gate is still unsatisfied.
+- Added missing final director synthesis artifacts:
+  - `report/director_final_executive.md`
+  - `report/director_final_technical.md`
+- Updated project planning/findings state:
+  - `Research_Template/RESEARCH_PLAN.md` now marks synthesis artifacts as complete and keeps non-dry loop + guidance causal run as pending blockers.
+  - `Research_Template/FINDINGS.md` now logs creation of the two final director docs and focuses next action on guidance OFF vs ON plus final non-dry loop pass.
+- Validation executed:
+  - `Test-Path report/director_final_executive.md` -> `True`
+  - `Test-Path report/director_final_technical.md` -> `True`
+  - `Get-Content report/director_final_executive.md -Head 5` (PASS)
+  - `Get-Content report/director_final_technical.md -Head 5` (PASS)
+## 2026-03-01 10:12:00 - Live streaming visibility upgrade for native research loop
+- Upgraded `Research_Template/scripts/Research_native_loop.ps1` execution streaming behavior:
+  - Added decoupled fast output polling (`runtime_safety.live_output_poll_ms`).
+  - Added explicit periodic console status lines per running step (`runtime_safety.console_status_interval_sec`) showing elapsed/idle/out/err bytes.
+  - Kept heartbeat independently configurable (`runtime_safety.heartbeat_interval_sec`) so console visibility no longer depends on heartbeat cadence.
+  - Added per-attempt stream artifact persistence under run folder:
+    - `iter_<n>_<step>_attempt_<k>_stdout.log`
+    - `iter_<n>_<step>_attempt_<k>_stderr.log`
+- Updated template runtime knobs in `Research_Template/RESEARCH_NATIVE_LOOP_TEMPLATE.json`:
+  - version `1.3.1`
+  - `heartbeat_interval_sec: 15`
+  - `live_output_poll_ms: 800`
+  - `console_status_interval_sec: 8`
+- Validation executed:
+  - `-DryRun -MaxIterations 1`: PASS.
+  - Real foreground run (`research_20260301_100507`) confirmed repeated `attempt_status` events for `bootstrap_merge`, `director_preflight`, and `researcher` in `execution_trace.jsonl`.
+  - Stream logs successfully persisted for completed attempts (`bootstrap_merge`, `director_preflight`).
+- Result:
+  - Researcher execution is now explicit and continuously observable even when model text output is sparse.

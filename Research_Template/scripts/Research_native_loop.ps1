@@ -328,6 +328,7 @@ function Invoke-CodexExecWithSafety {
     [string]$TraceFile,
     [string]$RunId,
     [bool]$ShowLiveOutput,
+    [string]$StepArtifactsDir = "",
     [switch]$DryRun
   )
 
@@ -355,7 +356,17 @@ function Invoke-CodexExecWithSafety {
   $maxRetries = if ($retryEnabled) { [int]$retryCfg.max_retries_per_step } else { 0 }
   $backoff = @($retryCfg.backoff_seconds)
   $maxIdleMinutes = [int]$Template.runtime_safety.max_idle_minutes
-  $heartbeatSec = [int]$Template.runtime_safety.heartbeat_interval_sec
+  $heartbeatSec = [math]::Max(1, [int]$Template.runtime_safety.heartbeat_interval_sec)
+  $liveOutputPollMs = 1000
+  if ($Template.runtime_safety.PSObject.Properties.Name -contains "live_output_poll_ms") {
+    try { $liveOutputPollMs = [int]$Template.runtime_safety.live_output_poll_ms } catch {}
+  }
+  if ($liveOutputPollMs -lt 100) { $liveOutputPollMs = 100 }
+  $consoleStatusSec = 10
+  if ($Template.runtime_safety.PSObject.Properties.Name -contains "console_status_interval_sec") {
+    try { $consoleStatusSec = [int]$Template.runtime_safety.console_status_interval_sec } catch {}
+  }
+  if ($consoleStatusSec -lt 1) { $consoleStatusSec = 1 }
 
   for ($attempt = 0; $attempt -le $maxRetries; $attempt++) {
     $outFile = Join-Path $env:TEMP ("codex_{0}.out" -f [guid]::NewGuid().ToString("N"))
@@ -368,6 +379,7 @@ function Invoke-CodexExecWithSafety {
 
     Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} start" -f $StepName, $Iteration, $attempt)
     Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_start" -Iteration $Iteration -Attempt $attempt -Message "Launching codex exec."
+    Write-Host ("[{0}] start step={1} iter={2} attempt={3}" -f (Get-Date -Format "HH:mm:ss"), $StepName, $Iteration, $attempt) -ForegroundColor Cyan
     Set-Content -Path $promptFile -Value $Prompt -Encoding UTF8
 
     $procArgs = @()
@@ -380,21 +392,29 @@ function Invoke-CodexExecWithSafety {
     $procArgs += $messageFile
     $procArgs += "-"
     $proc = Start-Process -FilePath $CodexLaunchSpec.FilePath -ArgumentList $procArgs -PassThru -NoNewWindow -RedirectStandardInput $promptFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-    $lastActivity = Get-Date
-    $lastLen = 0L
+    $attemptStart = Get-Date
+    $lastActivity = $attemptStart
+    $lastHeartbeatAt = $attemptStart
+    $lastStatusAt = $attemptStart
+    $lastOutLen = 0L
+    $lastErrLen = 0L
 
     while (-not $proc.HasExited) {
-      Start-Sleep -Seconds $heartbeatSec
+      Start-Sleep -Milliseconds $liveOutputPollMs
       $now = Get-Date
+      $outLen = 0L
+      $errLen = 0L
       if (Test-Path $outFile) {
-        $len = (Get-Item $outFile).Length
-        if ($len -gt $lastLen) {
-          $lastLen = $len
-          $lastActivity = $now
-        }
+        $outLen = (Get-Item $outFile).Length
       }
-      Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} alive" -f $StepName, $Iteration, $attempt)
-      Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_alive" -Iteration $Iteration -Attempt $attempt -Message "Process still running."
+      if (Test-Path $errFile) {
+        $errLen = (Get-Item $errFile).Length
+      }
+      if ($outLen -gt $lastOutLen -or $errLen -gt $lastErrLen) {
+        $lastActivity = $now
+      }
+      $lastOutLen = $outLen
+      $lastErrLen = $errLen
 
       if ($ShowLiveOutput) {
         $stdoutChunk = Read-NewStreamChunk -Path $outFile -Cursor $stdoutCursor
@@ -410,6 +430,21 @@ function Invoke-CodexExecWithSafety {
         }
       }
 
+      if (((New-TimeSpan -Start $lastStatusAt -End $now).TotalSeconds) -ge $consoleStatusSec) {
+        $elapsedSec = [int](New-TimeSpan -Start $attemptStart -End $now).TotalSeconds
+        $idleSec = [int](New-TimeSpan -Start $lastActivity -End $now).TotalSeconds
+        $statusMsg = ("step={0} iter={1} attempt={2} elapsed={3}s idle={4}s out={5}B err={6}B" -f $StepName, $Iteration, $attempt, $elapsedSec, $idleSec, $outLen, $errLen)
+        Write-Host ("[{0}] status {1}" -f $now.ToString("HH:mm:ss"), $statusMsg) -ForegroundColor DarkCyan
+        Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_status" -Iteration $Iteration -Attempt $attempt -Message $statusMsg
+        $lastStatusAt = $now
+      }
+
+      if (((New-TimeSpan -Start $lastHeartbeatAt -End $now).TotalSeconds) -ge $heartbeatSec) {
+        Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} alive" -f $StepName, $Iteration, $attempt)
+        Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_alive" -Iteration $Iteration -Attempt $attempt -Message "Process still running."
+        $lastHeartbeatAt = $now
+      }
+
       if (((New-TimeSpan -Start $lastActivity -End $now).TotalMinutes) -ge $maxIdleMinutes) {
         try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
         $timedOut = $true
@@ -420,6 +455,12 @@ function Invoke-CodexExecWithSafety {
     }
 
     try { $proc.WaitForExit() | Out-Null } catch {}
+    $exitCode = $null
+    try { $exitCode = $proc.ExitCode } catch {}
+    $doneNow = Get-Date
+    $doneElapsedSec = [int](New-TimeSpan -Start $attemptStart -End $doneNow).TotalSeconds
+    $doneExit = if ($null -eq $exitCode) { "NA" } else { [string]$exitCode }
+    Write-Host ("[{0}] done step={1} iter={2} attempt={3} exit={4} elapsed={5}s timeout={6}" -f $doneNow.ToString("HH:mm:ss"), $StepName, $Iteration, $attempt, $doneExit, $doneElapsedSec, $timedOut) -ForegroundColor Cyan
 
     if ($ShowLiveOutput) {
       $stdoutTail = Read-NewStreamChunk -Path $outFile -Cursor $stdoutCursor
@@ -435,14 +476,26 @@ function Invoke-CodexExecWithSafety {
     $stdout = if (Test-Path $outFile) { Get-Content -Path $outFile -Raw } else { "" }
     $stderr = if (Test-Path $errFile) { Get-Content -Path $errFile -Raw } else { "" }
     $lastMessage = if (Test-Path $messageFile) { Get-Content -Path $messageFile -Raw } else { "" }
+
+    if (-not [string]::IsNullOrWhiteSpace($StepArtifactsDir)) {
+      $safeStepName = ($StepName -replace '[^A-Za-z0-9_-]', '_')
+      $stdoutLogFile = Join-Path $StepArtifactsDir ("iter_{0}_{1}_attempt_{2}_stdout.log" -f $Iteration, $safeStepName, $attempt)
+      $stderrLogFile = Join-Path $StepArtifactsDir ("iter_{0}_{1}_attempt_{2}_stderr.log" -f $Iteration, $safeStepName, $attempt)
+      if (Test-Path $outFile) {
+        Copy-Item -Path $outFile -Destination $stdoutLogFile -Force -ErrorAction SilentlyContinue
+      }
+      if (Test-Path $errFile) {
+        Copy-Item -Path $errFile -Destination $stderrLogFile -Force -ErrorAction SilentlyContinue
+      }
+      Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_stream_logs_saved" -Iteration $Iteration -Attempt $attempt -Message ("stdout={0}; stderr={1}" -f $stdoutLogFile, $stderrLogFile)
+    }
+
     Remove-Item -Path $promptFile -ErrorAction SilentlyContinue
     Remove-Item -Path $messageFile -ErrorAction SilentlyContinue
     Remove-Item -Path $outFile -ErrorAction SilentlyContinue
     Remove-Item -Path $errFile -ErrorAction SilentlyContinue
 
     $effectiveOutput = if (-not [string]::IsNullOrWhiteSpace($lastMessage)) { $lastMessage } else { $stdout }
-    $exitCode = $null
-    try { $exitCode = $proc.ExitCode } catch {}
     if (-not $timedOut -and -not [string]::IsNullOrWhiteSpace($effectiveOutput)) {
       Write-Heartbeat -HeartbeatFile $HeartbeatFile -Message ("step={0} iter={1} attempt={2} success" -f $StepName, $Iteration, $attempt)
       Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_success" -Iteration $Iteration -Attempt $attempt -Message "Received non-empty model output."
@@ -695,7 +748,7 @@ Perform a repo-wide smart scan and return strict JSON:
 }
 "@
   Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "dispatch" -Iteration 0 -Message "Dispatching bootstrap merge prompt."
-  $bootstrapRaw = Invoke-CodexExecWithSafety -Prompt $bootstrapPrompt -StepName "bootstrap_merge" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+  $bootstrapRaw = Invoke-CodexExecWithSafety -Prompt $bootstrapPrompt -StepName "bootstrap_merge" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
   $bootstrapFile = Join-Path $runDir "iter_0_bootstrap_merge.txt"
   Set-Content -Path $bootstrapFile -Value $bootstrapRaw -Encoding UTF8
   Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "artifact_written" -Iteration 0 -Message ("Saved output to {0}" -f $bootstrapFile)
@@ -772,7 +825,7 @@ Return strict JSON only:
 }
 "@
   Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "dispatch" -Iteration 0 -Message "Dispatching director preflight prompt."
-  $commanderRaw = Invoke-CodexExecWithSafety -Prompt $commanderPrompt -StepName "director_preflight" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+  $commanderRaw = Invoke-CodexExecWithSafety -Prompt $commanderPrompt -StepName "director_preflight" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
   $commanderFile = Join-Path $runDir "iter_0_director_preflight.txt"
   Set-Content -Path $commanderFile -Value $commanderRaw -Encoding UTF8
   Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "artifact_written" -Iteration 0 -Message ("Saved output to {0}" -f $commanderFile)
@@ -867,7 +920,7 @@ Required JSON:
 }
 "@
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "dispatch" -Iteration $i -Message "Dispatching researcher prompt."
-    $workerRaw = Invoke-CodexExecWithSafety -Prompt $workerPrompt -StepName "researcher" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+    $workerRaw = Invoke-CodexExecWithSafety -Prompt $workerPrompt -StepName "researcher" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
     $workerFile = Join-Path $runDir ("iter_{0}_researcher.txt" -f $i)
     Set-Content -Path $workerFile -Value $workerRaw -Encoding UTF8
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $workerFile)
@@ -943,7 +996,7 @@ Return strict JSON only:
 }
 "@
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "dispatch" -Iteration $i -Message "Dispatching evaluator prompt."
-    $reviewerRaw = Invoke-CodexExecWithSafety -Prompt $reviewerPrompt -StepName "evaluator" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+    $reviewerRaw = Invoke-CodexExecWithSafety -Prompt $reviewerPrompt -StepName "evaluator" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
     $reviewerFile = Join-Path $runDir ("iter_{0}_evaluator.txt" -f $i)
     Set-Content -Path $reviewerFile -Value $reviewerRaw -Encoding UTF8
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $reviewerFile)
@@ -1190,7 +1243,7 @@ Return strict JSON only:
 }
 "@
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "dispatch" -Iteration $i -Message ("Dispatching director post note mode={0}" -f $directorMode)
-    $directorRaw = Invoke-CodexExecWithSafety -Prompt $directorPrompt -StepName ("director_post_" + $directorMode) -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -DryRun:$DryRun
+    $directorRaw = Invoke-CodexExecWithSafety -Prompt $directorPrompt -StepName ("director_post_" + $directorMode) -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
     $directorFile = Join-Path $runDir ("iter_{0}_director_{1}.txt" -f $i, $directorMode)
     Set-Content -Path $directorFile -Value $directorRaw -Encoding UTF8
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $directorFile)
