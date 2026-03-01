@@ -1061,3 +1061,32 @@ Decision boundary map (locked)
   - Statistical power bound remains unchanged at paired `n=9`; non-significance remains bounded-null evidence, not an equivalence proof.
 - Precise next direction:
   - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired `n`), then execute matched paired ON/OFF runs and formal equivalence analysis.
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 24: Freeze Continuity + Invariant Revalidation)
+- Mode: freeze-preserving continuity checkpoint (no new Kaggle/local runs by design).
+- Risk Tier: L
+- Concrete next-best step executed:
+  - Reviewed iteration-23 researcher artifacts and continued under the locked frozen direction.
+  - Revalidated canonical closure evidence artifacts:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+  - Recorded iteration-24 continuity updates in plan/findings/goals/memory artifacts.
+- Validation actions/results:
+  - Process gate check at checkpoint start -> PASS:
+    - `git status --short` empty.
+  - JSON integrity check on `p0_summary.json` -> PASS:
+    - seeds `[11,22,33,44,55,66,77,88,99]`
+    - `meta.training_guidance=guided_blend`
+    - `meta.eval_policy_mode=model_only`
+    - `meta.domain_rand=true`
+  - JSON integrity check on 9-seed significance artifact -> PASS:
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - significant KPI count `0` at `alpha=0.05` (`rows[*].significant_0_05`)
+- Why local validation (not Kaggle) this iteration:
+  - The current direction is closure-freeze continuity; no new evidence-generation run is required.
+  - Trigger to move back to Kaggle: explicit equivalence-focused protocol request with predefined equivalence margin and larger paired `n`.
+- Residual risk:
+  - Statistical power bound remains unchanged at paired `n=9`; non-significance remains bounded-null evidence, not an equivalence proof.
+- Precise next direction:
+  - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired `n`), then execute matched paired ON/OFF runs and formal equivalence analysis.
