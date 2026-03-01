@@ -341,3 +341,33 @@ Last Compressed: 2026-03-01
   - Optional provenance hardening: rerun/sync `s55-r2` completion artifact under the same embedded-bootstrap matched config to remove mixed-provenance concern.
   - Then refresh executive/technical synthesis wording using the new 9-seed meta-strict result as current bounded evidence.
 
+## Recent Work (2026-03-01, Researcher Loop Iteration 10)
+- Concrete next-best step executed (optional provenance hardening closure):
+  - Relaunched `high-dimensional-worldmodel-guidance-on-s55-r2` with the same matched ON config and fixed run identity:
+    - `run_id=p_guidance_matched_on_9seed_s55`, `seed=55`
+    - `--no-code-dataset`, `training_guidance=guided_blend`, `eval_policy_mode=model_only`
+    - matched domain-rand controls (`scale=0.20`, `profile=conservative`, warmup 0).
+  - Remote execution reached `KernelWorkerStatus.COMPLETE`; outputs/log downloaded to `tmp_kaggle_pull_guidance_on_s55_r2/`.
+  - Synced Kaggle seed55 artifacts locally:
+    - `results/baseline/p_guidance_matched_on_9seed_s55/baseline.json`
+    - `results/transfer/p_guidance_matched_on_9seed_s55/transfer.json`
+    - `results/robustness/p_guidance_matched_on_9seed_s55/robustness.json`
+  - SHA256 parity confirmed between downloaded and local seed55 baseline artifact.
+- Decisive evidence:
+  - `tmp_kaggle_pull_guidance_on_s55_r2/high-dimensional-worldmodel-guidance-on-s55-r2.log` includes:
+    - `Embedded project bundle present: True`
+    - `Using embedded offline project bundle fallback.`
+    - `Saved run summary: /kaggle/working/hyperdream_kaggle_summary.json`
+  - Mixed-provenance caveat from iteration 9 is resolved by Kaggle-synced seed55 replacement.
+- Regression validation details:
+  - Initial quick rebuild (`run_p0_baseline_freeze.py --skip-existing`) passed but rewrote summary metadata defaults.
+  - Meta-strict significance then failed with unexpected diff keys (`domain_rand`, `eval_policy_mode`).
+  - Recovery fix applied in the same iteration:
+    - reran `run_p0_baseline_freeze.py` with matched meta flags (`--domain-rand ... --training-guidance guided_blend --eval-policy-mode model_only ...`)
+    - reran significance report with meta-strict -> PASS.
+  - Current canonical report remains:
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+    - `meta_check.passed=true`, `unexpected_diff_keys=[]`, `significant_kpi_count=0`.
+- Next-direction lock (precise):
+  - Finalize closure artifacts wording (executive + technical) to explicitly state provenance-hardened 9-seed evidence and the bounded non-significant conclusion under meta-strict guard.
+

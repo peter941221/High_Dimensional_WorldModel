@@ -1094,3 +1094,38 @@ Iteration 5 recovery map
 - Residual risk:
   - Summary rebuild regenerated seed `55` locally due missing local files at refresh time; this creates mixed provenance unless seed55 is later replaced by a completed Kaggle artifact under identical settings.
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 10: s55-r2 Completed and Mixed-Provenance Resolved)
+- Mode: Kaggle-first provenance hardening.
+- Risk Tier: M
+- Validation actions (PASS unless noted):
+  - Relaunch + execution:
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s55-r2 --run-id p_guidance_matched_on_9seed_s55 --seed 55 --no-code-dataset --training-guidance guided_blend --guidance-blend-ratio 0.7 --policy-noise-std 0.1 --eval-policy-mode model_only --eval-guidance-blend-ratio 0.7 --skip-ablation --domain-rand --domain-rand-scale 0.20 --domain-rand-profile conservative --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 --domain-rand-source-multiplier 1.0 --domain-rand-finetune-multiplier 0.5 --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120 --eval-episodes 40 --max-steps 120 --watch-interval 30 --watch-timeout-minutes 240 --output-dir tmp_kaggle_pull_guidance_on_s55_r2 run` -> PASS (`KernelWorkerStatus.COMPLETE`).
+  - Embedded bootstrap confirmation:
+    - `rg -n "Embedded project bundle present|Using embedded offline project bundle fallback|Saved run summary" tmp_kaggle_pull_guidance_on_s55_r2/high-dimensional-worldmodel-guidance-on-s55-r2.log` -> PASS.
+  - Local sync:
+    - Synced Kaggle artifacts to `results/baseline|transfer|robustness/p_guidance_matched_on_9seed_s55/` -> PASS.
+    - SHA256 check (`downloaded baseline.json` vs `local baseline.json`) -> PASS (identical hash).
+  - Regression refresh:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing` -> PASS but rewrote summary meta defaults.
+    - `python experiments/significance_report.py ... --meta-check --meta-allow-diff training_guidance --meta-strict` -> FAIL (unexpected diff keys: `domain_rand`, `eval_policy_mode`).
+    - Fixed by rebuilding summary with matched meta flags (`--domain-rand ... --training-guidance guided_blend --eval-policy-mode model_only ...`) and rerunning significance -> PASS.
+- New evidence:
+  - `tmp_kaggle_pull_guidance_on_s55_r2/high-dimensional-worldmodel-guidance-on-s55-r2.log` includes:
+    - `Embedded project bundle present: True`
+    - `Using embedded offline project bundle fallback.`
+    - `Saved run summary: /kaggle/working/hyperdream_kaggle_summary.json`
+  - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`:
+    - seeds `[11,22,33,44,55,66,77,88,99]`
+    - matched meta restored: `training_guidance=guided_blend`, `eval_policy_mode=model_only`, `domain_rand=true`.
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`:
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - no KPI significant at `alpha=0.05`.
+- Interpretation lock:
+  - The mixed-provenance caveat from iteration 9 is resolved: seed55 ON artifacts are now Kaggle-completed and synchronized under matched settings.
+  - Main scientific conclusion is unchanged: with 9 paired seeds and meta-strict pass, ON-vs-OFF training guidance shows no significant KPI deltas at alpha 0.05.
+- Coverage:
+  - Completed optional hardening path end-to-end and revalidated the canonical 9-seed paired significance artifact.
+- Residual risk:
+  - Effect-size uncertainty remains (non-significance is not proof of exact equivalence); stronger claims would require larger `n` or equivalence-testing design.
+

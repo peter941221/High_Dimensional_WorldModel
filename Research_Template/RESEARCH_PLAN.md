@@ -646,3 +646,49 @@ Decision boundary map (locked)
   - Optional provenance hardening: relaunch/sync `s55-r2` to replace locally regenerated seed55 with Kaggle-produced artifacts under the same config.
   - Then freeze final closure narrative around the updated 9-seed matched ON/OFF result (`meta-strict passed`, no significant KPI deltas) and refresh executive/technical synthesis wording accordingly.
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 10: s55-r2 Provenance Hardening + Meta-Strict Revalidation)
+- Mode: Kaggle-first provenance hardening + local regression revalidation.
+- Risk Tier: M
+- Concrete step executed:
+  - Relaunched and completed `high-dimensional-worldmodel-guidance-on-s55-r2` under matched ON config:
+    - `run_id=p_guidance_matched_on_9seed_s55`, `seed=55`
+    - `--no-code-dataset`, `--training-guidance guided_blend`, `--eval-policy-mode model_only`
+    - matched domain-rand controls (`--domain-rand --domain-rand-scale 0.20 --domain-rand-profile conservative ...`).
+  - Downloaded outputs/logs to `tmp_kaggle_pull_guidance_on_s55_r2/`.
+  - Synced Kaggle seed55 outputs into local results:
+    - `results/baseline/p_guidance_matched_on_9seed_s55/baseline.json`
+    - `results/transfer/p_guidance_matched_on_9seed_s55/transfer.json`
+    - `results/robustness/p_guidance_matched_on_9seed_s55/robustness.json`
+  - Rebuilt ON 9-seed summary and reran meta-strict paired significance.
+- Validation actions/results:
+  - Dispatch/watch/output:
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s55-r2 ... run` -> PASS (`status=complete`, outputs downloaded).
+  - Runtime evidence checks:
+    - `rg -n "Embedded project bundle present|Using embedded offline project bundle fallback|Saved run summary" tmp_kaggle_pull_guidance_on_s55_r2/high-dimensional-worldmodel-guidance-on-s55-r2.log` -> PASS.
+  - Sync integrity:
+    - SHA256 parity check PASS between downloaded and local seed55 `baseline.json`.
+  - Summary/report regression:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing` -> PASS but caused meta defaults drift in summary metadata.
+    - `python experiments/significance_report.py ... --meta-strict` -> FAIL (`meta mismatch beyond allowed keys: domain_rand, eval_policy_mode`).
+    - Recovery: reran summary rebuild with matched meta flags (`--domain-rand ... --training-guidance guided_blend --eval-policy-mode model_only ...`) -> PASS.
+    - Re-ran significance meta-strict report -> PASS.
+- New decisive evidence:
+  - `tmp_kaggle_pull_guidance_on_s55_r2/high-dimensional-worldmodel-guidance-on-s55-r2.log` includes:
+    - `Embedded project bundle present: True`
+    - `Using embedded offline project bundle fallback.`
+    - `Saved run summary: /kaggle/working/hyperdream_kaggle_summary.json`
+  - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`:
+    - seeds remain `[11,22,33,44,55,66,77,88,99]` (`row_count=9`)
+    - meta restored to matched settings (`training_guidance=guided_blend`, `eval_policy_mode=model_only`, `domain_rand=true`).
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`:
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - `significant` KPI count = `0` at `alpha=0.05`.
+- Coverage:
+  - Covered the full optional hardening chain: relaunch -> complete -> output download -> local sync -> summary rebuild -> meta-strict significance revalidation.
+- Residual risk:
+  - Statistical conclusion remains unchanged (null at current alpha), and this iteration does not add additional sample size beyond `n=9`.
+  - Minor operational caution: `run_p0_baseline_freeze.py --skip-existing` can still alter summary metadata unless matched flags are provided explicitly.
+- Precise next direction:
+  - Freeze final closure narrative with provenance-hardened wording (seed55 now Kaggle-synced) and publish final executive + technical findings artifacts tied to the current 9-seed meta-strict report.
+
