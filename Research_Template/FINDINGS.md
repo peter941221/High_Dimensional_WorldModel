@@ -1129,3 +1129,20 @@ Iteration 5 recovery map
 - Residual risk:
   - Effect-size uncertainty remains (non-significance is not proof of exact equivalence); stronger claims would require larger `n` or equivalence-testing design.
 
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 11: Final Wording Freeze on Provenance-Hardened 9-Seed Artifact)
+- Mode: synthesis-only closure (no new training/execution).
+- Risk Tier: L
+- Validation PASS:
+  - Final memo wording aligned to matched-setting ON/OFF 9-seed meta-strict artifact.
+  - Bounded conclusion explicitly locked: no KPI significance at alpha `0.05` does not imply strict equivalence.
+  - Primary evidence pointers now include:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+- Locked interpretation:
+  - Under matched settings with meta-strict pass (`training_guidance` is the only allowed diff), training-time guidance ON vs OFF shows no statistically significant KPI deltas at `n=9`.
+  - This upgrades wording quality and provenance consistency, while keeping causal language conservative.
+- Residual risk:
+  - Non-significance remains bounded-null evidence; potential small effects cannot be excluded without equivalence-targeted design.
+- Next direction:
+  - Preserve frozen closure artifacts; only reopen this thread if a stakeholder explicitly requests equivalence-grade testing or increased paired sample size.

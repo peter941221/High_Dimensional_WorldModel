@@ -18,13 +18,13 @@ Status: Final
 | C3 | Guidance-aware policies improve checkpoint-fixed behavior vs model-only control. | `report/director_evidence_closure_final.json` (`mechanism_attribution.guidance_policy`) | Significant on easy/medium/hard for `model_only` vs `guided_blend`. | High (checkpoint-fixed scope) | Not equal to training-time causal proof. |
 | C4 | Robustness default `scale=0.20` is preferred to `0.25` in final paired test. | `report/kaggle_hifinal_hard020_vs_hard025_5seed_significance.json` | Flat paired outcomes, no gain from `0.25`; parsimony favors `0.20`. | High | Could shift in different tasks/budgets. |
 | C5 | Domain randomization alters medium/hard tradeoff; `hard_only@0.20` supports hard target. | `report/release_significance_p0_vs_p2v2_9seed.json`; `report/kaggle_next_hard002_vs_hard020_9seed_significance.json` | Mixed but significant direction-specific effects. | Medium-High | Scope sensitivity remains. |
-| C6 | Training-time guidance OFF vs ON causality is formally downgraded to inconclusive for this closure cycle. | `report/guidance_off_vs_on_5seed_significance_finallock.json`; `report/guidance_off_vs_on_causality_lock_final.json` | Key transfer KPIs at p=0.0625 (>0.05). | Medium | Requires >=9 paired seeds for decisive confirmation. |
+| C6 | Under matched settings, training-time guidance ON (`guided_blend`) vs OFF (`model_only`) shows no KPI significance at alpha 0.05. | `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`; `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` | `paired_exact_signflip`, `n=9`, `meta_check.passed=true`, only diff key `training_guidance`, significant KPI count = 0. | Medium-High (bounded null) | Non-significance is not equivalence; small effects may remain. |
 
 ## Causal Lock Decision
 
 - Path selected: `B`
-- Locked statement: training-time guidance causality is **inconclusive** at current sample power.
-- Bound: maintain operational default but avoid causal-overclaim language.
+- Locked statement: training-time guidance ON vs OFF under matched settings is **non-significant** across tested KPIs at alpha `0.05`.
+- Bound: maintain bounded-null language and avoid equivalence overclaim.
 
 ## Runtime Packaging
 
@@ -34,6 +34,6 @@ Status: Final
 
 ## Residual Risks
 
-1. Training-time guidance causality remains inconclusive under current 5-seed test.
+1. Non-significant matched 9-seed result does not prove strict equivalence.
 2. Dimension ranking remains non-decisive despite matched compute.
 3. External real-world transfer remains unvalidated (simulation-only evidence).

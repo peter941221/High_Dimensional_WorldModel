@@ -371,3 +371,21 @@ Last Compressed: 2026-03-01
 - Next-direction lock (precise):
   - Finalize closure artifacts wording (executive + technical) to explicitly state provenance-hardened 9-seed evidence and the bounded non-significant conclusion under meta-strict guard.
 
+
+## Recent Work (2026-03-01, Researcher Loop Iteration 11)
+- Concrete next-best step executed (final synthesis freeze):
+  - Updated `report/director_final_executive.md` to anchor guidance causality wording on the matched-setting, provenance-hardened 9-seed meta-strict artifact.
+  - Updated `report/director_final_technical.md` claim matrix (`C6`) and causal-lock/residual-risk wording to the same bounded non-significant conclusion.
+  - Added iteration-11 closure records to `Research_Template/RESEARCH_PLAN.md` and `Research_Template/FINDINGS.md`.
+- Validation/evidence lock:
+  - Canonical matched-setting evidence remains:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` with seeds `[11,22,33,44,55,66,77,88,99]`.
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json` with:
+      - `meta_check.passed=true`
+      - `unexpected_diff_keys=[]`
+      - only allowed diff key `training_guidance`
+      - significant KPI count `0` at alpha `0.05`.
+- Locked interpretation:
+  - Final closure wording is now provenance-consistent across executive and technical artifacts and explicitly bounded: non-significant result is not equivalence proof.
+- Next-direction lock (precise):
+  - Keep closure package frozen unless a new decision explicitly requests equivalence-focused protocol design (pre-registered margin + larger paired `n`).

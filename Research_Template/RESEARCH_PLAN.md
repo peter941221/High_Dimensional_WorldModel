@@ -692,3 +692,24 @@ Decision boundary map (locked)
 - Precise next direction:
   - Freeze final closure narrative with provenance-hardened wording (seed55 now Kaggle-synced) and publish final executive + technical findings artifacts tied to the current 9-seed meta-strict report.
 
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 11: Final Executive + Technical Wording Freeze)
+- Mode: synthesis-only closure wording freeze (no new experiment runs).
+- Risk Tier: L
+- Concrete step executed:
+  - Updated `report/director_final_executive.md` to align causality wording with the provenance-hardened matched-setting 9-seed artifact.
+  - Updated `report/director_final_technical.md` claim matrix and causal-lock text to use the same matched-setting 9-seed meta-strict conclusion.
+  - Locked bounded conclusion language: non-significant at alpha 0.05 is treated as bounded-null evidence, not equivalence.
+- Validation actions/results:
+  - Evidence artifact consistency check planned against:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+  - Expected lock conditions:
+    - seeds `[11,22,33,44,55,66,77,88,99]`
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - significant KPI count `0` at alpha `0.05`.
+- Residual risk:
+  - No additional sample-size increase in this iteration; inference remains bounded by current `n=9` power.
+- Precise next direction:
+  - Keep closure package in frozen state unless a new decision requires an equivalence-focused protocol (e.g., predefined equivalence margin + larger paired `n`).
