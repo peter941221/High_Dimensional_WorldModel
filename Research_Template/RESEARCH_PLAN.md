@@ -50,37 +50,94 @@
 - Risk: simulation-only scope.
   - Mitigation: mark external validity as out-of-scope in this closure.
 
-## Optional Path A (Guidance OFF vs ON): seed count + stop rule
+## Optional Path A (Training-time guidance causality): matched-setting guidance-only ON vs OFF
 
 Primary evidence context:
 - The 5-seed lock uses `paired_exact_signflip` (exact sign-flip permutation test on the mean delta) and lands at `p=0.0625` on key transfer KPIs in `report/guidance_off_vs_on_5seed_significance_finallock.json`.
 - Under this test, if all per-seed deltas share the same sign (non-zero), the two-sided p-value is `p = 2 / 2^n = 1 / 2^(n-1)`. This is why `n=5` yields `0.0625`.
+
+Important confound note (why matched settings are required for causality):
+- The existing OFF vs ON comparisons in this closure cycle (`p_guidance_off_*` vs `p2_v2_*`) are **pipeline comparisons**, not isolated guidance-only ablations.
+- Evidence: `results/p0_freeze/*/p0_summary.json` `meta` shows substantial non-guidance differences, e.g.:
+  - `p_guidance_off_5seed`: `domain_rand_scope=all`, `domain_rand_scale=0.20`, `robustness_domain_rand_difficulties=hard_only`, warmup `0`.
+  - `p2_v2_9seed`: `domain_rand_scope=robustness_only`, `domain_rand_scale=0.10`, `robustness_domain_rand_difficulties=medium_hard`, warmup `200 eps / 8 epochs`.
+- Therefore:
+  - It is valid as "end-to-end pipeline evidence" (useful operationally), but
+  - It is **not sufficient** to upgrade *training-time guidance causality* beyond "inconclusive".
 
 Seed planning (two-sided p):
 - Minimal threshold (direction must hold): `n=6` => `p = 1/2^(6-1) = 0.03125`.
 - "Decisive" planning: `n=9` => `p = 1/2^(9-1) = 0.00390625` if all 9 align.
 - Conservative (magnitude-agnostic) robustness to 1 discordant seed: `n=9`, 8/9 sign agreement => two-sided sign-test bound `p = 0.0390625`.
 
-Execution commands:
-- See `report/guidance_off_vs_on_causality_lock_final.json` `next_commands` for the canonical `p_guidance_off_9seed` rerun + `significance_report.py` invocation against `p2_v2_9seed`.
-- Note: `p2_v2_9seed` already exists under `results/p0_freeze/`; Optional Path A primarily requires producing the matching `p_guidance_off_9seed` summary (the runner can reuse any already-computed seed outputs).
+Matched-setting design (guidance-only ablation):
+- Hold fixed: all non-guidance settings (epochs, steps, eval episodes, domain-rand flags/scope/scale/profile/warmup, robustness difficulty scope, etc).
+- Hold fixed: inference-time action mode by forcing `--eval-policy-mode model_only` for **both** conditions (so evaluation does not re-introduce guidance blending).
+- Toggle only: `--training-guidance {model_only vs guided_blend}` (optionally add `guide_only` as a separate third condition, not mixed into ON/OFF).
 
-Update (2026-03-01): 7 paired seeds already available
-- Additional `p_guidance_off` seed runs were already present for `66` and `77` under:
-  - `results/baseline/p_guidance_off_5seed_s{seed}/baseline.json`
-  - `results/transfer/p_guidance_off_5seed_s{seed}/transfer.json`
-  - `results/robustness/p_guidance_off_5seed_s{seed}/robustness.json`
-- A 7-seed `p0_summary.json` was built *without retraining* via:
-  - `python experiments/build_p0_summary_from_runs.py --out-prefix p_guidance_off_7seed --source-run-prefix p_guidance_off_5seed --seeds 11 22 33 44 55 66 77 --meta-from-prefix p_guidance_off_5seed`
-- New paired significance vs existing `p2_v2_9seed`:
-  - `python experiments/significance_report.py --a-prefix p_guidance_off_7seed --b-prefix p2_v2_9seed --report-name guidance_off_vs_on_7seed_significance`
-  - Result: key transfer KPIs reach `p=0.015625` at `n=7` under `paired_exact_signflip` (see `report/guidance_off_vs_on_7seed_significance.json`).
-- Note: `robust_*` KPIs come from `experiments/run_robustness.py`'s heuristic policy and primarily reflect evaluation-domain-randomization settings, not trained-policy robustness.
+Matched-setting execution commands (recommended, `n=9` paired seeds):
+
+```bash
+# OFF (matched): training guidance disabled; eval policy fixed to model_only
+python experiments/run_p0_baseline_freeze.py \
+  --run-id-prefix p_guidance_matched_off_9seed \
+  --seeds 11 22 33 44 55 66 77 88 99 \
+  --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 \
+  --robustness-episodes 120 \
+  --training-guidance model_only --eval-policy-mode model_only \
+  --domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 \
+  --robustness-domain-rand-difficulties hard_only
+
+# ON (matched): ONLY toggle training-guidance; keep eval-policy-mode model_only
+python experiments/run_p0_baseline_freeze.py \
+  --run-id-prefix p_guidance_matched_on_9seed \
+  --seeds 11 22 33 44 55 66 77 88 99 \
+  --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 \
+  --robustness-episodes 120 \
+  --training-guidance guided_blend --eval-policy-mode model_only \
+  --domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 \
+  --robustness-domain-rand-difficulties hard_only
+
+# Paired significance report (training-time guidance causality candidate evidence)
+python experiments/significance_report.py \
+  --a-prefix p_guidance_matched_off_9seed \
+  --b-prefix p_guidance_matched_on_9seed \
+  --report-name guidance_train_matched_off_vs_on_9seed_significance
+```
+
+```text
+Optional Path A (matched-setting) flow
+
+[Choose fixed base config]  (domain-rand, scope/scale, epochs, eval-policy-mode=model_only)
+            |
+            v
+   +-------------------+     +-------------------+
+   |  Train OFF (n=9)  |     |  Train ON (n=9)   |
+   | guidance=model    |     | guidance=blend    |
+   +---------+---------+     +---------+---------+
+             \\                   //
+              \\                 //
+               v               v
+        [build p0_summary.json for both prefixes]
+                      |
+                      v
+         [experiments/significance_report.py]
+                      |
+                      v
+     {p<0.05 on transfer KPIs under matched settings?}
+            |                             |
+           Yes                            No
+            v                             v
+   Upgrade causal language         Keep "inconclusive" lock
+ (bounded + residual risks)        (still allow pipeline evidence)
+```
+
+Pipeline-only note (optional, not causal):
+- Extending `p_guidance_off_*` to 9 seeds and comparing against existing `p2_v2_9seed` can strengthen the *pipeline* claim, but **does not remove confounds** and should not upgrade training-time causality language.
 
 Stop rule (for upgrading beyond Path B):
-1. Run Optional Path A to reach `n=9` paired seeds under matched settings.
-2. Re-run `experiments/significance_report.py` between `p_guidance_off_9seed` and `p2_v2_9seed`.
+1. Run Optional Path A with **matched settings** to reach `n>=9` paired seeds.
+2. Re-run `experiments/significance_report.py` between `p_guidance_matched_off_9seed` and `p_guidance_matched_on_9seed`.
 3. Upgrade training-time guidance causality only if key transfer KPIs achieve `p < 0.05` without introducing a large regression on `robust_hard`; otherwise keep the "inconclusive" lock.
-
-Practical next step (if `n=9` is still desired for decisiveness):
-- Run the missing `p_guidance_off` seeds `88` and `99` with the same settings used in `p_guidance_off_5seed` seed runs (training-guidance=`model_only`, `--domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative --robustness-domain-rand-difficulties hard_only`), then rebuild a 9-seed summary and re-run significance.

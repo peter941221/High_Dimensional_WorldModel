@@ -70,6 +70,8 @@
 ## Iteration Progress (2026-03-01, researcher-only, iteration 1/2)
 - Added explicit seed-power math for `paired_exact_signflip` planning: all-aligned `p = 1/2^(n-1)`; `n=6 => 0.03125`, `n=9 => 0.00390625`. Conservative 1-discordant bound: `n=9`, 8/9 sign agreement => two-sided sign-test `p = 0.0390625`.
 - Documented Optional Path A stop rule + decision flow in `Research_Template/RESEARCH_PLAN.md` and `Research_Template/FINDINGS.md` without changing canonical closure artifacts.
+- Clarified that `p_guidance_off_*` vs `p2_v2_*` is pipeline-confounded (domain-rand scope/scale/difficulty differ), so upgrading *training-time guidance causality* requires a matched-setting guidance-only ON vs OFF ablation (hold `--eval-policy-mode model_only`, toggle `--training-guidance` only).
+- Validation PASS (maintenance-only): JSON load of canonical artifacts + `pytest -q` (50 passed; 1 warning).
 
 ## Iteration Progress (2026-03-01, researcher-only, iteration 2/2)
 - Found that `p_guidance_off` seed runs already existed for seeds `66` and `77` under `results/{baseline,transfer,robustness}/p_guidance_off_5seed_s{seed}`; regenerated missing robustness output for seed `77`.
