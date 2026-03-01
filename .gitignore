@@ -37,3 +37,7 @@ Thumbs.db
 kaggle_outputs/
 kaggle.json
 tmp_kaggle_*
+
+# Research loop runtime (local-only)
+Research_Template/runtime/
+tmp_*.log

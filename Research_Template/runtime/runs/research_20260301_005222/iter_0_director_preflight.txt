@@ -1,6 +1,0 @@
-﻿{
-  "plan_health": "needs_adjustment",
-  "summary_for_user": "Baseline evidence remains strong and reusable, but done criteria are still unmet: completed loop artifacts show dry-run-style evaluator outputs with quality_score capped at 0.75 and approved_final=false, and the latest run (research_20260301_005222) is still in director_preflight activity rather than final synthesis/signoff.",
-  "researcher_direction": "Execute closure in this sequence: (1) stabilize runtime state first (allow current run to finish/timeout, or stop PID 17904 only after confirming no forward progress, then clear active.lock only if process is dead); (2) run a non-dry local loop with enough iterations to complete synthesis, e.g. powershell -ExecutionPolicy Bypass -File .\\Research_Template\\scripts\\Research_native_loop.ps1 -TemplatePath .\\Research_Template\\RESEARCH_NATIVE_LOOP_TEMPLATE.json -RepoRoot . -PrdPath .\\Research_Template\\RESEARCH_GOALS.md -DevDocPath .\\Research_Template\\RESEARCH_PLAN.md -FindingsPath .\\Research_Template\\FINDINGS.md -MaxIterations 3; (3) produce one director-ready final package that explicitly closes matched-compute 4D/5D/6D/8D transfer ranking with significance, mechanism attribution (latent representation vs guidance vs domain randomization), and residual-risk decisions tied to done criteria.",
-  "approved_final": false
-}

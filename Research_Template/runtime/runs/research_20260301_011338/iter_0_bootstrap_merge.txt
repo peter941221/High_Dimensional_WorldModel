@@ -1,1 +1,0 @@
-﻿{"baseline_progress_pct":25,"reuse_candidates":[{"item":"prior findings draft","confidence":0.8}],"open_gaps":["source triangulation"],"next_direction":"validate and extend existing findings"}
