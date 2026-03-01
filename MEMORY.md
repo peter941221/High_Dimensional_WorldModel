@@ -78,4 +78,27 @@
   - human summary: `Research_Template/runtime/runs/<run_id>/iter_<n>_researcher.md`
 - Auto-commit each iteration is enabled; auto-push is enabled by default as of template v1.3.8.
 
+## Iteration 3/3 Durable Addendum (2026-03-01, Optional Path A Analysis-Only Closure)
+- Executive lock:
+  - Optional Path A remains evidence-bounded and non-decisive in this loop.
+  - Valid matched-setting overlap evidence uses seeds `[11, 22, 33]` only.
+  - Causality language remains `inconclusive` pending larger matched paired sample.
+- Technical lock:
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap3_significance.json` is the canonical interim matched-setting evidence for this loop:
+    - `meta_check.passed=true`
+    - allowed diff key only `training_guidance`
+    - no KPI significant at `n=3`
+  - Seed44 remains triaged as interrupted mid-baseline:
+    - missing `baseline.json`, `transfer.json`, `robustness.json`
+    - has `progress.json` (dim2 only) and `checkpoints/.../dim3_latest.pt`
+- Decision-boundary lock (defer vs resume):
+  - Default: keep deferral (analysis-only) while overlap size is `n<=4` and decisiveness is required.
+  - Minimal seed44 resume is allowed only for bookkeeping/recovery validation with explicit acknowledgment that `n=4` remains non-decisive (`p_min=0.125`).
+  - Decisive upgrade path requires matched OFF/ON scale-up to `n>=9` with meta-strict significance recheck.
+- Handoff next-direction lock:
+  - No long training by default after this loop.
+  - Triggered execution choices only:
+    - Choice A: seed44 minimal resume for completeness/recovery proof.
+    - Choice B: full matched `n>=9` run for causality decisiveness.
+
 Last Compressed: 2026-03-01

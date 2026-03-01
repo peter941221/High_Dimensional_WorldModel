@@ -286,3 +286,55 @@ Stop rule (for upgrading beyond Path B):
 1. Run Optional Path A with **matched settings** to reach `n>=9` paired seeds.
 2. Re-run `experiments/significance_report.py` between `p_guidance_matched_off_9seed` and `p_guidance_matched_on_9seed`.
 3. Upgrade training-time guidance causality only if key transfer KPIs achieve `p < 0.05` without introducing a large regression on `robust_hard`; otherwise keep the "inconclusive" lock.
+
+## Iteration 3/3 Closure Addendum (2026-03-01, analysis-only)
+
+Status:
+- Risk Tier: `L`
+- Loop progress: `3/3` complete
+- Long training launched in this iteration: `No`
+
+Final Optional Path A status for this loop:
+1. Matched-setting interim evidence is bounded to overlap seeds `[11, 22, 33]`.
+2. Meta-checked paired report is valid (`meta_check.passed=true`; allowed diff key only `training_guidance`) but non-significant at `n=3`.
+3. Seed `44` remains incomplete and is locked behind a cost/power gate; therefore no causality upgrade action is taken in this loop.
+
+Decision boundaries (locked):
+1. Keep deferral when all are true:
+   - Decisive causality is required at alpha `0.05`.
+   - Available overlap remains `n<=4` (sign-flip floor at `n=4`: `p_min=0.125`).
+   - No contradictory matched-setting primary evidence appears.
+2. Execute seed44 minimal resume (scheduled path) only when at least one is true:
+   - Reporting requires overlap4 bookkeeping completeness, or
+   - Resume-path operability must be validated operationally.
+   - Plus acceptance that resulting evidence remains non-decisive.
+3. Escalate to full execution only when decision demand is causal decisiveness now:
+   - Run matched OFF/ON to `n>=9`.
+   - Re-run `significance_report.py` with `--meta-check --meta-allow-diff training_guidance --meta-strict`.
+   - Reassess both transfer significance and robustness regression constraints.
+
+Next direction (post-loop precise handoff):
+- Preserve analysis-only deferral by default.
+- If triggered, execute either:
+  - minimal seed44 resume path for bookkeeping/recovery validation only, or
+  - full matched `n>=9` causal upgrade path for decisiveness.
+
+```text
+Decision boundary map (locked)
+
+[Current evidence: overlap3 only, n=3, non-significant]
+                      |
+                      v
+          {Need causal decisiveness now?}
+               |                 |
+              No                Yes
+               |                 |
+               v                 v
+ [Keep deferral + bounded language]   {Can run matched n>=9 now?}
+                                            |            |
+                                           No           Yes
+                                            |            |
+                                            v            v
+                       [Optional seed44 minimal resume]  [Run full matched path]
+                       [bookkeeping/recovery only]       [causal upgrade candidate]
+```

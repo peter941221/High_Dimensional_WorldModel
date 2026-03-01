@@ -629,3 +629,64 @@ Keep Path B        Run to 9 seeds (or matched-setting ablation)
 - Residual risk:
   - Active-run metadata may continue changing while lock ownership remains active.
   - Guidance OFF vs ON training-time causality is still inconclusive at 5 paired seeds (`p=0.0625`) and requires Optional Path A (>=9 paired seeds) only if stronger decisiveness is required.
+
+## Iteration Update (2026-03-01 Iteration 3/3 Optional Path A Analysis-Only Closure Addendum)
+- Mode: analysis-only closure (no training launched in this loop).
+- Risk Tier: L
+- Current phase: Optional Path A status lock and handoff boundary definition.
+- Total loop progress: `3/3` iterations complete.
+- Newly completed progress (this iteration):
+  - Finalized executive+technical Optional Path A addendum using overlap3 evidence plus seed44 triage gate.
+  - Locked explicit decision boundaries for when to keep deferral vs when to execute seed44 minimal resume.
+  - Finalized evidence narrative for this loop without changing canonical Path B closure.
+- Executive status (Optional Path A):
+  - Causality claim status remains **inconclusive**.
+  - Best available matched-setting evidence in this loop is overlap seeds `[11, 22, 33]` only.
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap3_significance.json` shows `meta_check.passed=true` with only `training_guidance` differing, but no KPI significance at `n=3`.
+- Technical status (Optional Path A):
+  - Intersection set used for valid KPI comparison is locked to `[11, 22, 33]` because seed `44` ON outputs remain incomplete (`baseline.json`, `transfer.json`, `robustness.json` missing).
+  - Seed44 triage remains classified as interruption/preemption mid-baseline (progress and checkpoint pattern), not a summary-build defect.
+  - Power gate remains binding: with paired exact sign-flip at `n=4`, best-case two-sided `p_min=0.125`, so executing seed44 alone cannot produce a decisive alpha `0.05` causality upgrade.
+- Decision boundary lock:
+  - Keep deferral if:
+    - Objective is decisiveness at alpha `0.05`, and expected sample size remains `n<=4`.
+    - No contradictory primary evidence appears in matched-setting artifacts.
+    - Compute budget is insufficient for a full matched-setting scale-up to `n>=9`.
+  - Execute seed44 minimal resume only if:
+    - A bookkeeping-complete overlap4 artifact is explicitly required for reporting completeness, or
+    - Pipeline recovery validation (resume path integrity) is explicitly required, and
+    - Stakeholders accept that `n=4` remains non-decisive by p-floor.
+  - Execute full causal upgrade path if:
+    - Decision demand explicitly requires stronger causality evidence now, then run matched OFF/ON to `n>=9` and re-evaluate with meta-strict guard.
+- Validation actions executed this iteration:
+  - `Get-Content results/analysis_guidance/guidance_train_matched_off_vs_on_overlap3_significance.json` -> PASS (`seeds=[11,22,33]`, `meta_check.passed=true`, no significant KPI rows).
+  - `Get-Content results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` -> PASS (`seeds=[11,22,33]`).
+  - `Test-Path` checks on seed44 outputs/checkpoint -> PASS (three expected result JSON files absent; `progress.json` and `dim3_latest.pt` present).
+  - `Get-Content results/baseline/p_guidance_matched_on_9seed_s44/progress.json` -> PASS (only `dim=2` committed).
+- Coverage:
+  - Confirms overlap3 matched-setting report integrity and allowed-diff meta guard.
+  - Confirms seed44 incompleteness boundary that constrains intersection-seed analysis.
+  - Confirms this iteration stayed analysis-only (no long training run started).
+- Residual risk:
+  - Causality remains underpowered/inconclusive until matched-setting paired scale-up (`n>=9`) is executed.
+  - Seed44 interruption root cause remains evidence-based inference without original stderr trace.
+
+```text
+Optional Path A closure gate (Iteration 3/3)
+
+[Overlap3 report available: n=3, meta_check=true, no KPI significant]
+                               |
+                               v
+                 [Need decisive causality now?]
+                      |                  |
+                     No                 Yes
+                      |                  |
+                      v                  v
+      [Keep deferral + lock language]   [Can fund n>=9 matched OFF/ON?]
+                                                 |              |
+                                                No             Yes
+                                                 |              |
+                                                 v              v
+                         [Optionally resume seed44 only for   [Run full matched
+                          bookkeeping/recovery validation]      n>=9 + meta-strict]
+```
