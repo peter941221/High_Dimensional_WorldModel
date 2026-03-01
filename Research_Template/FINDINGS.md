@@ -792,3 +792,55 @@ Optional Path A status after iteration 2
 - Residual risk:
   - CLI status polling/output download for the new kernel may be permission-gated (`403`) despite successful push/listing.
   - Causal decisiveness remains pending completion of ON seeds `55..99` and meta-strict paired report refresh.
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 4: Kaggle A2 Multi-Seed Dispatch)
+- Mode: execution progression (Kaggle-first, no local retrain).
+- Risk Tier: M
+- Validation actions (PASS unless noted):
+  - Matched ON dispatch for remaining seeds:
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s66 ... prepare` -> PASS
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s66 ... push` -> PASS
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s77 ... prepare` -> PASS
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s77 ... push` -> PASS
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s88 ... prepare` -> PASS
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s88 ... push` -> PASS
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s99 ... prepare` -> PASS
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s99 ... push` -> PASS
+  - Visibility/status checks:
+    - `kaggle kernels list --mine --page-size 100` -> PASS (contains `...guidance-on-s55/s66/s77/s88/s99`).
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s99 status` -> PASS (`status=running`).
+- Evidence updates:
+  - New dispatched kernels:
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s66`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s77`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s88`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s99`
+  - A2 ON dispatch set is now complete for missing seeds (`55/66/77/88/99`).
+  - Prior status-blocker observation (`403` on `s55`) is no longer universal; at least one new slug (`s99`) reports `running` via manager status.
+- Interpretation:
+  - The experiment execution queue for matched ON scale-up is now fully dispatched on Kaggle.
+  - This iteration still does not change statistical conclusions because no new result artifacts were synchronized locally yet.
+- Coverage:
+  - Covers remote launch evidence for all remaining ON seeds required by the current direction.
+  - Confirms orchestration pathway is operational end-to-end for dispatch and at least one live status probe.
+- Residual risk:
+  - Local paired significance remains overlap-limited until Kaggle outputs are downloaded and merged.
+  - Kaggle CLI output retrieval may still vary by run state/permissions; completion checks remain required before synthesis refresh.
+
+```text
+Iteration 4 flow (A2 dispatch completion)
+
+[Matched ON seeds pending: 66/77/88/99]
+                 |
+                 v
+[Prepare + Push each seed on Kaggle]
+                 |
+                 v
+[Kernels visible in --mine list]
+                 |
+                 v
+[Status probe: s99 = running]
+                 |
+                 v
+[Next: sync outputs locally -> rebuild ON summary -> meta-strict 9-seed significance]
+```

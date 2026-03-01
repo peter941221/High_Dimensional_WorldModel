@@ -426,3 +426,38 @@ Decision boundary map (locked)
   - Dispatch ON seeds `66/77/88/99` with the same matched config via Kaggle slugs `high-dimensional-worldmodel-guidance-on-s{seed}`.
   - After outputs land locally, rebuild `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` and run:
     - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 4: A2 Kaggle Dispatch Seeds 66/77/88/99)
+- Mode: remote execution dispatch (A2 matched-setting scale-up progression).
+- Risk Tier: M
+- Concrete step executed:
+  - Dispatched all remaining matched ON seeds to Kaggle with the same strict settings used for seed55:
+    - `seed=66` -> `peter941221/high-dimensional-worldmodel-guidance-on-s66`
+    - `seed=77` -> `peter941221/high-dimensional-worldmodel-guidance-on-s77`
+    - `seed=88` -> `peter941221/high-dimensional-worldmodel-guidance-on-s88`
+    - `seed=99` -> `peter941221/high-dimensional-worldmodel-guidance-on-s99`
+  - Configuration lock preserved across all pushes:
+    - `training_guidance=guided_blend`
+    - `eval_policy_mode=model_only`
+    - matched domain-rand controls (`scale=0.20`, `profile=conservative`, warmup=0)
+    - transfer multipliers (`scratch=1.0`, `source=1.0`, `finetune=0.5`)
+    - `skip_ablation=true`
+- Validation actions executed:
+  - For each seed in `{66,77,88,99}`:
+    - `python kaggle_job_manager.py ... prepare` -> PASS
+    - `python kaggle_job_manager.py ... push` -> PASS
+  - Listing validation:
+    - `kaggle kernels list --mine --page-size 100` -> PASS (shows `...-s55/-s66/-s77/-s88/-s99`)
+  - Status probe:
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s99 status` -> PASS (`status=running`)
+- Coverage:
+  - Completed all planned A2 ON-seed Kaggle dispatch actions (`55/66/77/88/99`).
+  - Confirms remote execution has started for at least one newly dispatched seed (`s99` running).
+- Residual risk:
+  - No new local output artifacts ingested this iteration; paired significance remains unchanged locally.
+  - Completion timing and output retrieval still depend on Kaggle runtime queue/execution lifecycle.
+- Precise next direction:
+  - Poll and download outputs for ON seeds `55/66/77/88/99` as they complete.
+  - Once outputs are synchronized locally, rebuild ON summary and run:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 --robustness-episodes 120 --training-guidance guided_blend --eval-policy-mode model_only --domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 --robustness-domain-rand-difficulties hard_only`
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`

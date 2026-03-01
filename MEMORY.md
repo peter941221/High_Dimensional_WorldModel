@@ -175,3 +175,28 @@ Last Compressed: 2026-03-01
 - Next-direction lock (precise):
   - Dispatch ON seeds `66/77/88/99` with the same matched config on Kaggle.
   - After outputs sync locally, rebuild ON summary and run meta-strict paired significance for `guidance_train_matched_off_vs_on_9seed_significance`.
+
+## Recent Work (2026-03-01, Researcher Loop Iteration 4)
+- Concrete A2 dispatch completion executed (Kaggle-first):
+  - Dispatched all remaining matched ON seeds with strict matched settings:
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s66`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s77`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s88`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s99`
+  - Matched config lock kept identical to seed55:
+    - `training_guidance=guided_blend`
+    - `eval_policy_mode=model_only`
+    - domain-rand matched controls (`scale=0.20`, `profile=conservative`, warmup=`0`)
+    - transfer rand multipliers (`scratch=1.0`, `source=1.0`, `finetune=0.5`)
+    - `skip_ablation=true`
+- Validation evidence:
+  - For each seed `66/77/88/99`, both `prepare` and `push` passed via `kaggle_job_manager.py`.
+  - `kaggle kernels list --mine --page-size 100` confirms presence of ON kernels `s55/s66/s77/s88/s99`.
+  - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s99 status` now returns `status=running` (previous 403 state is not universal).
+- Locked interpretation:
+  - A2 remote dispatch set for missing ON seeds is complete.
+  - No new local significance evidence yet; claim language remains unchanged until output sync + meta-strict rerun.
+- Next-direction lock (precise):
+  - Poll/download outputs for `s55/s66/s77/s88/s99`.
+  - After synchronization, rebuild `p_guidance_matched_on_9seed` summary and run:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
