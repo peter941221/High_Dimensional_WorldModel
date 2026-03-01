@@ -140,6 +140,16 @@ Smoke2 execution status (2026-03-01, iteration 2/3):
   - `meta_check.passed=true` with only allowed diff key `training_guidance`.
   - KPI deltas are not significant at `n=2` (all `p=1.0` under `paired_exact_signflip`), as expected for a wiring smoke test.
 
+Overlap3 interim status (2026-03-01, iteration 1/3):
+- Objective: use existing partial `p_guidance_matched_on_9seed` artifacts to compute a meta-checked paired report on overlap seeds only (no new training).
+- Built ON overlap summary (no-train rebuild; `--skip-existing`) for seeds `11 22 33`:
+  - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+- Interim paired significance report (overlap seeds only via `significance_report.py` intersection logic):
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap3_significance.json`
+  - `meta_check.passed=true` with allowed diff key `training_guidance`.
+  - Result: no KPI significant at `n=3` (power-limited).
+- Note: seed `44` remains incomplete (baseline has `progress.json` + checkpoints but no `baseline.json`; no transfer/robustness), so it is excluded from the overlap set.
+
 Matched-setting execution commands (recommended, `n=9` paired seeds):
 
 ```bash

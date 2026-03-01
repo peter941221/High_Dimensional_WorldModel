@@ -50,12 +50,16 @@
   - OFF: `results/p0_freeze/p_guidance_matched_off_smoke2/p0_summary.json`
   - ON: `results/p0_freeze/p_guidance_matched_on_smoke2/p0_summary.json`
   - Meta-strict paired report written under `results/analysis_smoke/` (git-ignored); meta_check.passed=true.
+- Optional Path A overlap3 interim (analysis-only; no training):
+  - Built ON overlap p0 summary (seeds `11 22 33`): `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+  - Meta-strict paired report vs OFF 9seed: `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap3_significance.json`
+    - meta_check.passed=true (allowed diff key: `training_guidance` only)
+    - `n=3`; no KPI significant (power-limited)
 - Scale-up attempt status:
   - OFF n=9 complete: `results/p0_freeze/p_guidance_matched_off_9seed/p0_summary.json`
-  - ON n=9 incomplete:
-    - baseline: seeds `11 22 33 44` present under `results/baseline/`
-    - transfer+robustness: seeds `11 22 33` present under `results/{transfer,robustness}/`
-    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` not yet present
+  - ON partial (not n=9):
+    - baseline: seeds `11 22 33` complete; seed `44` incomplete (`results/baseline/p_guidance_matched_on_9seed_s44/progress.json` only; checkpoints under `checkpoints/baseline/p_guidance_matched_on_9seed_s44/`)
+    - transfer+robustness: seeds `11 22 33` complete; seed `44` missing
   - Resume command (same matched settings; toggle only training-guidance):
     - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing ...`
 
@@ -67,4 +71,3 @@
 - Auto-commit each iteration is enabled; auto-push is enabled by default as of template v1.3.8.
 
 Last Compressed: 2026-03-01
-

@@ -73,6 +73,36 @@
 - Next direction (for iteration 3/3):
   - If training-time guidance causality decisiveness is required: run matched OFF vs ON at `n>=9` paired seeds using the `p_guidance_matched_*_9seed` commands in `Research_Template/RESEARCH_PLAN.md`, then enforce `--meta-check --meta-allow-diff training_guidance --meta-strict` before interpreting p-values.
 
+## Iteration Update (2026-03-01 Iteration 1/3 Optional Path A Overlap3 Interim Significance)
+- Mode: analysis-only (no training executed; reuse existing per-seed artifacts).
+- Risk Tier: L
+- Validation PASS:
+  - Built ON overlap summary with `--skip-existing` (seeds `[11, 22, 33]`):
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+  - Meta-strict paired significance report vs OFF 9seed executed and passed meta-check:
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap3_significance.json`
+    - `meta_check.passed=true` with only allowed diff key `training_guidance`.
+  - Regression: `pytest -q` (`50 passed, 1 warning`).
+- Overlap seeds used:
+  - Included: `[11, 22, 33]`
+  - Excluded: `44` (baseline incomplete: missing `results/baseline/p_guidance_matched_on_9seed_s44/baseline.json`; no transfer/robustness outputs).
+- Interim outcomes (A=`p_guidance_matched_off_9seed` vs B=`p_guidance_matched_on_9seed`, `n=3`, alpha=0.05):
+  - No KPI is significant (power-limited).
+  - Summary table (Δ = B-A):
+
+| KPI | Δ (B-A) | p-value |
+| --- | ---: | ---: |
+| baseline_success_dim3 | -0.00833 | 1.0000 |
+| baseline_success_dim4 | 0.00000 | 1.0000 |
+| transfer_success_mean | +0.00417 | 0.5000 |
+| transfer_gain_mean | -0.00417 | 1.0000 |
+| robust_easy | 0.00000 | 1.0000 |
+| robust_medium | 0.00000 | 1.0000 |
+| robust_hard | 0.00000 | 1.0000 |
+
+- Residual risk / interpretation:
+  - This does not upgrade training-time guidance causality beyond "inconclusive"; completing matched-setting ON runs to `n>=9` paired seeds remains the recommended decisive path if causality is required.
+
 ## Key Findings
 1. `scale=0.20` remains preferred over `0.25` under final paired evidence (no measurable gain from `0.25`).
 2. Matched-compute ranking remains `4D ~= 5D > 6D ~= 8D`, with no pairwise significance at alpha 0.05.
