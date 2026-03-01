@@ -121,6 +121,38 @@ def parse_args():
     parser.add_argument("--domain-rand-scratch-multiplier", type=float, default=1.0)
     parser.add_argument("--domain-rand-source-multiplier", type=float, default=1.0)
     parser.add_argument("--domain-rand-finetune-multiplier", type=float, default=0.5)
+    parser.add_argument(
+        "--training-guidance",
+        type=str,
+        default="guided_blend",
+        choices=["model_only", "guided_blend", "guide_only"],
+        help="Guidance mode used during training rollouts and BC targets.",
+    )
+    parser.add_argument(
+        "--guidance-blend-ratio",
+        type=float,
+        default=0.7,
+        help="Guide action weight when training-guidance=guided_blend.",
+    )
+    parser.add_argument(
+        "--policy-noise-std",
+        type=float,
+        default=0.10,
+        help="Exploration noise std during training rollouts.",
+    )
+    parser.add_argument(
+        "--eval-policy-mode",
+        type=str,
+        default="guided_blend",
+        choices=["model_only", "guided_blend", "guide_only"],
+        help="Evaluation action mode for baseline/transfer scripts.",
+    )
+    parser.add_argument(
+        "--eval-guidance-blend-ratio",
+        type=float,
+        default=0.7,
+        help="Guide action weight when eval-policy-mode=guided_blend.",
+    )
     return parser.parse_args()
 
 
@@ -154,6 +186,16 @@ def run():
                 str(args.baseline_heartbeat_every),
                 "--seed",
                 str(seed),
+                "--training-guidance",
+                args.training_guidance,
+                "--guidance-blend-ratio",
+                str(args.guidance_blend_ratio),
+                "--policy-noise-std",
+                str(args.policy_noise_std),
+                "--eval-policy-mode",
+                args.eval_policy_mode,
+                "--eval-guidance-blend-ratio",
+                str(args.eval_guidance_blend_ratio),
             ]
             + (
                 [
@@ -192,6 +234,16 @@ def run():
                 str(args.transfer_heartbeat_every),
                 "--seed",
                 str(seed),
+                "--training-guidance",
+                args.training_guidance,
+                "--guidance-blend-ratio",
+                str(args.guidance_blend_ratio),
+                "--policy-noise-std",
+                str(args.policy_noise_std),
+                "--eval-policy-mode",
+                args.eval_policy_mode,
+                "--eval-guidance-blend-ratio",
+                str(args.eval_guidance_blend_ratio),
             ]
             + (
                 [
@@ -321,6 +373,11 @@ def run():
             "domain_rand_scratch_multiplier": args.domain_rand_scratch_multiplier,
             "domain_rand_source_multiplier": args.domain_rand_source_multiplier,
             "domain_rand_finetune_multiplier": args.domain_rand_finetune_multiplier,
+            "training_guidance": args.training_guidance,
+            "guidance_blend_ratio": args.guidance_blend_ratio,
+            "policy_noise_std": args.policy_noise_std,
+            "eval_policy_mode": args.eval_policy_mode,
+            "eval_guidance_blend_ratio": args.eval_guidance_blend_ratio,
         },
     }
 

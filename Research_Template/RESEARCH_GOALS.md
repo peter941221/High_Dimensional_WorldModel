@@ -23,6 +23,9 @@
 1. Demonstrate reproducible positive transfer evidence from >3D pretraining to 3D in paired multi-seed analysis.
 2. Reach a stable recommended robustness default backed by significance or consistent directional evidence.
 3. Produce complete decision artifacts (summary JSON/Markdown + runbook commands) for independent reruns.
+4. Complete director signoff package with `quality_score >= 0.95`, including both:
+   - Executive artifact: concise decision memo for non-technical stakeholders.
+   - Technical artifact: claim-to-evidence matrix with residual risk and rerun commands.
 
 ## Constraints
 - Time: Prioritize incremental loop iterations with frequent checkpoints; avoid long runs without intermediate evidence.

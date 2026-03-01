@@ -24,7 +24,18 @@ from models.policy import PolicyNetwork
 from training.buffer import ReplayBuffer
 from training.dream_trainer import DreamTrainer
 
-def evaluate_policy(env: PushBallNDEnv, policy: PolicyNetwork, episodes: int = 20) -> float:
+def evaluate_policy(
+    env: PushBallNDEnv,
+    policy: PolicyNetwork,
+    episodes: int = 20,
+    eval_policy_mode: str = "guided_blend",
+    eval_guidance_blend_ratio: float = 0.7,
+) -> float:
+    if eval_policy_mode not in {"model_only", "guided_blend", "guide_only"}:
+        raise ValueError("eval_policy_mode must be one of: model_only, guided_blend, guide_only")
+    if not (0.0 <= float(eval_guidance_blend_ratio) <= 1.0):
+        raise ValueError("eval_guidance_blend_ratio must be within [0, 1]")
+
     successes = 0
     for ep in range(episodes):
         state = env.reset(seed=1000 + ep)
@@ -34,7 +45,15 @@ def evaluate_policy(env: PushBallNDEnv, policy: PolicyNetwork, episodes: int = 2
             with torch.no_grad():
                 s = torch.as_tensor(state, dtype=torch.float32)
                 action_model = policy(s.unsqueeze(0)).squeeze(0)
-                action = (0.3 * action_model + 0.7 * guided_push_action(s, env.dim)).clamp(-1, 1)
+                action_guide = guided_push_action(s, env.dim)
+                if eval_policy_mode == "model_only":
+                    action = action_model
+                elif eval_policy_mode == "guide_only":
+                    action = action_guide
+                else:
+                    blend = float(eval_guidance_blend_ratio)
+                    action = (1.0 - blend) * action_model + blend * action_guide
+                action = action.clamp(-1, 1)
             state, _, done, info = env.step(action)
         successes += int(info["success"])
     return successes / episodes
@@ -82,6 +101,38 @@ def parse_args():
         default=0,
         help="Linear warmup epochs for effective randomization scale.",
     )
+    parser.add_argument(
+        "--training-guidance",
+        type=str,
+        default="guided_blend",
+        choices=["model_only", "guided_blend", "guide_only"],
+        help="Guidance mode used during policy data collection and BC targets.",
+    )
+    parser.add_argument(
+        "--guidance-blend-ratio",
+        type=float,
+        default=0.7,
+        help="Guide action weight when training-guidance=guided_blend.",
+    )
+    parser.add_argument(
+        "--policy-noise-std",
+        type=float,
+        default=0.10,
+        help="Exploration noise std for non-random rollout actions during training.",
+    )
+    parser.add_argument(
+        "--eval-policy-mode",
+        type=str,
+        default="guided_blend",
+        choices=["model_only", "guided_blend", "guide_only"],
+        help="Evaluation action mode.",
+    )
+    parser.add_argument(
+        "--eval-guidance-blend-ratio",
+        type=float,
+        default=0.7,
+        help="Guide action weight when eval-policy-mode=guided_blend.",
+    )
     return parser.parse_args()
 
 
@@ -119,6 +170,9 @@ def run():
             world_model=world_model,
             policy=policy,
             buffer=ReplayBuffer(capacity=30_000),
+            training_guidance_mode=args.training_guidance,
+            guidance_blend_ratio=args.guidance_blend_ratio,
+            policy_noise_std=args.policy_noise_std,
         )
 
         dim_ckpt = checkpoint_dir / f"dim{dim}_latest.pt"
@@ -162,7 +216,13 @@ def run():
 
         if args.domain_rand:
             env.set_domain_rand_training_epoch(max(trainer.train_epochs, 1))
-        success_rate = evaluate_policy(env, policy, episodes=args.eval_episodes)
+        success_rate = evaluate_policy(
+            env,
+            policy,
+            episodes=args.eval_episodes,
+            eval_policy_mode=args.eval_policy_mode,
+            eval_guidance_blend_ratio=args.eval_guidance_blend_ratio,
+        )
         result = {
             "dim": dim,
             "success_rate": success_rate,
@@ -183,6 +243,11 @@ def run():
             "domain_rand_profile": args.domain_rand_profile,
             "domain_rand_warmup_episodes": args.domain_rand_warmup_episodes,
             "domain_rand_warmup_epochs": args.domain_rand_warmup_epochs,
+            "training_guidance": args.training_guidance,
+            "guidance_blend_ratio": args.guidance_blend_ratio,
+            "policy_noise_std": args.policy_noise_std,
+            "eval_policy_mode": args.eval_policy_mode,
+            "eval_guidance_blend_ratio": args.eval_guidance_blend_ratio,
         }
         save_json(progress_path, progress)
         print(f"[baseline] dim={dim} success_rate={success_rate:.3f}")

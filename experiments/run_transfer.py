@@ -25,7 +25,18 @@ from training.buffer import ReplayBuffer
 from training.dream_trainer import DreamTrainer
 from training.transfer import DimensionTransfer
 
-def evaluate(env: PushBallNDEnv, policy: PolicyNetwork, episodes: int = 20) -> float:
+def evaluate(
+    env: PushBallNDEnv,
+    policy: PolicyNetwork,
+    episodes: int = 20,
+    eval_policy_mode: str = "guided_blend",
+    eval_guidance_blend_ratio: float = 0.7,
+) -> float:
+    if eval_policy_mode not in {"model_only", "guided_blend", "guide_only"}:
+        raise ValueError("eval_policy_mode must be one of: model_only, guided_blend, guide_only")
+    if not (0.0 <= float(eval_guidance_blend_ratio) <= 1.0):
+        raise ValueError("eval_guidance_blend_ratio must be within [0, 1]")
+
     success = 0
     for ep in range(episodes):
         state = env.reset(seed=ep + 500)
@@ -35,7 +46,15 @@ def evaluate(env: PushBallNDEnv, policy: PolicyNetwork, episodes: int = 20) -> f
             with torch.no_grad():
                 s = torch.as_tensor(state, dtype=torch.float32)
                 model_action = policy(s.unsqueeze(0)).squeeze(0)
-                action = (0.3 * model_action + 0.7 * guided_push_action(s, env.dim)).clamp(-1, 1)
+                guide_action = guided_push_action(s, env.dim)
+                if eval_policy_mode == "model_only":
+                    action = model_action
+                elif eval_policy_mode == "guide_only":
+                    action = guide_action
+                else:
+                    blend = float(eval_guidance_blend_ratio)
+                    action = (1.0 - blend) * model_action + blend * guide_action
+                action = action.clamp(-1, 1)
             state, _, done, info = env.step(action)
         success += int(info["success"])
     return success / episodes
@@ -102,6 +121,38 @@ def parse_args():
         default=0.5,
         help="Stage multiplier for transfer finetune randomization.",
     )
+    parser.add_argument(
+        "--training-guidance",
+        type=str,
+        default="guided_blend",
+        choices=["model_only", "guided_blend", "guide_only"],
+        help="Guidance mode used during policy data collection and BC targets.",
+    )
+    parser.add_argument(
+        "--guidance-blend-ratio",
+        type=float,
+        default=0.7,
+        help="Guide action weight when training-guidance=guided_blend.",
+    )
+    parser.add_argument(
+        "--policy-noise-std",
+        type=float,
+        default=0.10,
+        help="Exploration noise std for non-random rollout actions during training.",
+    )
+    parser.add_argument(
+        "--eval-policy-mode",
+        type=str,
+        default="guided_blend",
+        choices=["model_only", "guided_blend", "guide_only"],
+        help="Evaluation action mode.",
+    )
+    parser.add_argument(
+        "--eval-guidance-blend-ratio",
+        type=float,
+        default=0.7,
+        help="Guide action weight when eval-policy-mode=guided_blend.",
+    )
     return parser.parse_args()
 
 
@@ -113,6 +164,9 @@ def make_trainer(
     domain_rand_profile: str,
     domain_rand_warmup_episodes: int,
     domain_rand_warmup_epochs: int,
+    training_guidance: str,
+    guidance_blend_ratio: float,
+    policy_noise_std: float,
 ):
     env = PushBallNDEnv(
         dim=dim,
@@ -126,7 +180,15 @@ def make_trainer(
     )
     wm = GRUWorldModel(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
     policy = PolicyNetwork(state_dim=env.state_dim, action_dim=env.action_dim, hidden_dim=128)
-    trainer = DreamTrainer(env=env, world_model=wm, policy=policy, buffer=ReplayBuffer(capacity=30_000))
+    trainer = DreamTrainer(
+        env=env,
+        world_model=wm,
+        policy=policy,
+        buffer=ReplayBuffer(capacity=30_000),
+        training_guidance_mode=training_guidance,
+        guidance_blend_ratio=guidance_blend_ratio,
+        policy_noise_std=policy_noise_std,
+    )
     return env, wm, policy, trainer
 
 
@@ -162,6 +224,9 @@ def run():
         domain_rand_profile=args.domain_rand_profile,
         domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
         domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
+        training_guidance=args.training_guidance,
+        guidance_blend_ratio=args.guidance_blend_ratio,
+        policy_noise_std=args.policy_noise_std,
     )
     scratch_env.set_domain_rand_stage_multiplier(args.domain_rand_scratch_multiplier)
     scratch_ckpt = checkpoint_dir / f"scratch_dim{target_dim}.pt"
@@ -195,7 +260,13 @@ def run():
     if args.domain_rand:
         scratch_env.set_domain_rand_training_epoch(max(scratch_trainer.train_epochs, 1))
         scratch_env.set_domain_rand_stage_multiplier(args.domain_rand_scratch_multiplier)
-    baseline_success = evaluate(scratch_env, scratch_policy, episodes=args.eval_episodes)
+    baseline_success = evaluate(
+        scratch_env,
+        scratch_policy,
+        episodes=args.eval_episodes,
+        eval_policy_mode=args.eval_policy_mode,
+        eval_guidance_blend_ratio=args.eval_guidance_blend_ratio,
+    )
 
     for src_dim in source_dims:
         src_env, src_wm, _, src_trainer = make_trainer(
@@ -206,6 +277,9 @@ def run():
             domain_rand_profile=args.domain_rand_profile,
             domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
             domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
+            training_guidance=args.training_guidance,
+            guidance_blend_ratio=args.guidance_blend_ratio,
+            policy_noise_std=args.policy_noise_std,
         )
         src_env.set_domain_rand_stage_multiplier(args.domain_rand_source_multiplier)
         src_ckpt = checkpoint_dir / f"source_dim{src_dim}.pt"
@@ -245,6 +319,9 @@ def run():
             domain_rand_profile=args.domain_rand_profile,
             domain_rand_warmup_episodes=args.domain_rand_warmup_episodes,
             domain_rand_warmup_epochs=args.domain_rand_warmup_epochs,
+            training_guidance=args.training_guidance,
+            guidance_blend_ratio=args.guidance_blend_ratio,
+            policy_noise_std=args.policy_noise_std,
         )
         tgt_env.set_domain_rand_stage_multiplier(args.domain_rand_finetune_multiplier)
         tgt_ckpt = checkpoint_dir / f"transfer_{src_dim}_to_{target_dim}.pt"
@@ -291,7 +368,13 @@ def run():
         if args.domain_rand:
             tgt_env.set_domain_rand_training_epoch(max(tgt_trainer.train_epochs, 1))
             tgt_env.set_domain_rand_stage_multiplier(args.domain_rand_finetune_multiplier)
-        transfer_success = evaluate(tgt_env, tgt_policy, episodes=args.eval_episodes)
+        transfer_success = evaluate(
+            tgt_env,
+            tgt_policy,
+            episodes=args.eval_episodes,
+            eval_policy_mode=args.eval_policy_mode,
+            eval_guidance_blend_ratio=args.eval_guidance_blend_ratio,
+        )
         results_by_src[src_dim] = {
             "source_dim": src_dim,
             "target_dim": target_dim,
@@ -319,6 +402,11 @@ def run():
             "domain_rand_scratch_multiplier": args.domain_rand_scratch_multiplier,
             "domain_rand_source_multiplier": args.domain_rand_source_multiplier,
             "domain_rand_finetune_multiplier": args.domain_rand_finetune_multiplier,
+            "training_guidance": args.training_guidance,
+            "guidance_blend_ratio": args.guidance_blend_ratio,
+            "policy_noise_std": args.policy_noise_std,
+            "eval_policy_mode": args.eval_policy_mode,
+            "eval_guidance_blend_ratio": args.eval_guidance_blend_ratio,
         }
         save_json(progress_path, progress)
         print(f"[transfer] {src_dim}D -> {target_dim}D success={transfer_success:.3f}")

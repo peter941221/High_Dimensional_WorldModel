@@ -37,6 +37,9 @@ class DreamTrainer:
         device: str = "cpu",
         gamma: float = 0.99,
         actor_bc_coef: float = 0.05,
+        training_guidance_mode: str = "guided_blend",
+        guidance_blend_ratio: float = 0.7,
+        policy_noise_std: float = 0.10,
     ):
         self.env = env
         self.world_model = world_model.to(device)
@@ -45,6 +48,18 @@ class DreamTrainer:
         self.device = device
         self.gamma = float(gamma)
         self.actor_bc_coef = float(actor_bc_coef)
+        self.training_guidance_mode = str(training_guidance_mode)
+        self.guidance_blend_ratio = float(guidance_blend_ratio)
+        self.policy_noise_std = float(policy_noise_std)
+
+        if self.training_guidance_mode not in {"model_only", "guided_blend", "guide_only"}:
+            raise ValueError(
+                "training_guidance_mode must be one of: model_only, guided_blend, guide_only"
+            )
+        if not (0.0 <= self.guidance_blend_ratio <= 1.0):
+            raise ValueError("guidance_blend_ratio must be within [0, 1]")
+        if self.policy_noise_std < 0.0:
+            raise ValueError("policy_noise_std must be >= 0")
 
         self.value_model = value_model or ValueNetwork(state_dim=env.state_dim, hidden_dim=256)
         self.value_model = self.value_model.to(device)
@@ -83,7 +98,16 @@ class DreamTrainer:
                 with torch.no_grad():
                     model_action = self.policy(state_t.unsqueeze(0)).squeeze(0).cpu()
                 guide_action = guided_push_action(state_t, self.env.action_dim)
-                action = (0.3 * model_action + 0.7 * guide_action + 0.10 * torch.randn_like(model_action)).clamp(-1, 1)
+                if self.training_guidance_mode == "model_only":
+                    action = model_action
+                elif self.training_guidance_mode == "guide_only":
+                    action = guide_action
+                else:
+                    blend = self.guidance_blend_ratio
+                    action = (1.0 - blend) * model_action + blend * guide_action
+                if self.policy_noise_std > 0.0:
+                    action = action + self.policy_noise_std * torch.randn_like(model_action)
+                action = action.clamp(-1, 1)
 
             if action.shape != (self.env.action_dim,):
                 raise ValueError(
@@ -172,6 +196,9 @@ class DreamTrainer:
         return total / max(steps, 1)
 
     def _heuristic_targets(self, states: torch.Tensor) -> torch.Tensor:
+        if self.training_guidance_mode == "model_only":
+            with torch.no_grad():
+                return self.policy(states)
         return guided_push_action_batch(states, self.env.action_dim)
 
     def _soft_update_target_value(self, tau: float = 0.02):
@@ -282,6 +309,9 @@ class DreamTrainer:
                 "actor_bc_coef": self.actor_bc_coef,
                 "train_epochs": self.train_epochs,
                 "gradient_steps": self.gradient_steps,
+                "training_guidance_mode": self.training_guidance_mode,
+                "guidance_blend_ratio": self.guidance_blend_ratio,
+                "policy_noise_std": self.policy_noise_std,
             },
             "env": {
                 "state_dim": int(self.env.state_dim),
@@ -350,6 +380,13 @@ class DreamTrainer:
         self.actor_bc_coef = float(trainer_meta.get("actor_bc_coef", self.actor_bc_coef))
         self.train_epochs = int(trainer_meta.get("train_epochs", 0))
         self.gradient_steps = int(trainer_meta.get("gradient_steps", 0))
+        self.training_guidance_mode = str(
+            trainer_meta.get("training_guidance_mode", self.training_guidance_mode)
+        )
+        self.guidance_blend_ratio = float(
+            trainer_meta.get("guidance_blend_ratio", self.guidance_blend_ratio)
+        )
+        self.policy_noise_std = float(trainer_meta.get("policy_noise_std", self.policy_noise_std))
 
         if load_rng and "rng" in ckpt:
             rng = ckpt["rng"]
