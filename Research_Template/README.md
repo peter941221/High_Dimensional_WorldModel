@@ -31,6 +31,15 @@ run research loop
 powershell -ExecutionPolicy Bypass -File .\Research_Template\scripts\Research_native_loop.ps1
 ```
 
+## Portability Notes
+- The script now auto-detects the correct workspace root from the template path when current shell directory is different.
+- The script validates that required docs exist before execution:
+  - `Research_Template/RESEARCH_GOALS.md`
+  - `Research_Template/RESEARCH_PLAN.md`
+  - `Research_Template/FINDINGS.md`
+- For real completion target (`quality_score >= 0.95`), do not use `-DryRun`.
+- `-MaxIterations 1` is useful for smoke checks only; use higher value (or default unlimited) for completion runs.
+
 If `Research_Template` is not present in a workspace, AI should prompt you to place/copy this folder first before loop execution.
 
 ## Runtime Visibility and Tracing

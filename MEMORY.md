@@ -945,3 +945,16 @@
   - `latest_run.txt` now points to local workspace run path and `active.lock` is cleared.
 - Next recommended continuation command (non-dry):
   - `powershell -ExecutionPolicy Bypass -File .\Research_Template\scripts\Research_native_loop.ps1 -TemplatePath .\Research_Template\RESEARCH_NATIVE_LOOP_TEMPLATE.json -RepoRoot . -PrdPath .\Research_Template\RESEARCH_GOALS.md -DevDocPath .\Research_Template\RESEARCH_PLAN.md -FindingsPath .\Research_Template\FINDINGS.md -MaxIterations 3`
+
+## 2026-03-01 08:27:10 - Research template portability hardening
+- Fixed loop portability issues in `Research_Template/scripts/Research_native_loop.ps1`:
+  - default doc paths now target `Research_Template/*.md`.
+  - added auto repo-root detection from `TemplatePath` to prevent wrong cwd writes.
+  - added strict required-doc resolution/validation with template fallback.
+  - added dry-run safety cap: when `-DryRun` and no positive max iteration is set, auto set to 1 to avoid infinite dry-run loop.
+- Updated `Research_Template/README.md` with portability notes and usage expectations (`DryRun` vs real completion).
+- Validation executed:
+  - Dry-run from project root (relative template path): PASS.
+  - Dry-run from external cwd `C:\` (absolute script/template path): PASS.
+  - Cross-project portability smoke using copied bundle under `C:\AI Projects\Fun Stuff\Template_Portability_Smoke_20260301_1`: PASS.
+  - Confirmed generated state/final-report paths correctly bind to target workspace root and no active lock remains after run.

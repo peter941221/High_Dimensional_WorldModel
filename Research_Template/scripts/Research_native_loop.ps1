@@ -5,9 +5,9 @@ param(
   [string]$RepoRoot = ".",
   [string]$RiskTier,
   [int]$MaxIterations = 0,
-  [Alias("GoalsPath")][string]$PrdPath = ".\RESEARCH_GOALS.md",
-  [Alias("PlanPath")][string]$DevDocPath = ".\RESEARCH_PLAN.md",
-  [string]$FindingsPath = ".\FINDINGS.md",
+  [Alias("GoalsPath")][string]$PrdPath = ".\Research_Template\RESEARCH_GOALS.md",
+  [Alias("PlanPath")][string]$DevDocPath = ".\Research_Template\RESEARCH_PLAN.md",
+  [string]$FindingsPath = ".\Research_Template\FINDINGS.md",
   [string]$ProblemLink = "",
   [switch]$DryRun,
   [switch]$NoLiveOutput
@@ -21,6 +21,44 @@ function Resolve-PathSafe {
   if ([System.IO.Path]::IsPathRooted($PathSpec)) { return [System.IO.Path]::GetFullPath($PathSpec) }
   $normalized = $PathSpec -replace '^[.][/\\]', ''
   return [System.IO.Path]::GetFullPath((Join-Path $Base $normalized))
+}
+
+function Resolve-DocPath {
+  param(
+    [string]$RepoRoot,
+    [string]$TemplateDir,
+    [string]$PathSpec,
+    [string]$FallbackLeaf
+  )
+
+  $candidates = New-Object System.Collections.ArrayList
+
+  if (-not [string]::IsNullOrWhiteSpace($PathSpec)) {
+    if ([System.IO.Path]::IsPathRooted($PathSpec)) {
+      [void]$candidates.Add([System.IO.Path]::GetFullPath($PathSpec))
+    } else {
+      $normalized = $PathSpec -replace '^[.][/\\]', ''
+      [void]$candidates.Add([System.IO.Path]::GetFullPath((Join-Path $RepoRoot $normalized)))
+      [void]$candidates.Add([System.IO.Path]::GetFullPath((Join-Path $TemplateDir $normalized)))
+    }
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($FallbackLeaf)) {
+    [void]$candidates.Add([System.IO.Path]::GetFullPath((Join-Path $TemplateDir $FallbackLeaf)))
+  }
+
+  $seen = @{}
+  foreach ($candidate in @($candidates.ToArray())) {
+    if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+    if ($seen.ContainsKey($candidate)) { continue }
+    $seen[$candidate] = $true
+    if (Test-Path $candidate) { return $candidate }
+  }
+
+  if ($candidates.Count -gt 0) {
+    return [string]$candidates[0]
+  }
+  return ""
 }
 
 function Save-Json {
@@ -455,10 +493,41 @@ if (-not [bool]$template.official_commands_only) {
   throw "Template must enforce official_commands_only=true"
 }
 
-$resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
+$templateDir = Split-Path -Parent $templateFullPath
+$templateRepoRootCandidate = Split-Path -Parent $templateDir
+$requestedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
+
+# Portability guard: when launched from another cwd, prefer the repo root that actually contains this template.
+$resolvedRepoRoot = $requestedRepoRoot
+$expectedTemplateUnderRepo = [System.IO.Path]::GetFullPath((Join-Path $resolvedRepoRoot "Research_Template"))
+$sameTemplateLocation = $false
+if (Test-Path $expectedTemplateUnderRepo) {
+  $sameTemplateLocation = ($expectedTemplateUnderRepo -eq [System.IO.Path]::GetFullPath($templateDir))
+}
+if (-not $sameTemplateLocation) {
+  $resolvedRepoRoot = $templateRepoRootCandidate
+}
 if (-not (Test-Path $resolvedRepoRoot)) {
   throw "RepoRoot does not exist: $resolvedRepoRoot"
 }
+
+$resolvedGoalsPath = Resolve-DocPath -RepoRoot $resolvedRepoRoot -TemplateDir $templateDir -PathSpec $PrdPath -FallbackLeaf "RESEARCH_GOALS.md"
+$resolvedPlanPath = Resolve-DocPath -RepoRoot $resolvedRepoRoot -TemplateDir $templateDir -PathSpec $DevDocPath -FallbackLeaf "RESEARCH_PLAN.md"
+$resolvedFindingsPath = Resolve-DocPath -RepoRoot $resolvedRepoRoot -TemplateDir $templateDir -PathSpec $FindingsPath -FallbackLeaf "FINDINGS.md"
+
+if (-not (Test-Path $resolvedGoalsPath)) {
+  throw "Goals document not found. Checked path: $resolvedGoalsPath"
+}
+if (-not (Test-Path $resolvedPlanPath)) {
+  throw "Plan document not found. Checked path: $resolvedPlanPath"
+}
+if (-not (Test-Path $resolvedFindingsPath)) {
+  throw "Findings document not found. Checked path: $resolvedFindingsPath"
+}
+
+$PrdPath = $resolvedGoalsPath
+$DevDocPath = $resolvedPlanPath
+$FindingsPath = $resolvedFindingsPath
 
 $templateTaskDefault = [string]$template.inputs.task
 $templateDoneCriteriaDefault = [string]$template.inputs.done_criteria
@@ -489,6 +558,11 @@ $effectiveLiveOutput = (-not $NoLiveOutput) -and $templateLiveOutput
 $effectiveRiskTier = if ($RiskTier) { $RiskTier } else { [string]$template.inputs.risk_tier }
 $templateMaxIterations = [int]$template.inputs.max_iterations
 $effectiveMaxIterations = if ($MaxIterations -gt 0) { $MaxIterations } elseif ($templateMaxIterations -gt 0) { $templateMaxIterations } else { 0 }
+# Dry-run uses synthetic evaluator/director outputs and cannot satisfy final gate,
+# so auto-cap to one iteration unless caller explicitly sets a positive max.
+if ($DryRun -and $effectiveMaxIterations -le 0) {
+  $effectiveMaxIterations = 1
+}
 $maxIterationsLabel = if ($effectiveMaxIterations -gt 0) { [string]$effectiveMaxIterations } else { "unlimited" }
 $nestedExecArgs = @()
 if ($null -ne $nestedExecCfg) {
