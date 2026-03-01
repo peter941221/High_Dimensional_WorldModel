@@ -389,3 +389,19 @@ Last Compressed: 2026-03-01
   - Final closure wording is now provenance-consistent across executive and technical artifacts and explicitly bounded: non-significant result is not equivalence proof.
 - Next-direction lock (precise):
   - Keep closure package frozen unless a new decision explicitly requests equivalence-focused protocol design (pre-registered margin + larger paired `n`).
+
+## Recent Work (2026-03-01, Researcher Loop Iteration 12)
+- Concrete next-best step executed (freeze integrity checkpoint):
+  - Revalidated canonical frozen evidence artifacts with no reruns:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+  - Confirmed lock conditions persist:
+    - seeds `[11,22,33,44,55,66,77,88,99]`
+    - matched meta (`training_guidance=guided_blend`, `eval_policy_mode=model_only`, `domain_rand=true`)
+    - `meta_check.passed=true`, `unexpected_diff_keys=[]`, significant KPI count `0` at alpha `0.05`
+- Validation gate:
+  - Non-code minimum viable validation executed and passed (artifact integrity + clean git state).
+- Locked interpretation:
+  - Closure package remains frozen and internally consistent with bounded non-significant conclusion.
+- Next-direction lock (precise):
+  - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired `n`).

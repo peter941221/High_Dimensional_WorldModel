@@ -1146,3 +1146,17 @@ Iteration 5 recovery map
   - Non-significance remains bounded-null evidence; potential small effects cannot be excluded without equivalence-targeted design.
 - Next direction:
   - Preserve frozen closure artifacts; only reopen this thread if a stakeholder explicitly requests equivalence-grade testing or increased paired sample size.
+
+## Iteration 12 - Closure-Freeze Integrity Revalidation (2026-03-01)
+- Risk Tier: L
+- Scope: freeze-preserving evidence integrity check (no new Kaggle/local experiment runs).
+- Executed checks:
+  - Verified `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` seeds remain `[11,22,33,44,55,66,77,88,99]` with matched meta (`training_guidance=guided_blend`, `eval_policy_mode=model_only`, `domain_rand=true`).
+  - Verified `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json` still reports `meta_check.passed=true`, `unexpected_diff_keys=[]`, and significant KPI count `0` at `alpha=0.05`.
+  - Verified clean git state during checkpoint (`git status --short` returned empty).
+- Result:
+  - Frozen closure evidence remains valid and reproducible for final executive + technical narrative.
+- Residual risk:
+  - Statistical power bound unchanged (`n=9` paired); interpretation remains bounded non-significant, not equivalence.
+- Next direction:
+  - Keep closure frozen; reopen only for explicit equivalence-protocol request (predefined margin + larger paired sample).

@@ -713,3 +713,30 @@ Decision boundary map (locked)
   - No additional sample-size increase in this iteration; inference remains bounded by current `n=9` power.
 - Precise next direction:
   - Keep closure package in frozen state unless a new decision requires an equivalence-focused protocol (e.g., predefined equivalence margin + larger paired `n`).
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 12: Closure-Freeze Integrity Revalidation)
+- Mode: freeze-preserving integrity checkpoint (no new execution).
+- Risk Tier: L
+- Concrete next-best step executed:
+  - Revalidated canonical frozen evidence artifacts without changing experiment outputs:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`
+  - Confirmed repository working tree clean before/after doc updates (`git status --short`).
+- Validation actions/results:
+  - `python -c "...p0_summary..."` -> PASS:
+    - seeds `[11,22,33,44,55,66,77,88,99]`
+    - `meta.training_guidance=guided_blend`
+    - `meta.eval_policy_mode=model_only`
+    - `meta.domain_rand=true`
+  - `python -c "...significance..."` -> PASS:
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - significant KPI count `0` at alpha `0.05`
+  - Process gate (non-code MVC check): PASS.
+- Locked interpretation:
+  - Closure package remains internally consistent with bounded null conclusion under matched settings.
+  - No new evidence generation was required; this iteration strictly confirms freeze integrity.
+- Residual risk:
+  - Current inference remains power-limited by paired `n=9`; non-significance is not an equivalence proof.
+- Precise next direction:
+  - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired `n`).
