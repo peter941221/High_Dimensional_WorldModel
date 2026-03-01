@@ -131,6 +131,15 @@ Preflight status (2026-03-01, iteration 1/3):
 - Meta-check guard verified on known-confounded pipeline comparison (`p_guidance_off_7seed` vs `p2_v2_9seed`): `meta_check.passed=false` with unexpected diffs in domain-rand and eval settings.
   - Evidence (local, git-ignored): `results/analysis_smoke/meta_check_confounded_p_guidance_off_7seed_vs_p2_v2_9seed.json`.
 
+Smoke2 execution status (2026-03-01, iteration 2/3):
+- Non-dry matched-setting smoke2 executed for both prefixes (seeds `11 22`):
+  - OFF: `results/p0_freeze/p_guidance_matched_off_smoke2/p0_summary.json`
+  - ON: `results/p0_freeze/p_guidance_matched_on_smoke2/p0_summary.json`
+- Meta-strict paired report executed and passed:
+  - Evidence (local, git-ignored): `results/analysis_smoke/guidance_train_matched_off_vs_on_smoke2_significance.json`
+  - `meta_check.passed=true` with only allowed diff key `training_guidance`.
+  - KPI deltas are not significant at `n=2` (all `p=1.0` under `paired_exact_signflip`), as expected for a wiring smoke test.
+
 Matched-setting execution commands (recommended, `n=9` paired seeds):
 
 ```bash
@@ -161,6 +170,7 @@ python experiments/significance_report.py \
   --a-prefix p_guidance_matched_off_9seed \
   --b-prefix p_guidance_matched_on_9seed \
   --report-name guidance_train_matched_off_vs_on_9seed_significance \
+  --out-dir results/analysis_guidance \
   --meta-check --meta-allow-diff training_guidance --meta-strict
 ```
 

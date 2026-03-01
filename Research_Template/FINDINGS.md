@@ -55,6 +55,24 @@
 - Next direction (for iteration 2/3):
   - If causality decisiveness is requested: run the non-dry 2-seed smoke for both prefixes and then enforce `--meta-check --meta-allow-diff training_guidance --meta-strict` before scaling to `n>=9`.
 
+## Iteration Update (2026-03-01 Iteration 2/3 Optional Path A Smoke2 Execution)
+- Mode: matched-setting execution (non-dry smoke2) to validate wiring + meta-guard readiness; canonical closure remains unchanged.
+- Risk Tier: M
+- Validation PASS:
+  - Non-dry matched OFF/ON smoke2 executed (seeds `11 22`) and summary artifacts produced:
+    - `results/p0_freeze/p_guidance_matched_off_smoke2/p0_summary.json`
+    - `results/p0_freeze/p_guidance_matched_on_smoke2/p0_summary.json`
+  - Meta-strict paired significance report executed:
+    - `results/analysis_smoke/guidance_train_matched_off_vs_on_smoke2_significance.json`
+    - `meta_check.passed=true` with only allowed diff key `training_guidance`.
+- Smoke2 outcomes (paired exact sign-flip; `n=2`):
+  - No KPI reaches significance (all `p=1.0`).
+  - Key deltas (OFF -> ON): `transfer_success_mean=-0.0020833`, `transfer_gain_mean=-0.0020833`, `robust_hard=0.0`.
+- Residual risk:
+  - This smoke test is intentionally underpowered; use it only to validate matched pipelines + meta guard. Decisive causality still requires `n>=9` paired seeds under matched settings.
+- Next direction (for iteration 3/3):
+  - If training-time guidance causality decisiveness is required: run matched OFF vs ON at `n>=9` paired seeds using the `p_guidance_matched_*_9seed` commands in `Research_Template/RESEARCH_PLAN.md`, then enforce `--meta-check --meta-allow-diff training_guidance --meta-strict` before interpreting p-values.
+
 ## Key Findings
 1. `scale=0.20` remains preferred over `0.25` under final paired evidence (no measurable gain from `0.25`).
 2. Matched-compute ranking remains `4D ~= 5D > 6D ~= 8D`, with no pairwise significance at alpha 0.05.

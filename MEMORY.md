@@ -92,4 +92,15 @@
 - Meta-check guardrail validated on known-confounded pipeline comparison (`p_guidance_off_7seed` vs `p2_v2_9seed`): `meta_check.passed=false` with unexpected diffs in domain-rand and eval settings, confirming confound detection.
 - Next direction: keep canonical closure frozen; if training-time guidance causality is needed, run non-dry 2-seed matched smoke then enforce `--meta-check --meta-allow-diff training_guidance --meta-strict` before scaling to `n>=9` paired seeds.
 
+## Iteration Progress (2026-03-01, researcher-only, iteration 2/3)
+- Optional Path A smoke2 (non-dry) executed for matched OFF vs ON (seeds `11 22`) using `experiments/run_p0_baseline_freeze.py` with identical settings except `--training-guidance` (`model_only` vs `guided_blend`) and fixed `--eval-policy-mode model_only`.
+- Summary artifacts produced:
+  - OFF: `results/p0_freeze/p_guidance_matched_off_smoke2/p0_summary.json`
+  - ON: `results/p0_freeze/p_guidance_matched_on_smoke2/p0_summary.json`
+- Meta-strict paired report executed (writes to git-ignored `results/analysis_smoke/`):
+  - `results/analysis_smoke/guidance_train_matched_off_vs_on_smoke2_significance.json`
+  - `meta_check.passed=true` with only allowed diff key `training_guidance`.
+- Smoke2 outcomes are non-significant (all `p=1.0` at `n=2`) and should be treated as wiring validation only; decisive causal language still requires `n>=9` paired seeds under matched settings.
+- Canonical closure remains frozen (no changes to `report/` final artifacts and no edits under `Research_Template/runtime/`).
+
 Last Compressed: 2026-03-01
