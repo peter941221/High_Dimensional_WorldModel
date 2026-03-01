@@ -209,6 +209,25 @@ function Is-ProcessAlive {
   }
 }
 
+function Get-ProcessCommandLine {
+  param([int]$PidValue)
+  if ($PidValue -le 0) { return "" }
+  try {
+    $proc = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $PidValue) -ErrorAction Stop
+    if ($null -eq $proc) { return "" }
+    return [string]$proc.CommandLine
+  } catch {
+    return ""
+  }
+}
+
+function Is-ResearchLoopProcess {
+  param([int]$PidValue)
+  $cmd = Get-ProcessCommandLine -PidValue $PidValue
+  if ([string]::IsNullOrWhiteSpace($cmd)) { return $false }
+  return ($cmd -match "Research_native_loop\.ps1")
+}
+
 function Acquire-RunLock {
   param(
     [string]$LockFile,
@@ -216,18 +235,32 @@ function Acquire-RunLock {
   )
   if (Test-Path $LockFile) {
     $existing = $null
+    $removeStaleLock = $false
     try {
       $existing = Get-Content -Path $LockFile -Raw | ConvertFrom-Json
     } catch {
       $existing = $null
+      $removeStaleLock = $true
     }
 
     if ($null -ne $existing) {
       $existingPid = if ($existing.PSObject.Properties.Name -contains "pid") { [int]$existing.pid } else { -1 }
       if (Is-ProcessAlive -PidValue $existingPid) {
         $existingRunId = if ($existing.PSObject.Properties.Name -contains "run_id") { [string]$existing.run_id } else { "unknown" }
-        throw "Another loop run is active (run_id=$existingRunId, pid=$existingPid). Wait for it to finish or remove stale lock: $LockFile"
+        if (Is-ResearchLoopProcess -PidValue $existingPid) {
+          throw "Another loop run is active (run_id=$existingRunId, pid=$existingPid). Wait for it to finish or remove stale lock: $LockFile"
+        }
+        $removeStaleLock = $true
+        Write-Host ("[lock] Cleared stale lock with reused pid={0} (not Research_native_loop.ps1)." -f $existingPid) -ForegroundColor DarkYellow
+      } else {
+        $removeStaleLock = $true
       }
+    } else {
+      Write-Host "[lock] Cleared unreadable stale lock file before acquiring new lock." -ForegroundColor DarkYellow
+    }
+
+    if ($removeStaleLock) {
+      Remove-Item -Path $LockFile -Force -ErrorAction SilentlyContinue
     }
   }
 
@@ -235,6 +268,7 @@ function Acquire-RunLock {
     run_id = $RunId
     pid = $PID
     started_at = (Get-Date).ToString("s")
+    command_line = (Get-ProcessCommandLine -PidValue $PID)
   }
   $lock | ConvertTo-Json -Depth 4 | Set-Content -Path $LockFile -Encoding UTF8
 }
@@ -655,7 +689,8 @@ $effectiveLiveOutput = (-not $NoLiveOutput) -and $templateLiveOutput
 
 $effectiveRiskTier = if ($RiskTier) { $RiskTier } else { [string]$template.inputs.risk_tier }
 $templateMaxIterations = [int]$template.inputs.max_iterations
-$effectiveMaxIterations = if ($MaxIterations -gt 0) { $MaxIterations } elseif ($templateMaxIterations -gt 0) { $templateMaxIterations } else { 0 }
+$hasExplicitMaxIterations = $PSBoundParameters.ContainsKey("MaxIterations")
+$effectiveMaxIterations = if ($hasExplicitMaxIterations) { [int]$MaxIterations } elseif ($templateMaxIterations -gt 0) { $templateMaxIterations } else { 0 }
 # Dry-run uses synthetic evaluator/director outputs and cannot satisfy final gate,
 # so auto-cap to one iteration unless caller explicitly sets a positive max.
 if ($DryRun -and $effectiveMaxIterations -le 0) {

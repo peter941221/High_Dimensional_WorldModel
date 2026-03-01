@@ -1286,3 +1286,37 @@ eport/director_final_technical.md
   - real run `research_20260301_115446` showed `context_packet` markers and continued streaming through researcher/evaluator (no transition freeze).
 - Cleanup:
   - stopped internal validation run and removed active lock.
+
+## 2026-03-01 12:23:00 - Runtime hygiene addendum B (active run 121956)
+- Executed a non-blocking runtime hygiene verification while preserving the approved baseline package.
+- Verified `Research_Template/runtime/active.lock` is live (`run_id=research_20260301_121956`, `pid=9240`) and process is running.
+- Verified `Research_Template/runtime/latest_run.txt` points to active run ownership, while root `Research_Template/runtime/state.json` and `runtime/final_report.md` remain approved baseline (`director_approved_final=true`, `quality_score=0.96`, `progress_pct=100`).
+- Verified active run state is `running` at iteration 1 and bootstrap artifact exists (`iter_0_bootstrap_merge.txt` present).
+- Updated `Research_Template/FINDINGS.md` with maintenance addendum documenting commands, PASS results, coverage, and residual risk.
+- No lock mutation or conclusion changes performed.
+
+## 2026-03-01 12:26:17 - Iteration 2 canonical-integrity maintenance checkpoint
+- Executed non-blocking runtime hygiene verification while preserving approved Path B closure conclusions.
+- Confirmed active lock liveness: run_id=research_20260301_121956, pid=9240, process alive.
+- Confirmed active run state remains maintenance-in-flight (status=running, current_iteration=2), with no lock mutation performed.
+- Confirmed no materially new primary-source evidence appeared in `report/` after closure packaging window; escalation to a new full loop not triggered.
+- Captured SHA256 integrity fingerprints for canonical artifacts (`runtime/state.json`, `runtime/final_report.md`, `director_final_executive.md`, `director_final_technical.md`, `director_evidence_closure_final.json`, `guidance_off_vs_on_causality_lock_final.json`) and logged details in `Research_Template/FINDINGS.md`.
+- Residual risk unchanged: guidance OFF vs ON causality remains inconclusive until Optional Path A (>=9 paired seeds).
+
+## 2026-03-01 12:28:00 - Iteration 3 pointer/state normalization hygiene checkpoint
+- Performed a non-blocking maintenance check on active run `research_20260301_121956` while preserving canonical closure artifacts.
+- Verified `active.lock` ownership remains live (`pid=9240`) and `latest_run.txt` uses absolute-path representation that normalizes to the same run ID.
+- Verified active run runtime divergence: `runs/.../state.json` still shows gate fields `quality_score=0` and `progress_pct=0`, while `context_snapshot.json` goals state remains `quality_score=0.97`, `progress_pct=100` for this thread.
+- Reconfirmed root canonical baseline is unchanged (`director_approved_final=true`, `quality_score=0.96`, `progress_pct=100`) and canonical artifact SHA256 hashes remain identical to prior checkpoint.
+- Logged additive details to `Research_Template/FINDINGS.md`; no new primary-source evidence and no conclusion changes.
+## 2026-03-01 12:47:44 - Loop exit hardening + run audit (Memory/Kaggle)
+- Hardened `Research_Template/scripts/Research_native_loop.ps1` lock acquisition: stale/corrupt/reused-PID `active.lock` is auto-cleared, while true live `Research_native_loop.ps1` processes still block concurrent starts.
+- Hardened `Research_Template/start_research.bat` preflight: when a live loop already exists, starter now opens `monitor_research.bat` instead of failing; stale lock is auto-cleared before launch.
+- Audited latest run `research_20260301_123541`: this was a dry run (`dry_run_output` trace) with `max_iterations=1`, so it exited by cap and did not represent real research execution.
+- Audited real run `research_20260301_121956`: `MEMORY.md` was updated, but one section had malformed tokens; corrected those lines for canonical readability.
+- Kaggle execution audit for run `research_20260301_121956`: no new Kaggle experiment commands were executed in-loop; artifacts referenced prior Kaggle reports and existing outputs only.
+## 2026-03-01 12:50:47 - Validation pass for lock/start hardening
+- Validation PASS: Research_native_loop.ps1 -DryRun -MaxIterations 1 completed (run_id=research_20260301_124850).
+- Validation PASS: start_research.bat -DryRun -MaxIterations 1 completed with new preflight messaging (run_id=research_20260301_124900).
+- Validation PASS: stale-lock simulation via fake active.lock (pid=4) was auto-cleared by starter and loop script (run_id=research_20260301_124934 and run_id=research_20260301_125035).
+- Validation PASS: start_research.bat -DryRun showed default unlimited launcher mode (-MaxIterations 0), while dry-run internally auto-capped to 1 by design (run_id=research_20260301_124945).
