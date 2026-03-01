@@ -150,6 +150,74 @@ Overlap3 interim status (2026-03-01, iteration 1/3):
   - Result: no KPI significant at `n=3` (power-limited).
 - Note: seed `44` remains incomplete (baseline has `progress.json` + checkpoints but no `baseline.json`; no transfer/robustness), so it is excluded from the overlap set.
 
+Seed44 triage + decision status (2026-03-01, iteration 2/3, analysis-only):
+- Why `baseline.json` is missing:
+  - `progress.json` has only `dim=2` committed.
+  - Baseline checkpoints include `dim3_latest.pt` with extra epoch metadata (`epoch=2`), indicating the run advanced into `dim=3`.
+  - `experiments/run_baseline.py` writes `progress.json` per-dim, but writes `baseline.json` only after the full dims loop completes.
+  - Conclusion: seed `44` baseline was interrupted/preempted mid-run (not a summary script bug).
+- Cost/power gate:
+  - Test method is `paired_exact_signflip`; for overlap `n=4`, minimum two-sided p-value is `0.125`, so significance at alpha `0.05` is impossible even in best-case sign alignment.
+  - Resume is feasible, but not cheap enough to be decisive in this loop (baseline resume still leaves most baseline epochs plus full transfer/robustness for seed `44`).
+- Decision for this 3-iteration loop:
+  - Keep analysis-only posture and defer long training.
+  - Defer seed `44` execution to a scheduled minimal resume plan (for bookkeeping/interim `n=4`, not for decisive causality).
+
+Minimal resume plan for seed `44` (scheduled; not executed here):
+
+```bash
+# 1) Resume baseline from existing checkpoints
+python experiments/run_baseline.py \
+  --run-id p_guidance_matched_on_9seed_s44 \
+  --resume \
+  --epochs 8 --max-steps 120 --eval-episodes 40 --heartbeat-every 1 \
+  --seed 44 \
+  --training-guidance guided_blend --guidance-blend-ratio 0.7 --policy-noise-std 0.1 \
+  --eval-policy-mode model_only --eval-guidance-blend-ratio 0.7 \
+  --domain-rand --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0
+
+# 2) Run missing transfer for seed 44
+python experiments/run_transfer.py \
+  --run-id p_guidance_matched_on_9seed_s44 \
+  --pretrain-epochs 6 --finetune-epochs 6 --max-steps 120 --eval-episodes 40 --heartbeat-every 1 \
+  --seed 44 \
+  --training-guidance guided_blend --guidance-blend-ratio 0.7 --policy-noise-std 0.1 \
+  --eval-policy-mode model_only --eval-guidance-blend-ratio 0.7 \
+  --domain-rand --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 \
+  --domain-rand-scratch-multiplier 1.0 --domain-rand-source-multiplier 1.0 --domain-rand-finetune-multiplier 0.5
+
+# 3) Run missing robustness for seed 44
+python experiments/run_robustness.py \
+  --run-id p_guidance_matched_on_9seed_s44 \
+  --episodes 120 --dim 3 --heartbeat-every 10 \
+  --seed 44 \
+  --domain-rand --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 \
+  --domain-rand-difficulties hard_only
+
+# 4) Rebuild ON overlap summary (11,22,33,44) without extra training
+python experiments/run_p0_baseline_freeze.py \
+  --run-id-prefix p_guidance_matched_on_9seed \
+  --seeds 11 22 33 44 \
+  --skip-existing \
+  --baseline-epochs 8 --transfer-pretrain-epochs 6 --transfer-finetune-epochs 6 \
+  --robustness-episodes 120 \
+  --training-guidance guided_blend --eval-policy-mode model_only \
+  --domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 \
+  --robustness-domain-rand-difficulties hard_only
+
+# 5) Interim paired report at overlap n=4 (still not decisive by p-floor)
+python experiments/significance_report.py \
+  --a-prefix p_guidance_matched_off_9seed \
+  --b-prefix p_guidance_matched_on_9seed \
+  --report-name guidance_train_matched_off_vs_on_overlap4_significance \
+  --out-dir results/analysis_guidance \
+  --meta-check --meta-allow-diff training_guidance --meta-strict
+```
+
 Matched-setting execution commands (recommended, `n=9` paired seeds):
 
 ```bash

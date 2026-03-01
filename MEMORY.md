@@ -55,13 +55,21 @@
   - Meta-strict paired report vs OFF 9seed: `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap3_significance.json`
     - meta_check.passed=true (allowed diff key: `training_guidance` only)
     - `n=3`; no KPI significant (power-limited)
+- Optional Path A seed44 triage (analysis-only; no training):
+  - Confirmed incompleteness: `results/baseline|transfer|robustness/p_guidance_matched_on_9seed_s44/*.json` missing (`baseline.json`, `transfer.json`, `robustness.json` all absent).
+  - Failure mode classified as interrupted baseline run (not summary bug): `progress.json` has only dim2 committed while checkpoints include `dim3_latest.pt` (`epoch=2`).
+  - Power gate: under `paired_exact_signflip`, overlap `n=4` has best-case two-sided `p_min=0.125`; cannot be decisive at alpha `0.05`.
+  - Loop decision: defer long ON `n=9` completion and defer seed44 execution in this 3-iteration loop; keep analysis-only.
 - Scale-up attempt status:
   - OFF n=9 complete: `results/p0_freeze/p_guidance_matched_off_9seed/p0_summary.json`
   - ON partial (not n=9):
     - baseline: seeds `11 22 33` complete; seed `44` incomplete (`results/baseline/p_guidance_matched_on_9seed_s44/progress.json` only; checkpoints under `checkpoints/baseline/p_guidance_matched_on_9seed_s44/`)
     - transfer+robustness: seeds `11 22 33` complete; seed `44` missing
-  - Resume command (same matched settings; toggle only training-guidance):
-    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 55 66 77 88 99 --skip-existing ...`
+  - Scheduled minimal resume plan (not executed):
+    - `python experiments/run_baseline.py --run-id p_guidance_matched_on_9seed_s44 --resume ...`
+    - `python experiments/run_transfer.py --run-id p_guidance_matched_on_9seed_s44 ...`
+    - `python experiments/run_robustness.py --run-id p_guidance_matched_on_9seed_s44 ...`
+    - Then rebuild overlap summary/report (`overlap4`) for bookkeeping only; still not decisive by p-floor.
 
 ## Research Loop Notes (Template)
 - Default role mode: researcher_only (iteration 1 memory recovery; iteration 2+ review previous artifact).

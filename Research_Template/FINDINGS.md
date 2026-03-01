@@ -103,6 +103,51 @@
 - Residual risk / interpretation:
   - This does not upgrade training-time guidance causality beyond "inconclusive"; completing matched-setting ON runs to `n>=9` paired seeds remains the recommended decisive path if causality is required.
 
+## Iteration Update (2026-03-01 Iteration 2/3 Optional Path A Seed44 Triage + Cost/Power Decision)
+- Mode: analysis-only (no training executed).
+- Risk Tier: L
+- Validation PASS:
+  - Artifact presence triage confirms seed `44` remains incomplete:
+    - `results/baseline/p_guidance_matched_on_9seed_s44/baseline.json` -> `False`
+    - `results/transfer/p_guidance_matched_on_9seed_s44/transfer.json` -> `False`
+    - `results/robustness/p_guidance_matched_on_9seed_s44/robustness.json` -> `False`
+  - `results/baseline/p_guidance_matched_on_9seed_s44/progress.json` contains only completed `dim=2`; no recorded `dim>=3` result.
+  - Checkpoint inspection shows baseline run entered `dim=3` and saved at epoch 2 (`checkpoints/baseline/p_guidance_matched_on_9seed_s44/dim3_latest.pt`), indicating interruption mid-baseline rather than a pure summary-build issue.
+  - Writer semantics validated in `experiments/run_baseline.py`:
+    - `progress.json` updated inside the per-dimension loop.
+    - `baseline.json` is written only after all dims finish.
+  - Resume feasibility validated via dry-run command generation (`experiments/run_p0_baseline_freeze.py --dry-run --seeds 44`); no training launched.
+  - Power gate validated for `paired_exact_signflip`: with `n=4`, best-case two-sided p-value is `0.125` (cannot pass alpha `0.05`).
+- Triage conclusion:
+  - Most likely failure mode is process interruption/preemption during baseline seed `44` after partial `dim=3` training, before per-dim result commit for `dim=3` and before final `baseline.json` serialization.
+- Decision (this 3-iteration loop):
+  - Defer long ON `n=9` completion.
+  - Also defer executing seed `44` resume now, because moving from overlap `n=3` to `n=4` is still non-decisive by test floor (`p_min=0.125`) while compute cost remains substantial.
+- Minimal resume plan (scheduled, not executed):
+  - Resume baseline seed `44` with checkpoint reuse:
+    - `python experiments/run_baseline.py --run-id p_guidance_matched_on_9seed_s44 --resume --epochs 8 --max-steps 120 --eval-episodes 40 --heartbeat-every 1 --seed 44 --training-guidance guided_blend --guidance-blend-ratio 0.7 --policy-noise-std 0.1 --eval-policy-mode model_only --eval-guidance-blend-ratio 0.7 --domain-rand --domain-rand-scale 0.20 --domain-rand-profile conservative --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0`
+  - Then run missing transfer/robustness for seed `44`, rebuild overlap summary, and rerun paired report as an `n=4` interim (still non-decisive by design).
+
+```text
+Seed44 triage decision map
+
+[seed44 has progress.json + checkpoints, no baseline.json]
+                    |
+                    v
+[run_baseline writes baseline.json only after all dims complete]
+                    |
+                    v
+[classification: interrupted mid-baseline (likely around dim3)]
+                    |
+                    v
+[cost/power gate]
+  - n=4 signflip p_min=0.125 (non-decisive)
+  - resume still requires substantial remaining compute
+                    |
+                    v
+[decision: defer training this loop; keep analysis-only]
+```
+
 ## Key Findings
 1. `scale=0.20` remains preferred over `0.25` under final paired evidence (no measurable gain from `0.25`).
 2. Matched-compute ranking remains `4D ~= 5D > 6D ~= 8D`, with no pairwise significance at alpha 0.05.
