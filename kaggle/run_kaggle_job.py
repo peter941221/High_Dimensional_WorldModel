@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import json
 from datetime import datetime
+import io
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,6 +17,8 @@ PROJECT_DIR = Path("/kaggle/working/High_Dimensional_WorldModel")
 OUTPUT_SUMMARY = Path("/kaggle/working") / "hyperdream_kaggle_summary.json"
 # Patched at kernel build time by kaggle_job_manager.py when available.
 EMBEDDED_RUN_CONFIG_JSON = "{}"
+# Patched at kernel build time by kaggle_job_manager.py when available.
+EMBEDDED_PROJECT_BUNDLE_B64 = ""
 
 
 def log(message: str) -> None:
@@ -122,6 +126,7 @@ def log_startup_diagnostics(cfg: dict) -> None:
         f"code_dataset_slug={cfg.get('code_dataset_slug')} "
         f"code_bundle_filename={cfg.get('code_bundle_filename')}"
     )
+    log(f"Embedded project bundle present: {bool(EMBEDDED_PROJECT_BUNDLE_B64.strip())}")
     bundle_roots = [
         Path(__file__).resolve().parent,
         Path.cwd(),
@@ -215,6 +220,43 @@ def prepare_from_kernel_bundle() -> Path | None:
         )
     log("Kernel bundle fallback unavailable across all candidate roots.")
     return None
+
+
+def prepare_from_embedded_bundle() -> Path | None:
+    payload = EMBEDDED_PROJECT_BUNDLE_B64.strip()
+    if not payload:
+        log("Embedded bundle fallback unavailable: payload empty.")
+        return None
+
+    try:
+        bundle_bytes = base64.b64decode(payload, validate=True)
+    except Exception as exc:  # pragma: no cover - defensive runtime guard
+        log(f"Embedded bundle decode failed: {exc}")
+        return None
+    if not bundle_bytes:
+        log("Embedded bundle decode produced empty payload.")
+        return None
+
+    if PROJECT_DIR.exists():
+        shutil.rmtree(PROJECT_DIR)
+    PROJECT_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(io.BytesIO(bundle_bytes), "r") as zf:
+            zf.extractall(PROJECT_DIR)
+    except Exception as exc:  # pragma: no cover - defensive runtime guard
+        log(f"Embedded bundle extraction failed: {exc}")
+        return None
+
+    has_experiments = (PROJECT_DIR / "experiments").exists()
+    has_configs = (PROJECT_DIR / "configs").exists()
+    if not (has_experiments and has_configs):
+        log(
+            "Embedded bundle extracted but required dirs missing: "
+            f"has_experiments={has_experiments} has_configs={has_configs}"
+        )
+        return None
+    log("Using embedded offline project bundle fallback.")
+    return PROJECT_DIR
 
 
 def ensure_repo() -> Path:
@@ -403,7 +445,7 @@ def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
 def main() -> None:
     cfg = load_config()
     log_startup_diagnostics(cfg)
-    root = prepare_from_dataset(cfg) or prepare_from_kernel_bundle() or ensure_repo()
+    root = prepare_from_dataset(cfg) or prepare_from_embedded_bundle() or prepare_from_kernel_bundle() or ensure_repo()
     # Reload after dataset extraction/repo ready so runtime-mounted config can override defaults.
     cfg = load_config(extra_candidates=[root / "kaggle" / "run_config.json"])
 

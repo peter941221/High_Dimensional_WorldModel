@@ -339,6 +339,58 @@ Iteration 7 diagnosis map
 
 ## Maintenance Checkpoint (2026-03-01 Iteration 1 Runtime Hygiene Re-check)
 - Mode: maintenance (Path B baseline preserved; no new causal claim expansion).
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 8: Embedded Offline Bootstrap Validated on s66-r2)
+- Mode: Kaggle-first implementation + execution validation.
+- Risk Tier: M
+- Validation actions (PASS unless noted):
+  - Code changes:
+    - Added embedded bundle extraction fallback to `kaggle/run_kaggle_job.py`.
+    - Added embedded bundle injection at prepare time in `kaggle_job_manager.py`.
+    - `python -m py_compile kaggle/run_kaggle_job.py kaggle_job_manager.py` -> PASS.
+  - Kaggle probe launch:
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s66-r2 --run-id p_guidance_matched_on_9seed_s66 --seed 66 ... --no-code-dataset prepare` -> PASS
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s66-r2 ... --no-code-dataset push` -> PASS
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s66-r2 status` -> PASS (`complete`).
+  - Output retrieval + local sync:
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s66-r2 --output-dir tmp_kaggle_pull_guidance_on_s66_r2 output` -> PASS.
+    - Synced:
+      - `results/baseline/p_guidance_matched_on_9seed_s66/baseline.json`
+      - `results/transfer/p_guidance_matched_on_9seed_s66/transfer.json`
+      - `results/robustness/p_guidance_matched_on_9seed_s66/robustness.json`
+- New decisive evidence:
+  - `tmp_kaggle_pull_guidance_on_s66_r2/high-dimensional-worldmodel-guidance-on-s66-r2.log` shows:
+    - `Embedded project bundle present: True`
+    - `Using embedded offline project bundle fallback.`
+    - `Loaded run config from: /kaggle/working/High_Dimensional_WorldModel/kaggle/run_config.json`
+    - Stage execution completed and summary saved.
+  - No `git clone` DNS failure signature observed in this validated run.
+- Interpretation lock:
+  - Deterministic non-git bootstrap path is now operational in Kaggle script runtime and resolves the prior startup blocker for the validated seed.
+  - This iteration adds one new completed ON seed artifact (`s66`) to local synchronized evidence.
+- Coverage:
+  - Covered full implementation-to-runtime chain (local patch -> compile gate -> Kaggle dispatch -> terminal status -> output sync).
+  - Did not yet relaunch `s77-r2/s88-r2/s99-r2` in this iteration.
+- Residual risk:
+  - Remaining ON seeds (`77/88/99`) still need rerun/sync before 9-seed matched ON summary rebuild and meta-strict significance regeneration can be finalized.
+
+```text
+Iteration 8 closure map
+
+[Embed offline bundle in kernel script]
+                 |
+                 v
+[Runner extracts embedded bundle before ensure_repo()]
+                 |
+                 v
+[Launch s66-r2 with --no-code-dataset]
+                 |
+                 v
+[Status COMPLETE + outputs downloaded]
+                 |
+                 v
+[Evidence: embedded fallback used, no git DNS clone failure]
+```
 - Risk Tier: L (runtime hygiene verification and evidence logging only).
 - Validation actions:
   - `Get-Content -Raw Research_Template/runtime/active.lock` -> PASS (`run_id=research_20260301_115446`, `pid=4200`).

@@ -563,3 +563,40 @@ Decision boundary map (locked)
   - Validate with one probe slug (`s66-r2`), then relaunch `s77-r2/s88-r2/s99-r2` under the same run_id+seed mapping.
   - After any successful ON completions are synced locally, rebuild ON summary and rerun 9-seed meta-strict significance refresh.
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 8: Embedded Bootstrap Implemented + s66-r2 Validation)
+- Mode: Kaggle-first implementation + runtime validation.
+- Risk Tier: M
+- Concrete step executed:
+  - Implemented deterministic non-git bootstrap path:
+    - `kaggle_job_manager.py` now embeds a base64 offline project bundle payload (`project_bundle.zip` + `kaggle/run_config.json`) into prepared kernel script.
+    - `kaggle/run_kaggle_job.py` now decodes/extracts that embedded payload before `ensure_repo()` and uses it as a network-free source fallback.
+  - Launched validation probe slug:
+    - `high-dimensional-worldmodel-guidance-on-s66-r2` -> `run_id=p_guidance_matched_on_9seed_s66`, `seed=66`, `--no-code-dataset`.
+- Validation actions/results:
+  - Local code gate:
+    - `python -m py_compile kaggle/run_kaggle_job.py kaggle_job_manager.py` -> PASS.
+  - Kaggle dispatch + execution:
+    - `... s66-r2 ... prepare` -> PASS
+    - `... s66-r2 ... push` -> PASS
+    - `status` transitioned to `complete` (no startup DNS failure).
+  - Output retrieval + sync:
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s66-r2 --output-dir tmp_kaggle_pull_guidance_on_s66_r2 output` -> PASS
+    - Synced local artifacts:
+      - `results/baseline/p_guidance_matched_on_9seed_s66/baseline.json`
+      - `results/transfer/p_guidance_matched_on_9seed_s66/transfer.json`
+      - `results/robustness/p_guidance_matched_on_9seed_s66/robustness.json`
+- Decisive evidence from `tmp_kaggle_pull_guidance_on_s66_r2/high-dimensional-worldmodel-guidance-on-s66-r2.log`:
+  - `Embedded project bundle present: True`
+  - `Using embedded offline project bundle fallback.`
+  - Run completed and saved summary (`Saved run summary: /kaggle/working/hyperdream_kaggle_summary.json`).
+- Locked interpretation:
+  - Deterministic offline bootstrap is now validated on Kaggle runtime under `--no-code-dataset`.
+  - Prior startup blocker (`git clone` DNS dependency) is no longer on the critical path for this validated seed.
+- Precise next direction:
+  - Relaunch remaining ON replacement slugs with identical run mapping and embedded bootstrap path:
+    - `s77-r2` (`run_id=p_guidance_matched_on_9seed_s77`)
+    - `s88-r2` (`run_id=p_guidance_matched_on_9seed_s88`)
+    - `s99-r2` (`run_id=p_guidance_matched_on_9seed_s99`)
+  - On completion, sync artifacts locally, rebuild `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`, then rerun:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from datetime import datetime
+import io
 import json
 from pathlib import Path
 import re
@@ -208,37 +210,56 @@ def copy_project(build_dir: Path) -> None:
         keep.write_text("", encoding="utf-8")
 
 
-def build_project_bundle_zip(zip_path: Path) -> None:
+def write_project_bundle(zf: zipfile.ZipFile, run_config: dict | None = None) -> None:
+    for rel in INCLUDE_DIRS:
+        src = ROOT / rel
+        if not src.exists():
+            continue
+        for file in src.rglob("*"):
+            if file.is_dir():
+                continue
+            if "__pycache__" in file.parts or file.suffix == ".pyc":
+                continue
+            arcname = file.relative_to(ROOT).as_posix()
+            zf.write(file, arcname=arcname)
+
+    for rel in INCLUDE_FILES:
+        src = ROOT / rel
+        if src.exists() and src.is_file():
+            zf.write(src, arcname=src.relative_to(ROOT).as_posix())
+
+    if run_config is not None:
+        zf.writestr("kaggle/run_config.json", json.dumps(run_config, indent=2, ensure_ascii=False))
+
+
+def build_project_bundle_zip(zip_path: Path, run_config: dict | None = None) -> None:
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for rel in INCLUDE_DIRS:
-            src = ROOT / rel
-            if not src.exists():
-                continue
-            for file in src.rglob("*"):
-                if file.is_dir():
-                    continue
-                if "__pycache__" in file.parts or file.suffix == ".pyc":
-                    continue
-                arcname = file.relative_to(ROOT).as_posix()
-                zf.write(file, arcname=arcname)
-
-        for rel in INCLUDE_FILES:
-            src = ROOT / rel
-            if src.exists() and src.is_file():
-                zf.write(src, arcname=src.relative_to(ROOT).as_posix())
+        write_project_bundle(zf, run_config=run_config)
 
 
-def inject_embedded_run_config(build_dir: Path, run_config: dict) -> None:
+def build_project_bundle_b64(run_config: dict) -> str:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        write_project_bundle(zf, run_config=run_config)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def inject_embedded_payloads(build_dir: Path, run_config: dict) -> None:
     runner_path = build_dir / "kaggle" / "run_kaggle_job.py"
-    marker = 'EMBEDDED_RUN_CONFIG_JSON = "{}"'
-    payload = json.dumps(run_config, ensure_ascii=False)
-    replacement = f"EMBEDDED_RUN_CONFIG_JSON = {payload!r}"
-
+    cfg_marker = 'EMBEDDED_RUN_CONFIG_JSON = "{}"'
+    bundle_marker = 'EMBEDDED_PROJECT_BUNDLE_B64 = ""'
+    cfg_payload = json.dumps(run_config, ensure_ascii=False)
+    cfg_replacement = f"EMBEDDED_RUN_CONFIG_JSON = {cfg_payload!r}"
+    bundle_replacement = f"EMBEDDED_PROJECT_BUNDLE_B64 = {build_project_bundle_b64(run_config)!r}"
     text = runner_path.read_text(encoding="utf-8")
-    if marker not in text:
+    if cfg_marker not in text:
         raise RuntimeError(f"Embedded config marker not found in {runner_path}")
-    runner_path.write_text(text.replace(marker, replacement, 1), encoding="utf-8")
+    if bundle_marker not in text:
+        raise RuntimeError(f"Embedded bundle marker not found in {runner_path}")
+    text = text.replace(cfg_marker, cfg_replacement, 1)
+    text = text.replace(bundle_marker, bundle_replacement, 1)
+    runner_path.write_text(text, encoding="utf-8")
 
 
 def prepare_code_dataset_bundle(args: argparse.Namespace, run_config: dict) -> Path:
@@ -257,10 +278,7 @@ def prepare_code_dataset_bundle(args: argparse.Namespace, run_config: dict) -> P
 
     bundle_name = args.code_bundle_filename
     zip_path = dataset_dir / bundle_name
-    build_project_bundle_zip(zip_path)
-    # Ensure runtime config is available from dataset mount for de-colab direct runner.
-    with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("kaggle/run_config.json", json.dumps(run_config, indent=2, ensure_ascii=False))
+    build_project_bundle_zip(zip_path, run_config=run_config)
     log(f"Prepared code dataset bundle: {dataset_dir}")
     return dataset_dir
 
@@ -296,7 +314,7 @@ def prepare(args: argparse.Namespace) -> tuple[Path, dict, Path | None]:
     build_dir = Path(args.build_dir).resolve()
     copy_project(build_dir)
     run_config = to_run_config(args)
-    inject_embedded_run_config(build_dir, run_config=run_config)
+    inject_embedded_payloads(build_dir, run_config=run_config)
     (build_dir / "kaggle" / "run_config.json").write_text(json.dumps(run_config, indent=2, ensure_ascii=False), encoding="utf-8")
     metadata = write_metadata(args, build_dir)
     dataset_dir = None

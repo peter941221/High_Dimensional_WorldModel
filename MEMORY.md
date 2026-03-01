@@ -277,3 +277,37 @@ Last Compressed: 2026-03-01
   - Probe with one replacement (`s66-r2`), then relaunch `s77-r2/s88-r2/s99-r2`.
   - On successful completions, sync outputs and rerun 9-seed meta-strict significance refresh.
 
+## Recent Work (2026-03-01, Researcher Loop Iteration 8)
+- Concrete next-best step executed (deterministic bootstrap implementation + validation):
+  - Implemented offline embedded project-bundle bootstrap:
+    - `kaggle_job_manager.py` now injects both embedded run config and embedded `project_bundle.zip` payload into prepared runner script.
+    - `kaggle/run_kaggle_job.py` now decodes/extracts embedded bundle and uses it before `ensure_repo()` fallback.
+  - Validation PASS:
+    - `python -m py_compile kaggle/run_kaggle_job.py kaggle_job_manager.py`
+  - Launched probe replacement slug with identical run identity:
+    - `high-dimensional-worldmodel-guidance-on-s66-r2`
+    - `run_id=p_guidance_matched_on_9seed_s66`, `seed=66`
+    - launched with `--no-code-dataset`.
+  - Remote execution validation PASS:
+    - `prepare` + `push` succeeded.
+    - status reached `complete`.
+    - output download succeeded to `tmp_kaggle_pull_guidance_on_s66_r2/`.
+- Decisive evidence:
+  - `tmp_kaggle_pull_guidance_on_s66_r2/high-dimensional-worldmodel-guidance-on-s66-r2.log` includes:
+    - `Embedded project bundle present: True`
+    - `Using embedded offline project bundle fallback.`
+    - run summary saved at `/kaggle/working/hyperdream_kaggle_summary.json`.
+  - No git DNS clone failure observed in this validated run.
+- Local sync completed:
+  - `results/baseline/p_guidance_matched_on_9seed_s66/baseline.json`
+  - `results/transfer/p_guidance_matched_on_9seed_s66/transfer.json`
+  - `results/robustness/p_guidance_matched_on_9seed_s66/robustness.json`
+- Locked interpretation:
+  - Deterministic non-git bootstrap is now functioning on Kaggle runtime (validated on seed 66).
+  - Remaining closure work is now primarily operational relaunch/sync for seeds `77/88/99` plus final 9-seed refresh.
+- Next-direction lock (precise):
+  - Relaunch `s77-r2/s88-r2/s99-r2` using the same embedded-bootstrap path and matched run settings.
+  - Sync outputs locally on completion.
+  - Rebuild `p_guidance_matched_on_9seed` summary and rerun:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+
