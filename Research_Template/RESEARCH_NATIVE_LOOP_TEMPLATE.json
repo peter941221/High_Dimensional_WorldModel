@@ -1,6 +1,6 @@
 {
   "template_id": "codex_native_research_loop_v1",
-  "version": "1.3.6",
+  "version": "1.3.7",
   "name": "Research Native Loop Template",
   "description": "CLI-only iterative research orchestration with Director, Researcher, and Evaluator.",
   "mode": "cli-only",
@@ -61,7 +61,7 @@
       "require_evidence_delta": false,
       "no_progress_policy": "mark_continue",
       "write_researcher_iteration_md": true,
-      "recover_memory_each_iteration": true,
+      "recover_memory_each_iteration": false,
       "review_previous_iteration": true,
       "strict_json_contract": false,
       "auto_commit_each_iteration": {
@@ -129,7 +129,7 @@
       "Director preflight sets first research direction when role_mode=full.",
       "Each iteration runs Researcher then Evaluator then Director post-note when role_mode=full.",
       "In researcher_only mode, skip Director and Evaluator and run only Researcher each iteration.",
-      "In researcher_only mode, each iteration recovers memory, reviews previous iteration output, then executes the next concrete step.",
+      "In researcher_only mode, iteration 1 recovers memory then executes the next concrete step; iteration 2+ reviews previous iteration output then executes the next concrete step.",
       "Maintain rolling-thread context continuity across iterations using bounded context packets.",
       "In researcher_only mode, perform a scoped git commit per iteration when new iteration-local file deltas exist.",
       "Evaluator can enforce adaptive compression checkpoints when context pressure rises.",

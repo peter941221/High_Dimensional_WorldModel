@@ -1338,26 +1338,40 @@ Return strict JSON only:
     }
 
     if ($effectiveRoleMode -eq "researcher_only") {
-      $memoryRecoveryRule = if ($templateRecoverMemoryEachIteration) {
-        "First, recover memory/context from MEMORY.md + goals/plan/findings."
+      $shouldRecoverMemory = ($i -eq 1 -or $templateRecoverMemoryEachIteration)
+      $shouldReviewPrevious = ($i -gt 1 -and $templateReviewPreviousIteration)
+      $protocolLines = New-Object System.Collections.ArrayList
+      if ($i -eq 1) {
+        [void]$protocolLines.Add("Recover memory/context from MEMORY.md + goals/plan/findings, then immediately execute one next-best research step.")
       } else {
-        "Memory recovery is optional if not needed for this iteration."
+        if ($shouldRecoverMemory) {
+          [void]$protocolLines.Add("Recover memory/context from MEMORY.md + goals/plan/findings (optional by config).")
+        } else {
+          [void]$protocolLines.Add("Do not re-read the full MEMORY.md; use the rolling context packet + excerpts.")
+        }
+        if ($shouldReviewPrevious) {
+          [void]$protocolLines.Add("Review the previous researcher artifact/markdown and continue from it.")
+        }
       }
-      $reviewPriorRule = if ($templateReviewPreviousIteration) {
-        "If this is iteration > 1, review the previous researcher output/markdown, then choose and execute the next concrete research step."
-      } else {
-        "Use the rolling context packet to choose and execute the next concrete research step."
-      }
+      [void]$protocolLines.Add("Execute one concrete next-best step now (run commands and/or edit files).")
+      [void]$protocolLines.Add("Update repo artifacts (FINDINGS/PLAN/GOALS/etc) and set a precise next_direction for the next iteration.")
+      $iterationProtocolText = (@($protocolLines.ToArray()) | ForEach-Object { "- $_" }) -join [Environment]::NewLine
       $jsonStrictRule = if ($templateStrictJsonContract) {
         "JSON contract is strict for this run."
       } else {
         "If JSON is not perfect, continue with best effort; do not stop the task."
+      }
+      $iterationGoal = if ($i -eq 1) {
+        "Recover memory/context + execute one concrete step."
+      } else {
+        "Execute the next best step."
       }
       $workerPrompt = @"
 You are RESEARCHER in a research CLI loop (researcher-only mode).
 Ultimate goals: $effectiveTask
 Done criteria: $effectiveDoneCriteria
 Iteration: $iterationLabel
+Iteration goal: $iterationGoal
 Goals doc: $PrdPath
 Plan doc: $DevDocPath
 Findings doc: $FindingsPath
@@ -1371,9 +1385,7 @@ $rollingContextJson
 
 Act like a normal Codex coding session in this repo: inspect files, run commands, edit code/docs, and validate where possible.
 Iteration protocol:
-- $memoryRecoveryRule
-- If this is iteration 1, use recovered memory to choose and execute the next concrete research step.
-- $reviewPriorRule
+$iterationProtocolText
 - Do not run nested orchestration loops (`Research_native_loop.ps1` / `start_research.bat`).
 - Kaggle is optional; use it only when it materially helps the current step.
 
