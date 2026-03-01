@@ -126,3 +126,28 @@ Last Compressed: 2026-03-01
   - Optional Path A only if decisiveness is required now:
     - Path A1: seed44 minimal resume for bookkeeping overlap expansion.
     - Path A2: full matched OFF/ON at `n>=9` with meta-strict significance regeneration for causal upgrade.
+
+## Recent Work (2026-03-01, Researcher Loop Iteration 2)
+- Concrete Optional Path A1 execution completed (local checkpoint resume path):
+  - Completed seed44 ON baseline via resume:
+    - `results/baseline/p_guidance_matched_on_9seed_s44/baseline.json`
+  - Completed seed44 ON transfer:
+    - `results/transfer/p_guidance_matched_on_9seed_s44/transfer.json`
+  - Completed seed44 ON robustness:
+    - `results/robustness/p_guidance_matched_on_9seed_s44/robustness.json`
+- Overlap bookkeeping expanded and validated:
+  - Rebuilt ON summary for seeds `11 22 33 44`:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+  - Re-ran paired meta-strict report:
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap4_significance.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap4_significance.md`
+- Locked results from this iteration:
+  - Overlap seeds are now `[11,22,33,44]` (`n=4`).
+  - `meta_check.passed=true`; unexpected diff keys remain empty; only allowed key is `training_guidance`.
+  - No KPI significant at alpha `0.05`; strongest transfer KPI remains non-significant (`p=0.25`).
+- Execution venue note:
+  - Local chosen (not Kaggle) because this step depended on existing local seed44 checkpoints and completed quickly.
+  - Move to Kaggle when executing full matched OFF/ON `n>=9` causal-scale training.
+- Next-direction lock (precise):
+  - Keep canonical closure package unchanged.
+  - If stronger causal decisiveness is required, execute Optional Path A2 full matched OFF/ON at `n>=9` paired seeds with meta-strict checks, then regenerate significance and closure synthesis.

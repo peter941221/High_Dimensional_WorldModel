@@ -360,3 +360,35 @@ Decision boundary map (locked)
   - Execute Optional Path A only if decisiveness is required now: either
     1) seed44 minimal resume for overlap bookkeeping, or
     2) full matched OFF/ON `n>=9` with meta-strict recheck for causal upgrade.
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 2: Seed44 Resume + Overlap4 Refresh)
+- Mode: targeted execution for Optional Path A1 bookkeeping expansion.
+- Risk Tier: M
+- Concrete steps executed:
+  - Resumed and completed baseline for `p_guidance_matched_on_9seed_s44`:
+    - `python experiments/run_baseline.py --run-id p_guidance_matched_on_9seed_s44 --resume ...`
+  - Executed missing transfer for seed 44:
+    - `python experiments/run_transfer.py --run-id p_guidance_matched_on_9seed_s44 ...`
+  - Executed missing robustness for seed 44:
+    - `python experiments/run_robustness.py --run-id p_guidance_matched_on_9seed_s44 ...`
+  - Rebuilt ON summary overlap with skip-existing:
+    - `python experiments/run_p0_baseline_freeze.py --run-id-prefix p_guidance_matched_on_9seed --seeds 11 22 33 44 --skip-existing ...`
+  - Recomputed paired significance with meta-strict guard:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_overlap4_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
+- Evidence artifacts:
+  - `results/baseline/p_guidance_matched_on_9seed_s44/baseline.json`
+  - `results/transfer/p_guidance_matched_on_9seed_s44/transfer.json`
+  - `results/robustness/p_guidance_matched_on_9seed_s44/robustness.json`
+  - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` (now includes seed 44)
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap4_significance.json`
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap4_significance.md`
+- Results:
+  - Overlap seeds expanded to `[11, 22, 33, 44]` (`n=4`).
+  - `meta_check.passed=true` with only allowed diff key `training_guidance`.
+  - No KPI significant at alpha `0.05`; strongest transfer KPI p-value is `0.25`.
+- Why local (not Kaggle) in this step:
+  - Resume used existing local checkpoints for seed 44 and completed quickly with low orchestration overhead.
+  - Trigger to move this path to Kaggle: launching full matched OFF/ON scale-up to `n>=9` paired seeds for decisive causal isolation.
+- Precise next direction:
+  - Keep closure artifacts as canonical baseline.
+  - If causal decisiveness is required now, execute Optional Path A2: run full matched OFF/ON at `n>=9` paired seeds using `--meta-check --meta-allow-diff training_guidance --meta-strict`, then regenerate significance and closure synthesis.

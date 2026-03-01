@@ -713,3 +713,48 @@ Optional Path A closure gate (Iteration 3/3)
   - Confirms matched-setting diff guard still passes with only `training_guidance` differing.
 - Residual risk:
   - Power remains insufficient until matched OFF/ON overlap increases substantially (target `n>=9` for decisive update).
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 2: Seed44 Completion + Overlap4 Significance)
+- Mode: targeted execution (Optional Path A1 bookkeeping overlap expansion).
+- Risk Tier: M
+- Validation PASS:
+  - Completed seed `44` ON artifacts via local checkpoint resume + missing stages:
+    - `results/baseline/p_guidance_matched_on_9seed_s44/baseline.json`
+    - `results/transfer/p_guidance_matched_on_9seed_s44/transfer.json`
+    - `results/robustness/p_guidance_matched_on_9seed_s44/robustness.json`
+  - Rebuilt ON summary for seeds `11 22 33 44`:
+    - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`
+  - Re-ran meta-strict paired significance:
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap4_significance.json`
+    - `results/analysis_guidance/guidance_train_matched_off_vs_on_overlap4_significance.md`
+  - Meta guard status:
+    - `meta_check.passed=true`
+    - `unexpected_diff_keys=[]`
+    - only allowed diff key: `training_guidance`
+- Outcomes (`n=4`, seeds `[11,22,33,44]`, alpha `0.05`):
+  - No KPI significant.
+  - Transfer metrics remain non-decisive:
+    - `transfer_success_mean` delta (ON-OFF): `+0.0052083`, `p=0.25`
+    - `transfer_gain_mean` delta (ON-OFF): `-0.0010417`, `p=1.0`
+  - Robustness deltas remain `0.0` across easy/medium/hard.
+- Interpretation:
+  - This closes seed44 bookkeeping overlap expansion successfully.
+  - Causal decisiveness is still not achieved; `n=4` remains underpowered for the exact paired sign-flip gate.
+- Why local (not Kaggle) for this step:
+  - Existing checkpoints for seed `44` were already local and resumable; local execution minimized setup overhead.
+  - Kaggle becomes preferable for the full `n>=9` matched OFF/ON causal-scale run.
+
+```text
+Optional Path A status after iteration 2
+
+[Seed44 ON missing] --> [Resume baseline + run transfer + run robustness] --> [Rebuild ON summary]
+                                                                      |
+                                                                      v
+                                             [Overlap grows to n=4: seeds 11,22,33,44]
+                                                                      |
+                                                                      v
+                                                  [Meta-strict significance rerun]
+                                                                      |
+                                                                      v
+                                           [No KPI significant @ alpha 0.05; still inconclusive]
+```
