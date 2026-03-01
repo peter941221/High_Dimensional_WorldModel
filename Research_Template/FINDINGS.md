@@ -215,6 +215,62 @@ Keep Path B        Run to 9 seeds (or matched-setting ablation)
 2. Optional Path A (pipeline-only decisiveness, optional): if you still care about the *end-to-end* pipeline delta (`p_guidance_off_*` vs `p2_v2_*`), add the missing seeds (`88`, `99`) to reach `n=9` and re-run `significance_report.py`, but do **not** upgrade training-time causality language from this alone.
 3. Keep causal language bounded until matched-setting evidence is produced; treat current OFF vs ON paired significance as pipeline-level evidence.
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 6: Replacement ON Slugs r1)
+- Mode: Kaggle-first replacement dispatch and failure-signature refresh.
+- Risk Tier: M
+- Validation actions (PASS unless noted):
+  - Replacement dispatch with identical `run_id`+seed and matched flags for seeds `55/66/77/88/99`:
+    - `python kaggle_job_manager.py ... --slug high-dimensional-worldmodel-guidance-on-s55-r1 --run-id p_guidance_matched_on_9seed_s55 --seed 55 ... --no-code-dataset prepare/push`
+    - same pattern for `s66-r1`, `s77-r1`, `s88-r1`, `s99-r1` with corresponding `run_id`.
+  - Immediate status probes after each push:
+    - PASS: all five reported `status=running`.
+  - Follow-up status probes:
+    - `s55-r1=error`, `s66-r1=error`, `s77-r1=error`, `s88-r1=error`, `s99-r1=error`.
+  - Output retrieval for failed replacement slugs:
+    - PASS: logs downloaded to `tmp_kaggle_pull_guidance_on_s55_r1/`, `tmp_kaggle_pull_guidance_on_s66_r1/`, `tmp_kaggle_pull_guidance_on_s99_r1/`.
+- Evidence updates:
+  - New replacement kernels launched:
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s55-r1`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s66-r1`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s77-r1`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s88-r1`
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s99-r1`
+  - Replacement logs show persistent shared failure:
+    - `fatal: unable to access 'https://github.com/peter941221/High_Dimensional_WorldModel.git/': Could not resolve host: github.com`
+  - Replacement logs do **not** show the prior dataset mount missing message.
+  - Replacement logs show startup fallback state:
+    - `[kaggle-runner] run_config.json not found, using built-in defaults.`
+    - then execution reaches `ensure_repo()` clone path.
+- Coverage:
+  - Completed the requested replacement-slug launch strategy and captured post-launch runtime evidence.
+  - Verified that removing code-dataset publish churn did not resolve the terminal failure path (still blocked by git DNS fallback).
+- Residual risk:
+  - No new completed ON artifacts synchronized locally this iteration.
+  - 9-seed ON summary rebuild and meta-strict significance refresh remain blocked.
+- Next direction (precise):
+  - Instrument `kaggle/run_kaggle_job.py` startup with path-inventory diagnostics and explicit fallback reasons, launch one diagnostic `s55-r2`, and use its log evidence to implement a deterministic non-git source bootstrap path before relaunching `66/77/88/99`.
+
+```text
+Iteration 6 replacement flow
+
+[Launch s55/66/77/88/99 as -r1 with same run_id+seed]
+                         |
+                         v
+                [All initially RUNNING]
+                         |
+                         v
+                  [All transition ERROR]
+                         |
+                         v
+             [Download logs from r1 slugs]
+                         |
+                         v
+ [Observed: git DNS clone failure persists; dataset-mount error absent]
+                         |
+                         v
+      [Next: instrument fallback path -> diagnostic r2 -> fix bootstrap]
+```
+
 ## Maintenance Checkpoint (2026-03-01)
 - Mode: maintenance (claims locked; no new causal upgrade run executed).
 - Risk Tier: L (documentation/state verification only; no model/training changes).

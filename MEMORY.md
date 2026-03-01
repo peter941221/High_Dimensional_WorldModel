@@ -220,3 +220,28 @@ Last Compressed: 2026-03-01
   - Relaunch all five seeds on replacement slugs with identical run config (keep `run_id` and seed fixed) and avoid repeated immediate dataset re-versioning between launches.
   - After local sync of ON `55/66/77/88/99`, rebuild ON summary and regenerate meta-strict `guidance_train_matched_off_vs_on_9seed_significance`.
 
+## Recent Work (2026-03-01, Researcher Loop Iteration 6)
+- Concrete next-best step executed (replacement-slug launch path):
+  - Launched replacement ON slugs for seeds `55/66/77/88/99` with identical `run_id` + seed mapping:
+    - `high-dimensional-worldmodel-guidance-on-s55-r1` -> `p_guidance_matched_on_9seed_s55`
+    - `high-dimensional-worldmodel-guidance-on-s66-r1` -> `p_guidance_matched_on_9seed_s66`
+    - `high-dimensional-worldmodel-guidance-on-s77-r1` -> `p_guidance_matched_on_9seed_s77`
+    - `high-dimensional-worldmodel-guidance-on-s88-r1` -> `p_guidance_matched_on_9seed_s88`
+    - `high-dimensional-worldmodel-guidance-on-s99-r1` -> `p_guidance_matched_on_9seed_s99`
+  - Launches intentionally used `--no-code-dataset` to avoid immediate repeated code-dataset re-version churn.
+- Validation/evidence:
+  - Prepare + push succeeded for all five replacement slugs.
+  - Immediate status probes showed all five `running`; follow-up probes showed all five `error`.
+  - Downloaded replacement logs (`s55-r1/s66-r1/s99-r1`) confirm persistent fallback failure:
+    - `fatal: unable to access 'https://github.com/peter941221/High_Dimensional_WorldModel.git/': Could not resolve host: github.com`
+  - New replacement logs no longer contain the previous dataset-mount-missing error signature.
+  - Replacement logs include:
+    - `[kaggle-runner] run_config.json not found, using built-in defaults.`
+    - execution then reaches clone fallback (`ensure_repo()`).
+- Locked interpretation:
+  - Replacing slugs and removing dataset-version churn did not unblock execution completion.
+  - Current blocker has narrowed to deterministic source bootstrap under Kaggle runtime constraints (bundle/dataset fallback not taking effect before git clone path).
+- Next-direction lock (precise):
+  - Add diagnostic instrumentation in `kaggle/run_kaggle_job.py` to log candidate startup paths and explicit fallback failure reasons.
+  - Launch one diagnostic replacement slug (`s55-r2`) with same run config, collect logs, then implement a deterministic non-git bootstrap path and relaunch remaining seeds.
+

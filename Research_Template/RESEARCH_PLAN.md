@@ -494,3 +494,35 @@ Decision boundary map (locked)
   - Once at least seeds `55/66/77/88/99` are locally ingested, rebuild ON summary and run:
     - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`
 
+## Iteration Update (2026-03-01 Researcher Loop Iteration 6: Replacement Slugs Launched + Failure Signature Refresh)
+- Mode: Kaggle-first replacement launch and poll/download verification.
+- Risk Tier: M
+- Concrete step executed:
+  - Launched replacement ON slugs with identical `run_id` + seed for `55/66/77/88/99`:
+    - `high-dimensional-worldmodel-guidance-on-s55-r1` -> `run_id=p_guidance_matched_on_9seed_s55`
+    - `high-dimensional-worldmodel-guidance-on-s66-r1` -> `run_id=p_guidance_matched_on_9seed_s66`
+    - `high-dimensional-worldmodel-guidance-on-s77-r1` -> `run_id=p_guidance_matched_on_9seed_s77`
+    - `high-dimensional-worldmodel-guidance-on-s88-r1` -> `run_id=p_guidance_matched_on_9seed_s88`
+    - `high-dimensional-worldmodel-guidance-on-s99-r1` -> `run_id=p_guidance_matched_on_9seed_s99`
+  - To avoid immediate dataset re-version churn, launches used `--no-code-dataset` (no code-dataset publish in this batch).
+- Validation actions/results:
+  - For each seed, `prepare` + `push` completed successfully.
+  - Immediate post-push status probe showed all five replacement slugs in `running`.
+  - Follow-up status probes showed all five replacement slugs moved to `error`.
+  - Output logs were downloaded for representative failed replacement slugs (`s55-r1`, `s66-r1`, `s99-r1`).
+- New evidence from replacement logs:
+  - Shared failure remains `git clone` DNS failure:
+    - `fatal: unable to access 'https://github.com/peter941221/High_Dimensional_WorldModel.git/': Could not resolve host: github.com`
+  - Replacement logs no longer show the prior dataset-mount-missing message.
+  - Runtime trace also shows:
+    - `[kaggle-runner] run_config.json not found, using built-in defaults.`
+    - then falls through to `ensure_repo()` clone path.
+- Coverage and residual risk:
+  - Covered replacement launch path end-to-end (dispatch -> initial run -> fail -> log retrieval).
+  - No completed ON outputs were synchronized locally this iteration.
+  - 9-seed ON summary rebuild and meta-strict significance refresh remain blocked.
+- Precise next direction:
+  - Add a diagnostic patch in `kaggle/run_kaggle_job.py` to log startup path inventory (`__file__` parent, cwd, `/kaggle/src`) and explicit reasons `prepare_from_kernel_bundle()` returns `None`.
+  - Launch one diagnostic replacement slug (`s55-r2`) with identical run config and collect logs to confirm whether script kernels expose bundled repo files.
+  - Based on that evidence, implement one deterministic source bootstrap path that does not require external git DNS, then relaunch remaining ON seeds and resume poll/download sync.
+
