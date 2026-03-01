@@ -88,7 +88,8 @@
 
 ## Iteration Progress (2026-03-01, researcher-only, iteration 1/3)
 - Maintenance-only revalidation: canonical closure artifacts load successfully; `pytest -q` PASS (50 passed, 1 warning).
-- No new experiments executed; residual risks unchanged (guidance causality still confounded; ranking weak-order; external validity simulation-only).
-- Next direction unchanged: keep repo closed unless training-time guidance causality is required; if required, run Optional Path A matched-setting guidance-only OFF vs ON (start with a 2-seed smoke using `--dry-run` + `--meta-check`, then scale to `n>=9` paired seeds).
+- Optional Path A preflight (no training): executed matched OFF/ON 2-seed smoke `--dry-run` and normalized planned-command diff; only allowed differences are run-id and training-guidance (match=True). Artifacts under `results/analysis_smoke/` (git-ignored).
+- Meta-check guardrail validated on known-confounded pipeline comparison (`p_guidance_off_7seed` vs `p2_v2_9seed`): `meta_check.passed=false` with unexpected diffs in domain-rand and eval settings, confirming confound detection.
+- Next direction: keep canonical closure frozen; if training-time guidance causality is needed, run non-dry 2-seed matched smoke then enforce `--meta-check --meta-allow-diff training_guidance --meta-strict` before scaling to `n>=9` paired seeds.
 
 Last Compressed: 2026-03-01

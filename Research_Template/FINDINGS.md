@@ -41,6 +41,20 @@
 - Next direction unchanged:
   - Keep repo in closed state; only run Optional Path A if stronger training-time guidance causality is required (start with 2-seed smoke `--dry-run` + `--meta-check`, then scale to `n>=9` paired seeds).
 
+## Iteration Update (2026-03-01 Iteration 1/3 Optional Path A Preflight)
+- Mode: preflight-only (no training executed; canonical closure unchanged).
+- Risk Tier: L
+- Validation PASS:
+  - Optional Path A matched-setting smoke `--dry-run` executed for both OFF/ON prefixes (`seeds 11 22`, `--eval-policy-mode model_only`), logs captured under `results/analysis_smoke/`.
+  - Dry-run planned-command diff after normalization (allowing only run-id and training-guidance to vary) shows full match across baseline/transfer/robustness.
+    - Evidence (local, git-ignored): `results/analysis_smoke/p_guidance_matched_smoke2_dryrun_cmd_diff.json`.
+  - `experiments/significance_report.py --meta-check` run on a known-confounded pipeline comparison (`p_guidance_off_7seed` vs `p2_v2_9seed`) confirms confound detection (`meta_check.passed=false`).
+    - Evidence (local, git-ignored): `results/analysis_smoke/meta_check_confounded_p_guidance_off_7seed_vs_p2_v2_9seed.json`.
+- Residual risk unchanged:
+  - Training-time guidance causality remains untested under matched settings; requires non-dry Optional Path A execution (start with 2-seed smoke, then scale).
+- Next direction (for iteration 2/3):
+  - If causality decisiveness is requested: run the non-dry 2-seed smoke for both prefixes and then enforce `--meta-check --meta-allow-diff training_guidance --meta-strict` before scaling to `n>=9`.
+
 ## Key Findings
 1. `scale=0.20` remains preferred over `0.25` under final paired evidence (no measurable gain from `0.25`).
 2. Matched-compute ranking remains `4D ~= 5D > 6D ~= 8D`, with no pairwise significance at alpha 0.05.

@@ -124,6 +124,13 @@ python experiments/significance_report.py \
   --meta-check --meta-allow-diff training_guidance --meta-strict
 ```
 
+Preflight status (2026-03-01, iteration 1/3):
+- Dry-run command planning executed for both `p_guidance_matched_off_smoke2` and `p_guidance_matched_on_smoke2` (seeds `11 22`).
+- Normalized planned-command diff (allowing only `--run-id` value and `--training-guidance` value to vary) indicates exact match across baseline/transfer/robustness commands.
+  - Evidence (local, git-ignored): `results/analysis_smoke/p_guidance_matched_smoke2_dryrun_cmd_diff.json` + `results/analysis_smoke/p_guidance_matched_*_dryrun.txt`.
+- Meta-check guard verified on known-confounded pipeline comparison (`p_guidance_off_7seed` vs `p2_v2_9seed`): `meta_check.passed=false` with unexpected diffs in domain-rand and eval settings.
+  - Evidence (local, git-ignored): `results/analysis_smoke/meta_check_confounded_p_guidance_off_7seed_vs_p2_v2_9seed.json`.
+
 Matched-setting execution commands (recommended, `n=9` paired seeds):
 
 ```bash
