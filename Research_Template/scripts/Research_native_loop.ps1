@@ -9,6 +9,9 @@ param(
   [Alias("PlanPath")][string]$DevDocPath = ".\Research_Template\RESEARCH_PLAN.md",
   [string]$FindingsPath = ".\Research_Template\FINDINGS.md",
   [string]$ProblemLink = "",
+  [ValidateSet("full","researcher_only")][string]$RoleMode = "researcher_only",
+  [ValidateSet("mark_continue","stop","force_pivot")][string]$NoProgressPolicy = "mark_continue",
+  [switch]$RequireEvidenceDelta,
   [switch]$ContinueAfterApproval,
   [switch]$StopOnApproval,
   [switch]$DryRun,
@@ -188,6 +191,65 @@ function Parse-FirstJsonObject {
     throw "Could not find JSON object in model output."
   }
   return ($match.Value | ConvertFrom-Json)
+}
+
+function Convert-ToRepoRelativePath {
+  param(
+    [string]$RepoRoot,
+    [string]$Path
+  )
+  if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
+  $fullRepo = [System.IO.Path]::GetFullPath($RepoRoot)
+  $fullPath = [System.IO.Path]::GetFullPath($Path)
+  if ($fullPath.StartsWith($fullRepo, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $relative = $fullPath.Substring($fullRepo.Length).TrimStart('\','/')
+    if ([string]::IsNullOrWhiteSpace($relative)) { return "." }
+    return $relative -replace '\\','/'
+  }
+  return $fullPath -replace '\\','/'
+}
+
+function Get-EvidenceSnapshot {
+  param(
+    [string]$RepoRoot,
+    [string[]]$PathSpecs
+  )
+  $snapshot = @{}
+  foreach ($spec in $PathSpecs) {
+    if ([string]::IsNullOrWhiteSpace($spec)) { continue }
+    $fullPath = Resolve-PathSafe -Base $RepoRoot -PathSpec $spec
+    if (-not (Test-Path $fullPath)) { continue }
+    $item = Get-Item -Path $fullPath -ErrorAction SilentlyContinue
+    if ($null -eq $item) { continue }
+    if ($item.PSIsContainer) {
+      Get-ChildItem -Path $fullPath -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $snapshot[[System.IO.Path]::GetFullPath($_.FullName)] = [int64]$_.LastWriteTimeUtc.Ticks
+      }
+    } else {
+      $snapshot[[System.IO.Path]::GetFullPath($item.FullName)] = [int64]$item.LastWriteTimeUtc.Ticks
+    }
+  }
+  return $snapshot
+}
+
+function Get-EvidenceDeltaPaths {
+  param(
+    [hashtable]$Before,
+    [hashtable]$After
+  )
+  if ($null -eq $Before) { $Before = @{} }
+  if ($null -eq $After) { $After = @{} }
+  $delta = New-Object System.Collections.ArrayList
+  foreach ($path in $After.Keys) {
+    if (-not $Before.ContainsKey($path)) {
+      [void]$delta.Add($path)
+      continue
+    }
+    if ([int64]$After[$path] -gt [int64]$Before[$path]) {
+      [void]$delta.Add($path)
+    }
+  }
+  return @($delta.ToArray() | Sort-Object -Unique)
 }
 
 function Is-TemplatePlaceholder {
@@ -637,6 +699,7 @@ if (-not (Test-Path $resolvedRepoRoot)) {
 $resolvedGoalsPath = Resolve-DocPath -RepoRoot $resolvedRepoRoot -TemplateDir $templateDir -PathSpec $PrdPath -FallbackLeaf "RESEARCH_GOALS.md"
 $resolvedPlanPath = Resolve-DocPath -RepoRoot $resolvedRepoRoot -TemplateDir $templateDir -PathSpec $DevDocPath -FallbackLeaf "RESEARCH_PLAN.md"
 $resolvedFindingsPath = Resolve-DocPath -RepoRoot $resolvedRepoRoot -TemplateDir $templateDir -PathSpec $FindingsPath -FallbackLeaf "FINDINGS.md"
+$resolvedMemoryPath = Resolve-DocPath -RepoRoot $resolvedRepoRoot -TemplateDir $templateDir -PathSpec "./MEMORY.md" -FallbackLeaf "../MEMORY.md"
 
 if (-not (Test-Path $resolvedGoalsPath)) {
   throw "Goals document not found. Checked path: $resolvedGoalsPath"
@@ -651,6 +714,9 @@ if (-not (Test-Path $resolvedFindingsPath)) {
 $PrdPath = $resolvedGoalsPath
 $DevDocPath = $resolvedPlanPath
 $FindingsPath = $resolvedFindingsPath
+if (-not (Test-Path $resolvedMemoryPath)) {
+  $resolvedMemoryPath = [System.IO.Path]::GetFullPath((Join-Path $resolvedRepoRoot "MEMORY.md"))
+}
 
 $templateTaskDefault = [string]$template.inputs.task
 $templateDoneCriteriaDefault = [string]$template.inputs.done_criteria
@@ -675,6 +741,29 @@ $compressionStallIterations = if ($null -ne $compressionCfg -and $compressionCfg
 $compressionDriftSignal = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "trigger_drift_signal") { [string]$compressionCfg.trigger_drift_signal } else { "direction_mismatch_rework" }
 $compressionForcedRefresh = if ($null -ne $compressionCfg -and $compressionCfg.PSObject.Properties.Name -contains "forced_refresh") { [string]$compressionCfg.forced_refresh } else { "never" }
 $sourcePolicy = if ($template.inputs.PSObject.Properties.Name -contains "source_policy") { [string]$template.inputs.source_policy } else { "Primary-source-first, flexible for high-signal secondary sources." }
+$templateRoleModeDefault = if ($template.runtime_safety.PSObject.Properties.Name -contains "role_mode_default") { [string]$template.runtime_safety.role_mode_default } else { "researcher_only" }
+$researcherOnlyCfg = if ($template.runtime_safety.PSObject.Properties.Name -contains "researcher_only") { $template.runtime_safety.researcher_only } else { $null }
+$templateNoProgressPolicy = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "no_progress_policy") { [string]$researcherOnlyCfg.no_progress_policy } else { "mark_continue" }
+$templateRequireEvidenceDelta = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "require_evidence_delta") { [bool]$researcherOnlyCfg.require_evidence_delta } else { $true }
+$templateWriteResearcherIterationMd = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "write_researcher_iteration_md") { [bool]$researcherOnlyCfg.write_researcher_iteration_md } else { $true }
+$templateEvidencePaths = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "evidence_paths") { @($researcherOnlyCfg.evidence_paths) } else { @("./report", "./results", "./experiments", "./training") }
+$templateRecoverMemoryEachIteration = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "recover_memory_each_iteration") { [bool]$researcherOnlyCfg.recover_memory_each_iteration } else { $true }
+$templateReviewPreviousIteration = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "review_previous_iteration") { [bool]$researcherOnlyCfg.review_previous_iteration } else { $true }
+$templateStrictJsonContract = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "strict_json_contract") { [bool]$researcherOnlyCfg.strict_json_contract } else { $false }
+$effectiveRoleMode = if ($PSBoundParameters.ContainsKey("RoleMode")) { [string]$RoleMode } else { $templateRoleModeDefault }
+if ([string]::IsNullOrWhiteSpace($effectiveRoleMode)) { $effectiveRoleMode = "researcher_only" }
+$effectiveRoleMode = $effectiveRoleMode.ToLowerInvariant()
+if ($effectiveRoleMode -notin @("full","researcher_only")) {
+  throw "Unsupported role mode '$effectiveRoleMode'. Allowed: full, researcher_only."
+}
+$effectiveNoProgressPolicy = if ($PSBoundParameters.ContainsKey("NoProgressPolicy")) { [string]$NoProgressPolicy } else { $templateNoProgressPolicy }
+if ([string]::IsNullOrWhiteSpace($effectiveNoProgressPolicy)) { $effectiveNoProgressPolicy = "mark_continue" }
+$effectiveNoProgressPolicy = $effectiveNoProgressPolicy.ToLowerInvariant()
+if ($effectiveNoProgressPolicy -notin @("mark_continue","stop","force_pivot")) {
+  throw "Unsupported no_progress policy '$effectiveNoProgressPolicy'. Allowed: mark_continue, stop, force_pivot."
+}
+$effectiveRequireEvidenceDelta = if ($RequireEvidenceDelta) { $true } else { $templateRequireEvidenceDelta }
+$effectiveWriteResearcherIterationMd = $templateWriteResearcherIterationMd
 $templateContinueAfterApproval = if ($template.runtime_safety.PSObject.Properties.Name -contains "continue_after_approval") { [bool]$template.runtime_safety.continue_after_approval } else { $false }
 $effectiveContinueAfterApproval = $templateContinueAfterApproval
 if ($ContinueAfterApproval) { $effectiveContinueAfterApproval = $true }
@@ -747,6 +836,16 @@ $state = [ordered]@{
   trace_file = $traceFile
   lock_file = $lockFile
   nested_exec_args = $nestedExecArgs
+  role_mode = $effectiveRoleMode
+  no_progress_policy = $effectiveNoProgressPolicy
+  require_evidence_delta = $effectiveRequireEvidenceDelta
+  write_researcher_iteration_md = $effectiveWriteResearcherIterationMd
+  strict_json_contract = $templateStrictJsonContract
+  recover_memory_each_iteration = $templateRecoverMemoryEachIteration
+  review_previous_iteration = $templateReviewPreviousIteration
+  memory_doc_path = $resolvedMemoryPath
+  evidence_paths = $templateEvidencePaths
+  no_progress_count = 0
   max_iterations = $effectiveMaxIterations
   continue_after_approval = $effectiveContinueAfterApproval
   min_iterations_before_approval_stop = $minIterationsBeforeApprovalStop
@@ -786,6 +885,7 @@ $qualityScore = 0.0
 $progressPct = 0
 $approvalStreak = 0
 $processApprovalSatisfied = $false
+$noProgressCount = 0
 $bestQualityScore = 0.0
 $lastQualityScore = -1.0
 $nonImprovingCount = 0
@@ -811,7 +911,7 @@ Save-Json -Obj $state -Path $stateFile
 
 Push-Location $resolvedRepoRoot
 try {
-  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "start" -Message ("risk_tier={0}; max_iterations={1}; nested_exec_args={2}" -f $effectiveRiskTier, $maxIterationsLabel, ($nestedExecArgs -join " "))
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "start" -Message ("risk_tier={0}; role_mode={1}; max_iterations={2}; nested_exec_args={3}" -f $effectiveRiskTier, $effectiveRoleMode, $maxIterationsLabel, ($nestedExecArgs -join " "))
   Write-Heartbeat -HeartbeatFile $heartbeatFile -Message "run_id=$runId start"
 
   $bootstrapPrompt = @"
@@ -890,7 +990,8 @@ Perform a repo-wide smart scan and return strict JSON:
   $state.reused_items_file = $reusedItemsFile
   Save-Json -Obj $state -Path $stateFile
 
-  $commanderPrompt = @"
+  if ($effectiveRoleMode -eq "full") {
+    $commanderPrompt = @"
 You are DIRECTOR for a research loop.
 Ultimate goals: $effectiveTask
 Done criteria: $effectiveDoneCriteria
@@ -910,34 +1011,41 @@ Return strict JSON only:
   "approved_final": true|false
 }
 "@
-  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "dispatch" -Iteration 0 -Message "Dispatching director preflight prompt."
-  $commanderRaw = Invoke-CodexExecWithSafety -Prompt $commanderPrompt -StepName "director_preflight" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
-  $commanderFile = Join-Path $runDir "iter_0_director_preflight.txt"
-  Set-Content -Path $commanderFile -Value $commanderRaw -Encoding UTF8
-  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "artifact_written" -Iteration 0 -Message ("Saved output to {0}" -f $commanderFile)
-  $lastSuccessfulStep = "director_preflight"
-  $commanderBlock = Test-BlockedOutput -Text $commanderRaw -Patterns $blockerPatterns
-  if ($commanderBlock.blocked) {
-    $blocked = $true
-    $blockedReason = "Blocked marker detected in director preflight output (pattern='$($commanderBlock.pattern)')."
-    $residualRisk = $blockedReason
-    $state.status = "blocked"
-    Save-Json -Obj $state -Path $stateFile
-    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "blocked_short_circuit" -Iteration 0 -Message $blockedReason
-    throw $blockedReason
-  }
-  try {
-    $commanderJson = Parse-FirstJsonObject -Text $commanderRaw
-    if ($commanderJson.PSObject.Properties.Name -contains "researcher_direction") {
-      $state.next_direction = [string]$commanderJson.researcher_direction
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "dispatch" -Iteration 0 -Message "Dispatching director preflight prompt."
+    $commanderRaw = Invoke-CodexExecWithSafety -Prompt $commanderPrompt -StepName "director_preflight" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
+    $commanderFile = Join-Path $runDir "iter_0_director_preflight.txt"
+    Set-Content -Path $commanderFile -Value $commanderRaw -Encoding UTF8
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "artifact_written" -Iteration 0 -Message ("Saved output to {0}" -f $commanderFile)
+    $lastSuccessfulStep = "director_preflight"
+    $commanderBlock = Test-BlockedOutput -Text $commanderRaw -Patterns $blockerPatterns
+    if ($commanderBlock.blocked) {
+      $blocked = $true
+      $blockedReason = "Blocked marker detected in director preflight output (pattern='$($commanderBlock.pattern)')."
+      $residualRisk = $blockedReason
+      $state.status = "blocked"
+      Save-Json -Obj $state -Path $stateFile
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "blocked_short_circuit" -Iteration 0 -Message $blockedReason
+      throw $blockedReason
     }
-    if ($commanderJson.PSObject.Properties.Name -contains "summary_for_user") {
-      $directorNote = [string]$commanderJson.summary_for_user
+    try {
+      $commanderJson = Parse-FirstJsonObject -Text $commanderRaw
+      if ($commanderJson.PSObject.Properties.Name -contains "researcher_direction") {
+        $state.next_direction = [string]$commanderJson.researcher_direction
+      }
+      if ($commanderJson.PSObject.Properties.Name -contains "summary_for_user") {
+        $directorNote = [string]$commanderJson.summary_for_user
+      }
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "parsed" -Iteration 0 -Message "Parsed director preflight JSON and updated next direction."
+    } catch {
+      $state.next_direction = "Start with highest-priority unresolved research question and update findings."
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "parse_fallback" -Iteration 0 -Message "Director preflight JSON parse failed, using fallback direction."
     }
-    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "parsed" -Iteration 0 -Message "Parsed director preflight JSON and updated next direction."
-  } catch {
-    $state.next_direction = "Start with highest-priority unresolved research question and update findings."
-    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "parse_fallback" -Iteration 0 -Message "Director preflight JSON parse failed, using fallback direction."
+  } else {
+    $directorNote = "Researcher-only mode: director preflight disabled."
+    if ([string]::IsNullOrWhiteSpace($state.next_direction) -or $state.next_direction -eq "none") {
+      $state.next_direction = "Execute the next best concrete experiment or analysis toward the ultimate goals."
+    }
+    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "skipped_researcher_only" -Iteration 0 -Message "Director preflight skipped due to researcher_only role mode."
   }
   Add-RollingItem -List $rollingRecentSummaries -Item ("Director preflight: {0}" -f $directorNote) -MaxItems 10
   Add-RollingItem -List $rollingRecentDirections -Item $state.next_direction -MaxItems 10
@@ -952,6 +1060,51 @@ Return strict JSON only:
     $state.current_iteration = $i
     Save-Json -Obj $state -Path $stateFile
     $previousDirection = [string]$state.next_direction
+    $previousIterationHistory = $null
+    if ($state.history.Count -gt 0) {
+      $previousIterationHistory = $state.history[$state.history.Count - 1]
+    }
+    $previousResearcherFile = ""
+    $previousResearcherMdFile = ""
+    if ($null -ne $previousIterationHistory) {
+      if ($previousIterationHistory -is [System.Collections.IDictionary]) {
+        if ($previousIterationHistory.Contains("worker_file")) {
+          $previousResearcherFile = [string]$previousIterationHistory["worker_file"]
+        }
+        if ($previousIterationHistory.Contains("worker_markdown_file")) {
+          $previousResearcherMdFile = [string]$previousIterationHistory["worker_markdown_file"]
+        }
+      } else {
+        if ($previousIterationHistory.PSObject.Properties.Name -contains "worker_file") {
+          $previousResearcherFile = [string]$previousIterationHistory.worker_file
+        }
+        if ($previousIterationHistory.PSObject.Properties.Name -contains "worker_markdown_file") {
+          $previousResearcherMdFile = [string]$previousIterationHistory.worker_markdown_file
+        }
+      }
+    }
+    if ([string]::IsNullOrWhiteSpace($previousResearcherFile) -and $i -gt 1) {
+      $fallbackPrevWorker = Join-Path $runDir ("iter_{0}_researcher.txt" -f ($i - 1))
+      if (Test-Path $fallbackPrevWorker) { $previousResearcherFile = $fallbackPrevWorker }
+    }
+    if ([string]::IsNullOrWhiteSpace($previousResearcherMdFile) -and $i -gt 1) {
+      $fallbackPrevMd = Join-Path $runDir ("iter_{0}_researcher.md" -f ($i - 1))
+      if (Test-Path $fallbackPrevMd) { $previousResearcherMdFile = $fallbackPrevMd }
+    }
+    $previousResearcherExcerpt = ""
+    if (-not [string]::IsNullOrWhiteSpace($previousResearcherFile) -and (Test-Path $previousResearcherFile)) {
+      $prevRaw = Get-Content -Path $previousResearcherFile -Raw
+      $previousResearcherExcerpt = if ($prevRaw.Length -gt 3500) { $prevRaw.Substring(0, 3500) } else { $prevRaw }
+    }
+    $memoryExcerpt = ""
+    if (Test-Path $resolvedMemoryPath) {
+      $memoryRaw = Get-Content -Path $resolvedMemoryPath -Raw
+      if ($memoryRaw.Length -gt 5000) {
+        $memoryExcerpt = $memoryRaw.Substring($memoryRaw.Length - 5000)
+      } else {
+        $memoryExcerpt = $memoryRaw
+      }
+    }
 
     $activeSnapshotExcerpt = ""
     if (-not [string]::IsNullOrWhiteSpace($state.active_snapshot_file) -and (Test-Path $state.active_snapshot_file)) {
@@ -970,6 +1123,11 @@ Return strict JSON only:
       validated_evidence = (Get-TailArrayClamped -List $rollingValidatedEvidence -MaxItems 8 -MaxCharsPerItem 1000)
       rejected_paths = (Get-TailArrayClamped -List $rollingRejectedPaths -MaxItems 8 -MaxCharsPerItem 1000)
       open_questions = (Get-TailArrayClamped -List $rollingOpenQuestions -MaxItems 10 -MaxCharsPerItem 1000)
+      memory_doc_path = $resolvedMemoryPath
+      memory_excerpt = (Clamp-ContextText -Text $memoryExcerpt -MaxChars 2000)
+      previous_researcher_file = $previousResearcherFile
+      previous_researcher_md_file = $previousResearcherMdFile
+      previous_researcher_excerpt = (Clamp-ContextText -Text $previousResearcherExcerpt -MaxChars 1500)
       active_snapshot_file = $state.active_snapshot_file
       active_snapshot_excerpt = (Clamp-ContextText -Text $activeSnapshotExcerpt -MaxChars 2000)
       last_quality_score = $qualityScore
@@ -982,6 +1140,8 @@ Return strict JSON only:
       $rollingContextPacket.validated_evidence = @((Get-TailArrayClamped -List $rollingValidatedEvidence -MaxItems 4 -MaxCharsPerItem 600))
       $rollingContextPacket.rejected_paths = @((Get-TailArrayClamped -List $rollingRejectedPaths -MaxItems 4 -MaxCharsPerItem 600))
       $rollingContextPacket.open_questions = @((Get-TailArrayClamped -List $rollingOpenQuestions -MaxItems 6 -MaxCharsPerItem 600))
+      $rollingContextPacket.memory_excerpt = (Clamp-ContextText -Text $memoryExcerpt -MaxChars 1200)
+      $rollingContextPacket.previous_researcher_excerpt = (Clamp-ContextText -Text $previousResearcherExcerpt -MaxChars 900)
       $rollingContextPacket.active_snapshot_excerpt = (Clamp-ContextText -Text $activeSnapshotExcerpt -MaxChars 1000)
       $rollingContextJson = $rollingContextPacket | ConvertTo-Json -Depth 10
       Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "context_packet" -Status "trimmed" -Iteration $i -Message ("Rolling context JSON exceeded cap; trimmed to {0} chars." -f $rollingContextJson.Length)
@@ -990,7 +1150,68 @@ Return strict JSON only:
     Save-Json -Obj $state -Path $stateFile
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "context_packet" -Status "build_done" -Iteration $i -Message ("Rolling context packet size={0} chars." -f $rollingContextJson.Length)
 
-    $workerPrompt = @"
+    $evidenceSnapshotBefore = @{}
+    if ($effectiveRoleMode -eq "researcher_only" -and $effectiveRequireEvidenceDelta) {
+      $evidenceSnapshotBefore = Get-EvidenceSnapshot -RepoRoot $resolvedRepoRoot -PathSpecs $templateEvidencePaths
+    }
+
+    if ($effectiveRoleMode -eq "researcher_only") {
+      $memoryRecoveryRule = if ($templateRecoverMemoryEachIteration) {
+        "First, recover memory/context from MEMORY.md + goals/plan/findings."
+      } else {
+        "Memory recovery is optional if not needed for this iteration."
+      }
+      $reviewPriorRule = if ($templateReviewPreviousIteration) {
+        "If this is iteration > 1, review the previous researcher output/markdown, then choose and execute the next concrete research step."
+      } else {
+        "Use the rolling context packet to choose and execute the next concrete research step."
+      }
+      $jsonStrictRule = if ($templateStrictJsonContract) {
+        "JSON contract is strict for this run."
+      } else {
+        "If JSON is not perfect, continue with best effort; do not stop the task."
+      }
+      $workerPrompt = @"
+You are RESEARCHER in a research CLI loop (researcher-only mode).
+Ultimate goals: $effectiveTask
+Done criteria: $effectiveDoneCriteria
+Iteration: $iterationLabel
+Goals doc: $PrdPath
+Plan doc: $DevDocPath
+Findings doc: $FindingsPath
+Source policy: $sourcePolicy
+Current direction: $($state.next_direction)
+Memory doc: $resolvedMemoryPath
+Previous researcher artifact: $previousResearcherFile
+Previous researcher markdown: $previousResearcherMdFile
+Rolling context packet (JSON):
+$rollingContextJson
+
+Act like a normal Codex coding session in this repo: inspect files, run commands, edit code/docs, and validate where possible.
+Iteration protocol:
+- $memoryRecoveryRule
+- If this is iteration 1, use recovered memory to choose and execute the next concrete research step.
+- $reviewPriorRule
+- Do not run nested orchestration loops (`Research_native_loop.ps1` / `start_research.bat`).
+- Kaggle is optional; use it only when it materially helps the current step.
+
+Output format:
+- Prefer JSON first and then short markdown.
+- $jsonStrictRule
+Preferred JSON fields:
+{
+  "summary_for_user": "...",
+  "actions": ["..."],
+  "evidence_updates": ["..."],
+  "limitations": ["..."],
+  "progress_pct_claim": 0-100,
+  "quality_score_self": 0.0-1.0,
+  "approved_candidate": true|false,
+  "next_direction": "..."
+}
+"@
+    } else {
+      $workerPrompt = @"
 You are RESEARCHER in a research CLI loop.
 Ultimate goals: $effectiveTask
 Done criteria: $effectiveDoneCriteria
@@ -1021,6 +1242,7 @@ Required JSON:
   "next_direction": "..."
 }
 "@
+    }
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "dispatch" -Iteration $i -Message "Dispatching researcher prompt."
     $workerRaw = Invoke-CodexExecWithSafety -Prompt $workerPrompt -StepName "researcher" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
     $workerFile = Join-Path $runDir ("iter_{0}_researcher.txt" -f $i)
@@ -1068,6 +1290,192 @@ Required JSON:
       }
     } catch {
       Add-RollingItem -List $rollingRecentSummaries -Item ("Researcher iter_{0}: parse fallback summary" -f $i) -MaxItems 10
+    }
+
+    if ($effectiveRoleMode -eq "researcher_only") {
+      $workerJsonForMode = $null
+      $workerJsonParsed = $false
+      try {
+        $workerJsonForMode = Parse-FirstJsonObject -Text $workerRaw
+        $workerJsonParsed = $true
+      } catch {
+        $workerJsonParsed = $false
+      }
+
+      $approvedCandidate = $false
+      $qualitySelf = $qualityScore
+      $progressClaim = $progressPct
+      $summaryForUser = "Researcher-only iteration completed."
+      $researcherDirection = $state.next_direction
+      $actionType = ""
+      $goalLink = ""
+      $actionsList = @()
+      $commandsExecuted = @()
+      $artifactsExpected = @()
+      $artifactsObserved = @()
+      $evidenceDeltaText = ""
+      $limitationsList = @()
+      $evidenceUpdatesList = @()
+      $jsonContractIssues = @()
+
+      if ($workerJsonParsed) {
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "approved_candidate") { $approvedCandidate = [bool]$workerJsonForMode.approved_candidate }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "quality_score_self") { $qualitySelf = [double]$workerJsonForMode.quality_score_self }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "progress_pct_claim") { $progressClaim = [math]::Max(0, [math]::Min(100, [int]$workerJsonForMode.progress_pct_claim)) }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "summary_for_user") { $summaryForUser = [string]$workerJsonForMode.summary_for_user }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "next_direction") { $researcherDirection = [string]$workerJsonForMode.next_direction }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "action_type") { $actionType = [string]$workerJsonForMode.action_type }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "goal_link") { $goalLink = [string]$workerJsonForMode.goal_link }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "actions") { $actionsList = @($workerJsonForMode.actions) }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "commands_executed") { $commandsExecuted = @($workerJsonForMode.commands_executed) }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "artifacts_expected") { $artifactsExpected = @($workerJsonForMode.artifacts_expected) }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "artifacts_observed") { $artifactsObserved = @($workerJsonForMode.artifacts_observed) }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "evidence_delta") { $evidenceDeltaText = [string]$workerJsonForMode.evidence_delta }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "limitations") { $limitationsList = @($workerJsonForMode.limitations) }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "evidence_updates") { $evidenceUpdatesList = @($workerJsonForMode.evidence_updates) }
+        if ($templateStrictJsonContract) {
+          $requiredFields = @("summary_for_user","next_direction")
+          foreach ($field in $requiredFields) {
+            if (-not ($workerJsonForMode.PSObject.Properties.Name -contains $field)) {
+              $jsonContractIssues += $field
+            }
+          }
+        }
+      } else {
+        if ($templateStrictJsonContract) {
+          $jsonContractIssues += "json_parse_failed"
+        }
+      }
+
+      if ($actionsList.Count -gt 0 -and $commandsExecuted.Count -eq 0) {
+        $commandsExecuted = @($actionsList)
+      }
+
+      $evidenceSnapshotAfter = @{}
+      $evidenceDeltaPaths = @()
+      if ($effectiveRequireEvidenceDelta) {
+        $evidenceSnapshotAfter = Get-EvidenceSnapshot -RepoRoot $resolvedRepoRoot -PathSpecs $templateEvidencePaths
+        $evidenceDeltaPaths = Get-EvidenceDeltaPaths -Before $evidenceSnapshotBefore -After $evidenceSnapshotAfter
+      }
+      $hasEvidenceDelta = ($evidenceDeltaPaths.Count -gt 0)
+      if ([string]::IsNullOrWhiteSpace($evidenceDeltaText) -and $hasEvidenceDelta) {
+        $evidenceDeltaText = ("Detected {0} changed evidence path(s)." -f $evidenceDeltaPaths.Count)
+      }
+
+      $noProgressIteration = $false
+      $noProgressReasons = @()
+      if ($templateStrictJsonContract -and $jsonContractIssues.Count -gt 0) {
+        $noProgressIteration = $true
+        $noProgressReasons += ("json_contract_issues={0}" -f ($jsonContractIssues -join ","))
+      }
+      if ($effectiveRequireEvidenceDelta -and -not $hasEvidenceDelta) {
+        $noProgressIteration = $true
+        $noProgressReasons += "no_evidence_delta_detected"
+      }
+
+      if ($progressClaim -gt $progressPct) { $progressPct = $progressClaim }
+      $qualityScore = [math]::Max(0.0, [math]::Min(1.0, $qualitySelf))
+      $approved = $approvedCandidate
+      $directorApprovedFinal = $false
+      $coverage = if ($effectiveRequireEvidenceDelta) { "Researcher-only mode with evidence-delta validation." } else { "Researcher-only mode without evidence-delta requirement." }
+      if ($noProgressIteration) {
+        $noProgressCount += 1
+        $residualRisk = "Researcher-only iteration had no acceptable progress: $($noProgressReasons -join '; ')."
+      } else {
+        $noProgressCount = 0
+        $residualRisk = if ($limitationsList.Count -gt 0) { ($limitationsList -join "; ") } else { "No major residual risk reported by researcher." }
+      }
+      $state.no_progress_count = $noProgressCount
+
+      if (-not [string]::IsNullOrWhiteSpace($researcherDirection)) {
+        $state.next_direction = $researcherDirection
+      }
+      if ($noProgressIteration -and $effectiveNoProgressPolicy -eq "force_pivot") {
+        $state.next_direction = "Pivot strategy: choose a different experiment or analysis path that yields measurable evidence delta toward the ultimate goals."
+      }
+
+      foreach ($deltaPath in $evidenceDeltaPaths) {
+        $rel = Convert-ToRepoRelativePath -RepoRoot $resolvedRepoRoot -Path $deltaPath
+        Add-RollingItem -List $rollingValidatedEvidence -Item ("delta: {0}" -f $rel) -MaxItems 20
+      }
+      if ($noProgressIteration) {
+        Add-RollingItem -List $rollingOpenQuestions -Item ("iter_{0}: no_progress reasons={1}" -f $i, ($noProgressReasons -join "; ")) -MaxItems 16
+      }
+
+      $workerMarkdownFile = Join-Path $runDir ("iter_{0}_researcher.md" -f $i)
+      if ($effectiveWriteResearcherIterationMd) {
+        $evidenceDeltaLines = if ($evidenceDeltaPaths.Count -gt 0) {
+          ($evidenceDeltaPaths | ForEach-Object { "- " + (Convert-ToRepoRelativePath -RepoRoot $resolvedRepoRoot -Path $_) }) -join [Environment]::NewLine
+        } else {
+          "- (none)"
+        }
+        $commandsLines = if ($commandsExecuted.Count -gt 0) { ($commandsExecuted | ForEach-Object { "- $_" }) -join [Environment]::NewLine } else { "- (none)" }
+        $limitationsLines = if ($limitationsList.Count -gt 0) { ($limitationsList | ForEach-Object { "- $_" }) -join [Environment]::NewLine } else { "- (none)" }
+        $md = @"
+# Researcher Iteration $i
+
+- role_mode: researcher_only
+- iteration: $iterationLabel
+- outcome: $(if ($noProgressIteration) { "no_progress" } else { "progress" })
+- action_type: $actionType
+- goal_link: $goalLink
+- progress_pct_claim: $progressClaim
+- quality_score_self: $qualitySelf
+- approved_candidate: $approvedCandidate
+- evidence_delta_text: $evidenceDeltaText
+- evidence_delta_count: $($evidenceDeltaPaths.Count)
+- next_direction: $($state.next_direction)
+- previous_researcher_file: $previousResearcherFile
+- previous_researcher_md_file: $previousResearcherMdFile
+- memory_doc_path: $resolvedMemoryPath
+
+## Commands Executed
+$commandsLines
+
+## Evidence Delta Files
+$evidenceDeltaLines
+
+## Limitations
+$limitationsLines
+"@
+        Set-Content -Path $workerMarkdownFile -Value $md -Encoding UTF8
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "markdown_written" -Iteration $i -Message ("Saved markdown summary to {0}" -f $workerMarkdownFile)
+      }
+
+      $state.history += [ordered]@{
+        iteration = $i
+        worker_file = $workerFile
+        worker_markdown_file = if ($effectiveWriteResearcherIterationMd) { $workerMarkdownFile } else { "" }
+        reviewer_file = ""
+        director_file = ""
+        approved = $approved
+        director_approved_final = $false
+        quality_score = $qualityScore
+        progress_pct = $progressPct
+        context_risk_score = 0.0
+        enforce_compression = $false
+        next_direction = $state.next_direction
+        role_mode = "researcher_only"
+        no_progress = $noProgressIteration
+        evidence_delta_count = $evidenceDeltaPaths.Count
+      }
+      Save-Json -Obj $state -Path $stateFile
+
+      if ($noProgressIteration) {
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "researcher_only_no_progress" -Iteration $i -Message ("policy={0}; reasons={1}" -f $effectiveNoProgressPolicy, ($noProgressReasons -join "; "))
+        if ($effectiveNoProgressPolicy -eq "stop") {
+          $state.status = "paused_no_progress"
+          Save-Json -Obj $state -Path $stateFile
+          $blocked = $true
+          $blockedReason = "Researcher-only iteration produced no progress and policy=stop."
+          break
+        }
+      } else {
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "researcher_only_progress" -Iteration $i -Message ("evidence_delta_count={0}" -f $evidenceDeltaPaths.Count)
+      }
+
+      $i++
+      continue
     }
 
     $reviewerPrompt = @"
@@ -1440,13 +1848,29 @@ Return strict JSON only:
   $state.ended_at = (Get-Date).ToString("s")
   Save-Json -Obj $state -Path $stateFile
 
-  $validationResult = if ($processApprovalSatisfied) { "PASS" } elseif ($blocked) { "FAIL_BLOCKED" } else { "PARTIAL" }
+  $validationResult = if ($processApprovalSatisfied) {
+    "PASS"
+  } elseif ($blocked) {
+    "FAIL_BLOCKED"
+  } elseif ($effectiveRoleMode -eq "researcher_only" -and $effectiveMaxIterations -gt 0 -and $state.current_iteration -ge $effectiveMaxIterations) {
+    "PASS"
+  } else {
+    "PARTIAL"
+  }
+  $executionModeSummary = if ($effectiveRoleMode -eq "researcher_only") { "Researcher-only" } else { "Director + Researcher + Evaluator" }
+  $iterationFlowCoverage = if ($effectiveRoleMode -eq "researcher_only") {
+    "bootstrap merge, per-iteration memory/context recovery, previous-iteration review handoff, researcher execution, researcher-only progress/no-progress decisions, per-iteration JSON artifacts, and per-iteration researcher markdown summaries."
+  } else {
+    "bootstrap merge, director preflight, researcher execution, evaluator scoring, evaluator-driven context pressure checks, adaptive compression checkpoints (JSON+Markdown), director post notes, adaptive burst, 25/50/75/100 progress milestones, 0.90 quality milestone, and step-level execution tracing."
+  }
   $report = @"
 # Research Native Loop Final Report
 
 - run_id: $runId
 - status: $($state.status)
 - risk_tier: $effectiveRiskTier
+- role_mode: $effectiveRoleMode
+- execution_flow: $executionModeSummary
 - max_iterations: $maxIterationsLabel
 - completed_iterations: $($state.current_iteration)
 - approved: $approved
@@ -1456,6 +1880,7 @@ Return strict JSON only:
 - process_approval_satisfied: $processApprovalSatisfied
 - approval_streak: $approvalStreak / required $approvalStreakRequired
 - min_iterations_before_approval_stop: $minIterationsBeforeApprovalStop
+- no_progress_count: $($state.no_progress_count)
 
 ## Executive Summary
 $summaryForUser
@@ -1476,10 +1901,10 @@ $summaryForUser
 - Enforced runtime safety (heartbeat/retry/no_silent_stop/lock): PASS
 - Wrote step-level trace stream to ${traceFile}: PASS
 - Auto merge bootstrap with baseline artifacts: PASS
-- Iterative director-researcher-evaluator loop execution: $validationResult
+- Iterative execution (`$effectiveRoleMode`): $validationResult
 
 ## Coverage
-- Covered: bootstrap merge, director preflight, researcher execution, evaluator scoring, evaluator-driven context pressure checks, adaptive compression checkpoints (JSON+Markdown), director post notes, adaptive burst, 25/50/75/100 progress milestones, 0.90 quality milestone, and step-level execution tracing.
+- Covered: $iterationFlowCoverage
 - Not covered: external domain-expert verification beyond repository/runtime evidence.
 
 ## Residual Risk

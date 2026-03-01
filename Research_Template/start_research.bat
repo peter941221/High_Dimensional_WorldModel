@@ -7,11 +7,13 @@ if "%TEMPLATE_DIR:~-1%"=="\" set "TEMPLATE_DIR=%TEMPLATE_DIR:~0,-1%"
 set "REPO_ROOT=%TEMPLATE_DIR%\.."
 set "HAS_MAX_ITER=0"
 set "HAS_APPROVAL_MODE=0"
+set "HAS_ROLE_MODE=0"
 
 for %%A in (%*) do (
   if /I "%%~A"=="-MaxIterations" set "HAS_MAX_ITER=1"
   if /I "%%~A"=="-ContinueAfterApproval" set "HAS_APPROVAL_MODE=1"
   if /I "%%~A"=="-StopOnApproval" set "HAS_APPROVAL_MODE=1"
+  if /I "%%~A"=="-RoleMode" set "HAS_ROLE_MODE=1"
 )
 
 set "DEFAULT_MAX_ITER_ARGS="
@@ -23,6 +25,11 @@ set "DEFAULT_APPROVAL_MODE_ARGS="
 if "%HAS_APPROVAL_MODE%"=="0" (
   REM Default behavior for starter: keep running even after approval until user stops it.
   set "DEFAULT_APPROVAL_MODE_ARGS=-ContinueAfterApproval"
+)
+set "DEFAULT_ROLE_MODE_ARGS="
+if "%HAS_ROLE_MODE%"=="0" (
+  REM Default behavior for starter: simplified researcher-only flow.
+  set "DEFAULT_ROLE_MODE_ARGS=-RoleMode researcher_only"
 )
 
 REM Preflight lock check:
@@ -61,6 +68,11 @@ if "%HAS_APPROVAL_MODE%"=="1" (
 ) else (
   echo [start_research] Approval mode default = continue after approval.
 )
+if "%HAS_ROLE_MODE%"=="1" (
+  echo [start_research] RoleMode explicitly set by user args.
+) else (
+  echo [start_research] RoleMode default = researcher_only.
+)
 echo [start_research] Starting foreground loop...
 echo.
 
@@ -72,6 +84,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%TEMPLATE_DIR%\scripts\Rese
   -FindingsPath "%TEMPLATE_DIR%\FINDINGS.md" ^
   %DEFAULT_MAX_ITER_ARGS% ^
   %DEFAULT_APPROVAL_MODE_ARGS% ^
+  %DEFAULT_ROLE_MODE_ARGS% ^
   %*
 
 set "EXIT_CODE=%ERRORLEVEL%"
