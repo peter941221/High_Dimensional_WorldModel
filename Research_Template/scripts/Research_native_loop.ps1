@@ -184,13 +184,74 @@ function Read-NewStreamChunk {
 
 function Parse-FirstJsonObject {
   param([string]$Text)
-  $trimmed = $Text.Trim()
-  if ($trimmed.StartsWith("{") -and $trimmed.EndsWith("}")) { return ($trimmed | ConvertFrom-Json) }
-  $match = [regex]::Match($trimmed, '\{[\s\S]*\}')
-  if (-not $match.Success) {
+  $raw = [string]$Text
+  if ([string]::IsNullOrWhiteSpace($raw)) {
+    throw "Model output is empty; cannot parse JSON."
+  }
+
+  # Prefer fenced ```json blocks to avoid accidentally matching later braces in markdown.
+  $fenceIdx = $raw.IndexOf("```json", [System.StringComparison]::OrdinalIgnoreCase)
+  if ($fenceIdx -ge 0) {
+    $lineEnd = $raw.IndexOf("`n", $fenceIdx)
+    if ($lineEnd -ge 0) {
+      $jsonStart = $lineEnd + 1
+      $fenceEnd = $raw.IndexOf("```", $jsonStart, [System.StringComparison]::Ordinal)
+      if ($fenceEnd -gt $jsonStart) {
+        $jsonText = $raw.Substring($jsonStart, $fenceEnd - $jsonStart).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($jsonText)) {
+          return ($jsonText | ConvertFrom-Json)
+        }
+      }
+    }
+  }
+
+  # Fallback: extract the first balanced JSON object by brace counting, ignoring braces inside strings.
+  $start = $raw.IndexOf("{")
+  if ($start -lt 0) {
     throw "Could not find JSON object in model output."
   }
-  return ($match.Value | ConvertFrom-Json)
+
+  $depth = 0
+  $inString = $false
+  $escaped = $false
+  $end = -1
+
+  for ($i = $start; $i -lt $raw.Length; $i++) {
+    $ch = $raw[$i]
+
+    if ($escaped) {
+      $escaped = $false
+      continue
+    }
+    if ($inString -and $ch -eq '\') {
+      $escaped = $true
+      continue
+    }
+    if ($ch -eq '"') {
+      $inString = -not $inString
+      continue
+    }
+    if ($inString) { continue }
+
+    if ($ch -eq '{') {
+      $depth++
+      continue
+    }
+    if ($ch -eq '}') {
+      $depth--
+      if ($depth -eq 0) {
+        $end = $i
+        break
+      }
+    }
+  }
+
+  if ($end -lt 0) {
+    throw "Could not find a balanced JSON object in model output."
+  }
+
+  $jsonCandidate = $raw.Substring($start, $end - $start + 1)
+  return ($jsonCandidate | ConvertFrom-Json)
 }
 
 function Convert-ToRepoRelativePath {
@@ -364,7 +425,8 @@ function Invoke-IterationAutoCommit {
 
   $candidatePaths = New-Object System.Collections.ArrayList
   foreach ($path in $resolvedTouched) {
-    if ($deltaPaths -contains $path) {
+    # Commit explicitly touched files if they are currently dirty, even if the repo started dirty.
+    if ($afterMap.ContainsKey($path)) {
       [void]$candidatePaths.Add($path)
     }
   }
@@ -1387,6 +1449,7 @@ Act like a normal Codex coding session in this repo: inspect files, run commands
 Iteration protocol:
 $iterationProtocolText
 - Do not run nested orchestration loops (`Research_native_loop.ps1` / `start_research.bat`).
+- Do not edit files under `Research_Template/runtime/` (loop-managed logs/locks/artifacts).
 - Kaggle is optional; use it only when it materially helps the current step.
 
 Output format:
@@ -1629,6 +1692,10 @@ Required JSON:
         } else {
           "- (none)"
         }
+        $summaryText = if ([string]::IsNullOrWhiteSpace($summaryForUser)) { "(none)" } else { $summaryForUser.Trim() }
+        $actionsLines = if ($actionsList.Count -gt 0) { ($actionsList | ForEach-Object { "- " + [string]$_ }) -join [Environment]::NewLine } else { "- (none)" }
+        $evidenceUpdatesLines = if ($evidenceUpdatesList.Count -gt 0) { ($evidenceUpdatesList | ForEach-Object { "- " + [string]$_ }) -join [Environment]::NewLine } else { "- (none)" }
+        $filesTouchedLines = if ($filesTouchedList.Count -gt 0) { ($filesTouchedList | ForEach-Object { "- " + [string]$_ }) -join [Environment]::NewLine } else { "- (none)" }
         $commandsLines = if ($commandsExecuted.Count -gt 0) { ($commandsExecuted | ForEach-Object { "- $_" }) -join [Environment]::NewLine } else { "- (none)" }
         $limitationsLines = if ($limitationsList.Count -gt 0) { ($limitationsList | ForEach-Object { "- $_" }) -join [Environment]::NewLine } else { "- (none)" }
         $md = @"
@@ -1652,6 +1719,18 @@ Required JSON:
 - auto_commit_result: $(if ($null -ne $autoCommitResult) { $autoCommitResult.reason } else { "disabled" })
 - auto_commit_hash: $(if ($null -ne $autoCommitResult -and $autoCommitResult.committed) { $autoCommitResult.commit_hash } else { "" })
 
+## Summary
+$summaryText
+
+## Actions
+$actionsLines
+
+## Evidence Updates
+$evidenceUpdatesLines
+
+## Files Touched
+$filesTouchedLines
+
 ## Commands Executed
 $commandsLines
 
@@ -1660,6 +1739,9 @@ $evidenceDeltaLines
 
 ## Limitations
 $limitationsLines
+
+## Raw Output File
+- $workerFile
 "@
         Set-Content -Path $workerMarkdownFile -Value $md -Encoding UTF8
         Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "markdown_written" -Iteration $i -Message ("Saved markdown summary to {0}" -f $workerMarkdownFile)
