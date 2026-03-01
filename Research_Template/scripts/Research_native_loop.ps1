@@ -252,6 +252,171 @@ function Get-EvidenceDeltaPaths {
   return @($delta.ToArray() | Sort-Object -Unique)
 }
 
+function Get-GitStatusMap {
+  param([string]$RepoRoot)
+  $map = @{}
+  try {
+    $lines = @(& git -C $RepoRoot status --porcelain=v1 --untracked-files=all 2>$null)
+  } catch {
+    return $map
+  }
+  foreach ($line in $lines) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    if ($line.Length -lt 4) { continue }
+    $status = $line.Substring(0, 2)
+    $path = $line.Substring(3).Trim()
+    if ($path -match ' -> ') {
+      $parts = $path -split ' -> '
+      $path = $parts[$parts.Length - 1].Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($path)) { continue }
+    $normalized = ($path -replace '\\', '/')
+    $map[$normalized] = $status
+  }
+  return $map
+}
+
+function Get-GitDeltaPaths {
+  param(
+    [hashtable]$Before,
+    [hashtable]$After
+  )
+  if ($null -eq $Before) { $Before = @{} }
+  if ($null -eq $After) { $After = @{} }
+  $delta = New-Object System.Collections.ArrayList
+  foreach ($path in $After.Keys) {
+    if (-not $Before.ContainsKey($path)) {
+      [void]$delta.Add($path)
+      continue
+    }
+    if ([string]$Before[$path] -ne [string]$After[$path]) {
+      [void]$delta.Add($path)
+    }
+  }
+  return @($delta.ToArray() | Sort-Object -Unique)
+}
+
+function Test-PathExcludedByPrefix {
+  param(
+    [string]$RelativePath,
+    [string[]]$ExcludePrefixes
+  )
+  if ([string]::IsNullOrWhiteSpace($RelativePath)) { return $true }
+  $normalizedPath = ($RelativePath -replace '\\', '/').TrimStart('/')
+  foreach ($prefix in $ExcludePrefixes) {
+    if ([string]::IsNullOrWhiteSpace($prefix)) { continue }
+    $normalizedPrefix = ($prefix -replace '\\', '/').TrimStart('/')
+    if ($normalizedPath.StartsWith($normalizedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+      return $true
+    }
+  }
+  return $false
+}
+
+function Resolve-CommitCandidatePaths {
+  param(
+    [string]$RepoRoot,
+    [string[]]$CandidatePaths
+  )
+  $resolved = New-Object System.Collections.ArrayList
+  foreach ($candidate in $CandidatePaths) {
+    $raw = [string]$candidate
+    if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+    $fullPath = Resolve-PathSafe -Base $RepoRoot -PathSpec $raw
+    if (-not (Test-Path $fullPath)) { continue }
+    $relative = Convert-ToRepoRelativePath -RepoRoot $RepoRoot -Path $fullPath
+    if ([string]::IsNullOrWhiteSpace($relative) -or $relative -eq ".") { continue }
+    [void]$resolved.Add(($relative -replace '\\', '/'))
+  }
+  return @($resolved.ToArray() | Sort-Object -Unique)
+}
+
+function Invoke-IterationAutoCommit {
+  param(
+    [string]$RepoRoot,
+    [int]$Iteration,
+    [string]$Summary,
+    [string]$NextDirection,
+    [string[]]$FilesTouched,
+    [string]$CommitMessageHint,
+    [hashtable]$GitStatusBefore,
+    [string[]]$ExcludePrefixes,
+    [switch]$AutoPush
+  )
+
+  $result = [ordered]@{
+    attempted = $true
+    committed = $false
+    pushed = $false
+    reason = ""
+    commit_hash = ""
+    staged_paths = @()
+  }
+
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    $result.reason = "git_not_found"
+    return $result
+  }
+
+  $afterMap = Get-GitStatusMap -RepoRoot $RepoRoot
+  $deltaPaths = Get-GitDeltaPaths -Before $GitStatusBefore -After $afterMap
+  $resolvedTouched = Resolve-CommitCandidatePaths -RepoRoot $RepoRoot -CandidatePaths $FilesTouched
+
+  $candidatePaths = New-Object System.Collections.ArrayList
+  foreach ($path in $resolvedTouched) {
+    if ($deltaPaths -contains $path) {
+      [void]$candidatePaths.Add($path)
+    }
+  }
+  if ($candidatePaths.Count -eq 0) {
+    foreach ($path in $deltaPaths) {
+      [void]$candidatePaths.Add($path)
+    }
+  }
+
+  $filtered = New-Object System.Collections.ArrayList
+  foreach ($path in @($candidatePaths.ToArray() | Sort-Object -Unique)) {
+    if (Test-PathExcludedByPrefix -RelativePath $path -ExcludePrefixes $ExcludePrefixes) { continue }
+    [void]$filtered.Add($path)
+  }
+  if ($filtered.Count -eq 0) {
+    $result.reason = "no_commit_candidates"
+    return $result
+  }
+
+  $pathArgs = @($filtered.ToArray())
+  try {
+    & git -C $RepoRoot add -- @pathArgs
+    $staged = @(& git -C $RepoRoot diff --cached --name-only -- @pathArgs 2>$null)
+    if ($staged.Count -eq 0) {
+      $result.reason = "no_staged_changes"
+      return $result
+    }
+    $commitMessage = $CommitMessageHint
+    if ([string]::IsNullOrWhiteSpace($commitMessage)) {
+      $summaryCompact = if ([string]::IsNullOrWhiteSpace($Summary)) { "update" } else { $Summary.Trim() }
+      if ($summaryCompact.Length -gt 90) { $summaryCompact = $summaryCompact.Substring(0, 90) }
+      $commitMessage = ("research(loop): iter {0} - {1}" -f $Iteration, $summaryCompact)
+    }
+    & git -C $RepoRoot commit -m $commitMessage -- @pathArgs | Out-Null
+    $hash = (& git -C $RepoRoot rev-parse --short HEAD 2>$null)
+    $result.committed = $true
+    $result.commit_hash = [string]$hash
+    $result.staged_paths = @($staged)
+
+    if ($AutoPush) {
+      & git -C $RepoRoot push | Out-Null
+      $result.pushed = $true
+    }
+  } catch {
+    $result.reason = $_.Exception.Message
+    return $result
+  }
+
+  $result.reason = "ok"
+  return $result
+}
+
 function Is-TemplatePlaceholder {
   param([string]$Value)
   if ([string]::IsNullOrWhiteSpace($Value)) { return $true }
@@ -750,6 +915,14 @@ $templateEvidencePaths = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCf
 $templateRecoverMemoryEachIteration = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "recover_memory_each_iteration") { [bool]$researcherOnlyCfg.recover_memory_each_iteration } else { $true }
 $templateReviewPreviousIteration = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "review_previous_iteration") { [bool]$researcherOnlyCfg.review_previous_iteration } else { $true }
 $templateStrictJsonContract = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "strict_json_contract") { [bool]$researcherOnlyCfg.strict_json_contract } else { $false }
+$autoCommitCfg = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "auto_commit_each_iteration") { $researcherOnlyCfg.auto_commit_each_iteration } else { $null }
+$templateAutoCommitEnabled = if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "enabled") { [bool]$autoCommitCfg.enabled } else { $false }
+$templateAutoCommitPush = if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "auto_push") { [bool]$autoCommitCfg.auto_push } else { $false }
+if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "exclude_paths") {
+  $templateAutoCommitExcludePaths = [string[]]@($autoCommitCfg.exclude_paths)
+} else {
+  $templateAutoCommitExcludePaths = [string[]]@("Research_Template/runtime/")
+}
 $effectiveRoleMode = if ($PSBoundParameters.ContainsKey("RoleMode")) { [string]$RoleMode } else { $templateRoleModeDefault }
 if ([string]::IsNullOrWhiteSpace($effectiveRoleMode)) { $effectiveRoleMode = "researcher_only" }
 $effectiveRoleMode = $effectiveRoleMode.ToLowerInvariant()
@@ -764,6 +937,8 @@ if ($effectiveNoProgressPolicy -notin @("mark_continue","stop","force_pivot")) {
 }
 $effectiveRequireEvidenceDelta = if ($RequireEvidenceDelta) { $true } else { $templateRequireEvidenceDelta }
 $effectiveWriteResearcherIterationMd = $templateWriteResearcherIterationMd
+$effectiveAutoCommitEnabled = ($effectiveRoleMode -eq "researcher_only" -and $templateAutoCommitEnabled -and -not $DryRun)
+$effectiveAutoCommitPush = ($effectiveAutoCommitEnabled -and $templateAutoCommitPush)
 $templateContinueAfterApproval = if ($template.runtime_safety.PSObject.Properties.Name -contains "continue_after_approval") { [bool]$template.runtime_safety.continue_after_approval } else { $false }
 $effectiveContinueAfterApproval = $templateContinueAfterApproval
 if ($ContinueAfterApproval) { $effectiveContinueAfterApproval = $true }
@@ -844,6 +1019,9 @@ $state = [ordered]@{
   recover_memory_each_iteration = $templateRecoverMemoryEachIteration
   review_previous_iteration = $templateReviewPreviousIteration
   memory_doc_path = $resolvedMemoryPath
+  auto_commit_each_iteration = $effectiveAutoCommitEnabled
+  auto_push_each_commit = $effectiveAutoCommitPush
+  auto_commit_exclude_paths = $templateAutoCommitExcludePaths
   evidence_paths = $templateEvidencePaths
   no_progress_count = 0
   max_iterations = $effectiveMaxIterations
@@ -911,7 +1089,7 @@ Save-Json -Obj $state -Path $stateFile
 
 Push-Location $resolvedRepoRoot
 try {
-  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "start" -Message ("risk_tier={0}; role_mode={1}; max_iterations={2}; nested_exec_args={3}" -f $effectiveRiskTier, $effectiveRoleMode, $maxIterationsLabel, ($nestedExecArgs -join " "))
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "start" -Message ("risk_tier={0}; role_mode={1}; max_iterations={2}; auto_commit={3}; auto_push={4}; nested_exec_args={5}" -f $effectiveRiskTier, $effectiveRoleMode, $maxIterationsLabel, $effectiveAutoCommitEnabled, $effectiveAutoCommitPush, ($nestedExecArgs -join " "))
   Write-Heartbeat -HeartbeatFile $heartbeatFile -Message "run_id=$runId start"
 
   $bootstrapPrompt = @"
@@ -1060,6 +1238,10 @@ Return strict JSON only:
     $state.current_iteration = $i
     Save-Json -Obj $state -Path $stateFile
     $previousDirection = [string]$state.next_direction
+    $gitStatusBeforeIteration = @{}
+    if ($effectiveAutoCommitEnabled) {
+      $gitStatusBeforeIteration = Get-GitStatusMap -RepoRoot $resolvedRepoRoot
+    }
     $previousIterationHistory = $null
     if ($state.history.Count -gt 0) {
       $previousIterationHistory = $state.history[$state.history.Count - 1]
@@ -1202,6 +1384,8 @@ Preferred JSON fields:
 {
   "summary_for_user": "...",
   "actions": ["..."],
+  "files_touched": ["relative/path"],
+  "commit_message": "...",
   "evidence_updates": ["..."],
   "limitations": ["..."],
   "progress_pct_claim": 0-100,
@@ -1316,6 +1500,8 @@ Required JSON:
       $evidenceDeltaText = ""
       $limitationsList = @()
       $evidenceUpdatesList = @()
+      $filesTouchedList = @()
+      $commitMessageHint = ""
       $jsonContractIssues = @()
 
       if ($workerJsonParsed) {
@@ -1333,6 +1519,8 @@ Required JSON:
         if ($workerJsonForMode.PSObject.Properties.Name -contains "evidence_delta") { $evidenceDeltaText = [string]$workerJsonForMode.evidence_delta }
         if ($workerJsonForMode.PSObject.Properties.Name -contains "limitations") { $limitationsList = @($workerJsonForMode.limitations) }
         if ($workerJsonForMode.PSObject.Properties.Name -contains "evidence_updates") { $evidenceUpdatesList = @($workerJsonForMode.evidence_updates) }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "files_touched") { $filesTouchedList = @($workerJsonForMode.files_touched) }
+        if ($workerJsonForMode.PSObject.Properties.Name -contains "commit_message") { $commitMessageHint = [string]$workerJsonForMode.commit_message }
         if ($templateStrictJsonContract) {
           $requiredFields = @("summary_for_user","next_direction")
           foreach ($field in $requiredFields) {
@@ -1402,6 +1590,26 @@ Required JSON:
         Add-RollingItem -List $rollingOpenQuestions -Item ("iter_{0}: no_progress reasons={1}" -f $i, ($noProgressReasons -join "; ")) -MaxItems 16
       }
 
+      $autoCommitResult = $null
+      if ($effectiveAutoCommitEnabled) {
+        $autoCommitResult = Invoke-IterationAutoCommit `
+          -RepoRoot $resolvedRepoRoot `
+          -Iteration $i `
+          -Summary $summaryForUser `
+          -NextDirection $state.next_direction `
+          -FilesTouched $filesTouchedList `
+          -CommitMessageHint $commitMessageHint `
+          -GitStatusBefore $gitStatusBeforeIteration `
+          -ExcludePrefixes $templateAutoCommitExcludePaths `
+          -AutoPush:$effectiveAutoCommitPush
+        if ($autoCommitResult.committed) {
+          Add-RollingItem -List $rollingValidatedEvidence -Item ("git_commit: {0}" -f $autoCommitResult.commit_hash) -MaxItems 20
+          Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "git_commit" -Status "committed" -Iteration $i -Message ("hash={0}; pushed={1}; paths={2}" -f $autoCommitResult.commit_hash, $autoCommitResult.pushed, (($autoCommitResult.staged_paths -join ", ")))
+        } else {
+          Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "git_commit" -Status "skipped" -Iteration $i -Message ("reason={0}" -f $autoCommitResult.reason)
+        }
+      }
+
       $workerMarkdownFile = Join-Path $runDir ("iter_{0}_researcher.md" -f $i)
       if ($effectiveWriteResearcherIterationMd) {
         $evidenceDeltaLines = if ($evidenceDeltaPaths.Count -gt 0) {
@@ -1428,6 +1636,9 @@ Required JSON:
 - previous_researcher_file: $previousResearcherFile
 - previous_researcher_md_file: $previousResearcherMdFile
 - memory_doc_path: $resolvedMemoryPath
+- auto_commit_enabled: $effectiveAutoCommitEnabled
+- auto_commit_result: $(if ($null -ne $autoCommitResult) { $autoCommitResult.reason } else { "disabled" })
+- auto_commit_hash: $(if ($null -ne $autoCommitResult -and $autoCommitResult.committed) { $autoCommitResult.commit_hash } else { "" })
 
 ## Commands Executed
 $commandsLines
@@ -1458,6 +1669,10 @@ $limitationsLines
         role_mode = "researcher_only"
         no_progress = $noProgressIteration
         evidence_delta_count = $evidenceDeltaPaths.Count
+        files_touched = $filesTouchedList
+        commit_hash = if ($null -ne $autoCommitResult -and $autoCommitResult.committed) { [string]$autoCommitResult.commit_hash } else { "" }
+        commit_pushed = if ($null -ne $autoCommitResult -and $autoCommitResult.committed) { [bool]$autoCommitResult.pushed } else { $false }
+        commit_reason = if ($null -ne $autoCommitResult) { [string]$autoCommitResult.reason } else { "disabled" }
       }
       Save-Json -Obj $state -Path $stateFile
 
@@ -1871,6 +2086,8 @@ Return strict JSON only:
 - risk_tier: $effectiveRiskTier
 - role_mode: $effectiveRoleMode
 - execution_flow: $executionModeSummary
+- auto_commit_each_iteration: $effectiveAutoCommitEnabled
+- auto_push_each_commit: $effectiveAutoCommitPush
 - max_iterations: $maxIterationsLabel
 - completed_iterations: $($state.current_iteration)
 - approved: $approved
