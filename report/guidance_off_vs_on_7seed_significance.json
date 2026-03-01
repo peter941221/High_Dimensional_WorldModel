@@ -1,0 +1,83 @@
+{
+  "report_name": "guidance_off_vs_on_7seed_significance",
+  "a_prefix": "p_guidance_off_7seed",
+  "b_prefix": "p2_v2_9seed",
+  "a_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\p_guidance_off_7seed\\p0_summary.json",
+  "b_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\p2_v2_9seed\\p0_summary.json",
+  "seeds": [
+    11,
+    22,
+    33,
+    44,
+    55,
+    66,
+    77
+  ],
+  "method": "paired_exact_signflip",
+  "alpha": 0.05,
+  "rows": [
+    {
+      "kpi": "baseline_success_dim3",
+      "n": 7,
+      "a_mean": 0.010714285714285716,
+      "b_mean": 0.7285714285714285,
+      "delta_mean": 0.7178571428571427,
+      "p_value": 0.015625,
+      "significant_0_05": true
+    },
+    {
+      "kpi": "baseline_success_dim4",
+      "n": 7,
+      "a_mean": 0.0,
+      "b_mean": 0.6535714285714285,
+      "delta_mean": 0.6535714285714285,
+      "p_value": 0.015625,
+      "significant_0_05": true
+    },
+    {
+      "kpi": "transfer_success_mean",
+      "n": 7,
+      "a_mean": 0.0011904761904761904,
+      "b_mean": 0.6327380952380953,
+      "delta_mean": 0.631547619047619,
+      "p_value": 0.015625,
+      "significant_0_05": true
+    },
+    {
+      "kpi": "transfer_gain_mean",
+      "n": 7,
+      "a_mean": -0.005952380952380953,
+      "b_mean": 0.02559523809523809,
+      "delta_mean": 0.031547619047619054,
+      "p_value": 0.015625,
+      "significant_0_05": true
+    },
+    {
+      "kpi": "robust_easy",
+      "n": 7,
+      "a_mean": 0.7333333333333333,
+      "b_mean": 0.7333333333333333,
+      "delta_mean": 0.0,
+      "p_value": 1.0,
+      "significant_0_05": false
+    },
+    {
+      "kpi": "robust_medium",
+      "n": 7,
+      "a_mean": 0.24166666666666667,
+      "b_mean": 0.2916666666666667,
+      "delta_mean": 0.05000000000000003,
+      "p_value": 0.015625,
+      "significant_0_05": true
+    },
+    {
+      "kpi": "robust_hard",
+      "n": 7,
+      "a_mean": 0.16666666666666666,
+      "b_mean": 0.15,
+      "delta_mean": -0.016666666666666663,
+      "p_value": 0.015625,
+      "significant_0_05": true
+    }
+  ]
+}
