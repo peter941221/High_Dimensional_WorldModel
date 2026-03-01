@@ -1089,3 +1089,11 @@
   - Stream logs successfully persisted for completed attempts (`bootstrap_merge`, `director_preflight`).
 - Result:
   - Researcher execution is now explicit and continuously observable even when model text output is sparse.
+## 2026-03-01 10:18:00 - Live per-step log files now written during execution
+- Updated `Invoke-CodexExecWithSafety` to redirect codex stdout/stderr directly into run-folder log files when `StepArtifactsDir` is provided.
+- This enables real-time tailing from another terminal pane while the step is still executing:
+  - `iter_<n>_<step>_attempt_<k>_stdout.log`
+  - `iter_<n>_<step>_attempt_<k>_stderr.log`
+- Temp cleanup now only applies when step artifact persistence is not configured.
+- Validation:
+  - PowerShell parser check on `Research_native_loop.ps1` -> PASS (`parse_ok`).

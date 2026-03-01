@@ -369,8 +369,22 @@ function Invoke-CodexExecWithSafety {
   if ($consoleStatusSec -lt 1) { $consoleStatusSec = 1 }
 
   for ($attempt = 0; $attempt -le $maxRetries; $attempt++) {
-    $outFile = Join-Path $env:TEMP ("codex_{0}.out" -f [guid]::NewGuid().ToString("N"))
-    $errFile = Join-Path $env:TEMP ("codex_{0}.err" -f [guid]::NewGuid().ToString("N"))
+    $safeStepName = ($StepName -replace '[^A-Za-z0-9_-]', '_')
+    $persistOutFile = ""
+    $persistErrFile = ""
+    $cleanupOutErrFiles = $true
+    if (-not [string]::IsNullOrWhiteSpace($StepArtifactsDir)) {
+      $persistOutFile = Join-Path $StepArtifactsDir ("iter_{0}_{1}_attempt_{2}_stdout.log" -f $Iteration, $safeStepName, $attempt)
+      $persistErrFile = Join-Path $StepArtifactsDir ("iter_{0}_{1}_attempt_{2}_stderr.log" -f $Iteration, $safeStepName, $attempt)
+      Set-Content -Path $persistOutFile -Value "" -Encoding UTF8
+      Set-Content -Path $persistErrFile -Value "" -Encoding UTF8
+      $outFile = $persistOutFile
+      $errFile = $persistErrFile
+      $cleanupOutErrFiles = $false
+    } else {
+      $outFile = Join-Path $env:TEMP ("codex_{0}.out" -f [guid]::NewGuid().ToString("N"))
+      $errFile = Join-Path $env:TEMP ("codex_{0}.err" -f [guid]::NewGuid().ToString("N"))
+    }
     $promptFile = Join-Path $env:TEMP ("codex_{0}.prompt" -f [guid]::NewGuid().ToString("N"))
     $messageFile = Join-Path $env:TEMP ("codex_{0}.message" -f [guid]::NewGuid().ToString("N"))
     $timedOut = $false
@@ -478,22 +492,17 @@ function Invoke-CodexExecWithSafety {
     $lastMessage = if (Test-Path $messageFile) { Get-Content -Path $messageFile -Raw } else { "" }
 
     if (-not [string]::IsNullOrWhiteSpace($StepArtifactsDir)) {
-      $safeStepName = ($StepName -replace '[^A-Za-z0-9_-]', '_')
-      $stdoutLogFile = Join-Path $StepArtifactsDir ("iter_{0}_{1}_attempt_{2}_stdout.log" -f $Iteration, $safeStepName, $attempt)
-      $stderrLogFile = Join-Path $StepArtifactsDir ("iter_{0}_{1}_attempt_{2}_stderr.log" -f $Iteration, $safeStepName, $attempt)
-      if (Test-Path $outFile) {
-        Copy-Item -Path $outFile -Destination $stdoutLogFile -Force -ErrorAction SilentlyContinue
-      }
-      if (Test-Path $errFile) {
-        Copy-Item -Path $errFile -Destination $stderrLogFile -Force -ErrorAction SilentlyContinue
-      }
+      $stdoutLogFile = if (-not [string]::IsNullOrWhiteSpace($persistOutFile)) { $persistOutFile } else { $outFile }
+      $stderrLogFile = if (-not [string]::IsNullOrWhiteSpace($persistErrFile)) { $persistErrFile } else { $errFile }
       Write-TraceEvent -TraceFile $TraceFile -RunId $RunId -Step $StepName -Status "attempt_stream_logs_saved" -Iteration $Iteration -Attempt $attempt -Message ("stdout={0}; stderr={1}" -f $stdoutLogFile, $stderrLogFile)
     }
 
     Remove-Item -Path $promptFile -ErrorAction SilentlyContinue
     Remove-Item -Path $messageFile -ErrorAction SilentlyContinue
-    Remove-Item -Path $outFile -ErrorAction SilentlyContinue
-    Remove-Item -Path $errFile -ErrorAction SilentlyContinue
+    if ($cleanupOutErrFiles) {
+      Remove-Item -Path $outFile -ErrorAction SilentlyContinue
+      Remove-Item -Path $errFile -ErrorAction SilentlyContinue
+    }
 
     $effectiveOutput = if (-not [string]::IsNullOrWhiteSpace($lastMessage)) { $lastMessage } else { $stdout }
     if (-not $timedOut -and -not [string]::IsNullOrWhiteSpace($effectiveOutput)) {
