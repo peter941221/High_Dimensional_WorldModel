@@ -68,6 +68,11 @@ def parse_args():
     parser.add_argument("--run-id-prefix", type=str, default="p0_freeze")
     parser.add_argument("--seeds", type=int, nargs="+", default=[11, 22, 33])
     parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the commands/outputs that would be executed, but do not run training/eval.",
+    )
 
     parser.add_argument("--baseline-epochs", type=int, default=8)
     parser.add_argument("--baseline-max-steps", type=int, default=120)
@@ -162,6 +167,158 @@ def run():
     enable_train_rand = args.domain_rand and args.domain_rand_scope in {"all", "train_only"}
     enable_robust_rand = args.domain_rand and args.domain_rand_scope in {"all", "robustness_only"}
 
+    if args.dry_run:
+        print("[p0-freeze] dry-run: not executing (printing planned commands only)", flush=True)
+        for seed in args.seeds:
+            run_id = f"{args.run_id_prefix}_s{seed}"
+
+            baseline_out = ROOT / "results" / "baseline" / run_id / "baseline.json"
+            transfer_out = ROOT / "results" / "transfer" / run_id / "transfer.json"
+            robust_out = ROOT / "results" / "robustness" / run_id / "robustness.json"
+
+            baseline_cmd = (
+                [
+                    python,
+                    "experiments/run_baseline.py",
+                    "--run-id",
+                    run_id,
+                    "--epochs",
+                    str(args.baseline_epochs),
+                    "--max-steps",
+                    str(args.baseline_max_steps),
+                    "--eval-episodes",
+                    str(args.baseline_eval_episodes),
+                    "--heartbeat-every",
+                    str(args.baseline_heartbeat_every),
+                    "--seed",
+                    str(seed),
+                    "--training-guidance",
+                    args.training_guidance,
+                    "--guidance-blend-ratio",
+                    str(args.guidance_blend_ratio),
+                    "--policy-noise-std",
+                    str(args.policy_noise_std),
+                    "--eval-policy-mode",
+                    args.eval_policy_mode,
+                    "--eval-guidance-blend-ratio",
+                    str(args.eval_guidance_blend_ratio),
+                ]
+                + (
+                    [
+                        "--domain-rand",
+                        "--domain-rand-scale",
+                        str(args.domain_rand_scale),
+                        "--domain-rand-profile",
+                        args.domain_rand_profile,
+                        "--domain-rand-warmup-episodes",
+                        str(args.domain_rand_warmup_episodes),
+                        "--domain-rand-warmup-epochs",
+                        str(args.domain_rand_warmup_epochs),
+                    ]
+                    if enable_train_rand
+                    else []
+                )
+            )
+
+            transfer_cmd = (
+                [
+                    python,
+                    "experiments/run_transfer.py",
+                    "--run-id",
+                    run_id,
+                    "--pretrain-epochs",
+                    str(args.transfer_pretrain_epochs),
+                    "--finetune-epochs",
+                    str(args.transfer_finetune_epochs),
+                    "--max-steps",
+                    str(args.transfer_max_steps),
+                    "--eval-episodes",
+                    str(args.transfer_eval_episodes),
+                    "--heartbeat-every",
+                    str(args.transfer_heartbeat_every),
+                    "--seed",
+                    str(seed),
+                    "--training-guidance",
+                    args.training_guidance,
+                    "--guidance-blend-ratio",
+                    str(args.guidance_blend_ratio),
+                    "--policy-noise-std",
+                    str(args.policy_noise_std),
+                    "--eval-policy-mode",
+                    args.eval_policy_mode,
+                    "--eval-guidance-blend-ratio",
+                    str(args.eval_guidance_blend_ratio),
+                ]
+                + (
+                    [
+                        "--domain-rand",
+                        "--domain-rand-scale",
+                        str(args.domain_rand_scale),
+                        "--domain-rand-profile",
+                        args.domain_rand_profile,
+                        "--domain-rand-warmup-episodes",
+                        str(args.domain_rand_warmup_episodes),
+                        "--domain-rand-warmup-epochs",
+                        str(args.domain_rand_warmup_epochs),
+                        "--domain-rand-scratch-multiplier",
+                        str(args.domain_rand_scratch_multiplier),
+                        "--domain-rand-source-multiplier",
+                        str(args.domain_rand_source_multiplier),
+                        "--domain-rand-finetune-multiplier",
+                        str(args.domain_rand_finetune_multiplier),
+                    ]
+                    if enable_train_rand
+                    else []
+                )
+            )
+
+            robustness_cmd = (
+                [
+                    python,
+                    "experiments/run_robustness.py",
+                    "--run-id",
+                    run_id,
+                    "--episodes",
+                    str(args.robustness_episodes),
+                    "--dim",
+                    str(args.robustness_dim),
+                    "--heartbeat-every",
+                    str(args.robustness_heartbeat_every),
+                    "--seed",
+                    str(seed),
+                ]
+                + (
+                    [
+                        "--domain-rand",
+                        "--domain-rand-scale",
+                        str(args.domain_rand_scale),
+                        "--domain-rand-profile",
+                        args.domain_rand_profile,
+                        "--domain-rand-warmup-episodes",
+                        str(args.domain_rand_warmup_episodes),
+                        "--domain-rand-warmup-epochs",
+                        str(args.domain_rand_warmup_epochs),
+                        "--domain-rand-difficulties",
+                        args.robustness_domain_rand_difficulties,
+                    ]
+                    if enable_robust_rand
+                    else []
+                )
+            )
+
+            print(f"[p0-freeze] seed={seed} run_id={run_id}", flush=True)
+            print(f"[p0-freeze] baseline_out: {baseline_out}", flush=True)
+            print(f"[p0-freeze] transfer_out: {transfer_out}", flush=True)
+            print(f"[p0-freeze] robust_out: {robust_out}", flush=True)
+            print(f"[p0-freeze] baseline_cmd: {' '.join(baseline_cmd)}", flush=True)
+            print(f"[p0-freeze] transfer_cmd: {' '.join(transfer_cmd)}", flush=True)
+            print(f"[p0-freeze] robust_cmd: {' '.join(robustness_cmd)}", flush=True)
+
+        result_dir = ROOT / "results" / "p0_freeze" / args.run_id_prefix
+        print(f"[p0-freeze] would write: {result_dir / 'p0_summary.json'}", flush=True)
+        print("[p0-freeze] would write: results/p0_freeze_summary.json", flush=True)
+        return
+
     rows = []
     for seed in args.seeds:
         run_id = f"{args.run_id_prefix}_s{seed}"
@@ -170,34 +327,32 @@ def run():
         transfer_out = ROOT / "results" / "transfer" / run_id / "transfer.json"
         robust_out = ROOT / "results" / "robustness" / run_id / "robustness.json"
 
-        baseline = _maybe_run(
-            [
-                python,
-                "experiments/run_baseline.py",
-                "--run-id",
-                run_id,
-                "--epochs",
-                str(args.baseline_epochs),
-                "--max-steps",
-                str(args.baseline_max_steps),
-                "--eval-episodes",
-                str(args.baseline_eval_episodes),
-                "--heartbeat-every",
-                str(args.baseline_heartbeat_every),
-                "--seed",
-                str(seed),
-                "--training-guidance",
-                args.training_guidance,
-                "--guidance-blend-ratio",
-                str(args.guidance_blend_ratio),
-                "--policy-noise-std",
-                str(args.policy_noise_std),
-                "--eval-policy-mode",
-                args.eval_policy_mode,
-                "--eval-guidance-blend-ratio",
-                str(args.eval_guidance_blend_ratio),
-            ]
-            + (
+        baseline_cmd = [
+            python,
+            "experiments/run_baseline.py",
+            "--run-id",
+            run_id,
+            "--epochs",
+            str(args.baseline_epochs),
+            "--max-steps",
+            str(args.baseline_max_steps),
+            "--eval-episodes",
+            str(args.baseline_eval_episodes),
+            "--heartbeat-every",
+            str(args.baseline_heartbeat_every),
+            "--seed",
+            str(seed),
+            "--training-guidance",
+            args.training_guidance,
+            "--guidance-blend-ratio",
+            str(args.guidance_blend_ratio),
+            "--policy-noise-std",
+            str(args.policy_noise_std),
+            "--eval-policy-mode",
+            args.eval_policy_mode,
+            "--eval-guidance-blend-ratio",
+            str(args.eval_guidance_blend_ratio),
+        ] + (
                 [
                     "--domain-rand",
                     "--domain-rand-scale",
@@ -211,41 +366,41 @@ def run():
                 ]
                 if enable_train_rand
                 else []
-            ),
+        )
+        baseline = _maybe_run(
+            baseline_cmd,
             baseline_out,
             skip_existing=args.skip_existing,
         )
 
-        transfer = _maybe_run(
-            [
-                python,
-                "experiments/run_transfer.py",
-                "--run-id",
-                run_id,
-                "--pretrain-epochs",
-                str(args.transfer_pretrain_epochs),
-                "--finetune-epochs",
-                str(args.transfer_finetune_epochs),
-                "--max-steps",
-                str(args.transfer_max_steps),
-                "--eval-episodes",
-                str(args.transfer_eval_episodes),
-                "--heartbeat-every",
-                str(args.transfer_heartbeat_every),
-                "--seed",
-                str(seed),
-                "--training-guidance",
-                args.training_guidance,
-                "--guidance-blend-ratio",
-                str(args.guidance_blend_ratio),
-                "--policy-noise-std",
-                str(args.policy_noise_std),
-                "--eval-policy-mode",
-                args.eval_policy_mode,
-                "--eval-guidance-blend-ratio",
-                str(args.eval_guidance_blend_ratio),
-            ]
-            + (
+        transfer_cmd = [
+            python,
+            "experiments/run_transfer.py",
+            "--run-id",
+            run_id,
+            "--pretrain-epochs",
+            str(args.transfer_pretrain_epochs),
+            "--finetune-epochs",
+            str(args.transfer_finetune_epochs),
+            "--max-steps",
+            str(args.transfer_max_steps),
+            "--eval-episodes",
+            str(args.transfer_eval_episodes),
+            "--heartbeat-every",
+            str(args.transfer_heartbeat_every),
+            "--seed",
+            str(seed),
+            "--training-guidance",
+            args.training_guidance,
+            "--guidance-blend-ratio",
+            str(args.guidance_blend_ratio),
+            "--policy-noise-std",
+            str(args.policy_noise_std),
+            "--eval-policy-mode",
+            args.eval_policy_mode,
+            "--eval-guidance-blend-ratio",
+            str(args.eval_guidance_blend_ratio),
+        ] + (
                 [
                     "--domain-rand",
                     "--domain-rand-scale",
@@ -265,27 +420,27 @@ def run():
                 ]
                 if enable_train_rand
                 else []
-            ),
+        )
+        transfer = _maybe_run(
+            transfer_cmd,
             transfer_out,
             skip_existing=args.skip_existing,
         )
 
-        robustness = _maybe_run(
-            [
-                python,
-                "experiments/run_robustness.py",
-                "--run-id",
-                run_id,
-                "--episodes",
-                str(args.robustness_episodes),
-                "--dim",
-                str(args.robustness_dim),
-                "--heartbeat-every",
-                str(args.robustness_heartbeat_every),
-                "--seed",
-                str(seed),
-            ]
-            + (
+        robustness_cmd = [
+            python,
+            "experiments/run_robustness.py",
+            "--run-id",
+            run_id,
+            "--episodes",
+            str(args.robustness_episodes),
+            "--dim",
+            str(args.robustness_dim),
+            "--heartbeat-every",
+            str(args.robustness_heartbeat_every),
+            "--seed",
+            str(seed),
+        ] + (
                 [
                     "--domain-rand",
                     "--domain-rand-scale",
@@ -301,7 +456,9 @@ def run():
                 ]
                 if enable_robust_rand
                 else []
-            ),
+        )
+        robustness = _maybe_run(
+            robustness_cmd,
             robust_out,
             skip_existing=args.skip_existing,
         )

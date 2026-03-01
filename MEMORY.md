@@ -80,4 +80,10 @@
   - Result: `n=7` paired exact sign-flip yields `p=0.015625` on key transfer KPIs (statistically significant).
   - Remaining caveat: comparison is still confounded by differing domain-randomization settings; canonical Path B closure remains unchanged.
 
+## Iteration Progress (2026-03-01, researcher-only, iteration 2/2 - Optional Path A Tooling)
+- Added `--dry-run` to `experiments/run_p0_baseline_freeze.py` to print planned commands/outputs without executing training (supports low-risk smoke validation before compute).
+- Added `--out-dir` + `--meta-check/--meta-allow-diff/--meta-strict` to `experiments/significance_report.py` to explicitly detect/guard confounds when comparing prefixes.
+- Updated Optional Path A documentation to include a 2-seed smoke recipe and a strict meta guardrail for matched-setting guidance-only OFF vs ON.
+- Validation PASS: `pytest -q` (50 passed, 1 warning).
+
 Last Compressed: 2026-03-01

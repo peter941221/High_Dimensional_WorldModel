@@ -75,6 +75,52 @@ Matched-setting design (guidance-only ablation):
 - Hold fixed: inference-time action mode by forcing `--eval-policy-mode model_only` for **both** conditions (so evaluation does not re-introduce guidance blending).
 - Toggle only: `--training-guidance {model_only vs guided_blend}` (optionally add `guide_only` as a separate third condition, not mixed into ON/OFF).
 
+Matched-setting smoke (optional, 2 seeds; for wiring validation only):
+
+```bash
+# Dry-run (prints planned commands without executing)
+python experiments/run_p0_baseline_freeze.py \
+  --run-id-prefix p_guidance_matched_off_smoke2 \
+  --seeds 11 22 \
+  --baseline-epochs 1 --transfer-pretrain-epochs 1 --transfer-finetune-epochs 1 \
+  --robustness-episodes 30 \
+  --training-guidance model_only --eval-policy-mode model_only \
+  --domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 \
+  --robustness-domain-rand-difficulties hard_only \
+  --dry-run
+
+# OFF (smoke): matched settings; reduced compute
+python experiments/run_p0_baseline_freeze.py \
+  --run-id-prefix p_guidance_matched_off_smoke2 \
+  --seeds 11 22 \
+  --baseline-epochs 1 --transfer-pretrain-epochs 1 --transfer-finetune-epochs 1 \
+  --robustness-episodes 30 \
+  --training-guidance model_only --eval-policy-mode model_only \
+  --domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 \
+  --robustness-domain-rand-difficulties hard_only
+
+# ON (smoke): ONLY toggle training-guidance
+python experiments/run_p0_baseline_freeze.py \
+  --run-id-prefix p_guidance_matched_on_smoke2 \
+  --seeds 11 22 \
+  --baseline-epochs 1 --transfer-pretrain-epochs 1 --transfer-finetune-epochs 1 \
+  --robustness-episodes 30 \
+  --training-guidance guided_blend --eval-policy-mode model_only \
+  --domain-rand --domain-rand-scope all --domain-rand-scale 0.20 --domain-rand-profile conservative \
+  --domain-rand-warmup-episodes 0 --domain-rand-warmup-epochs 0 \
+  --robustness-domain-rand-difficulties hard_only
+
+# Optional: paired significance report for smoke (write to ignored results/ to avoid report drift)
+python experiments/significance_report.py \
+  --a-prefix p_guidance_matched_off_smoke2 \
+  --b-prefix p_guidance_matched_on_smoke2 \
+  --report-name guidance_train_matched_off_vs_on_smoke2_significance \
+  --out-dir results/analysis_smoke \
+  --meta-check --meta-allow-diff training_guidance --meta-strict
+```
+
 Matched-setting execution commands (recommended, `n=9` paired seeds):
 
 ```bash
@@ -104,7 +150,8 @@ python experiments/run_p0_baseline_freeze.py \
 python experiments/significance_report.py \
   --a-prefix p_guidance_matched_off_9seed \
   --b-prefix p_guidance_matched_on_9seed \
-  --report-name guidance_train_matched_off_vs_on_9seed_significance
+  --report-name guidance_train_matched_off_vs_on_9seed_significance \
+  --meta-check --meta-allow-diff training_guidance --meta-strict
 ```
 
 ```text

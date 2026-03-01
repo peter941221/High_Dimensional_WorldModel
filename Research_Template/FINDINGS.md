@@ -93,7 +93,7 @@ Keep Path B        Run to 9 seeds (or matched-setting ablation)
 ```
 
 ## Recommended Next Actions
-1. Optional Path A (causal upgrade): run a matched-setting guidance-only ON vs OFF ablation (same domain-rand settings + `--eval-policy-mode model_only`) to `n>=9` paired seeds, then re-run `significance_report.py`.
+1. Optional Path A (causal upgrade): run a matched-setting guidance-only ON vs OFF ablation (same domain-rand settings + `--eval-policy-mode model_only`) starting with a 2-seed smoke, then scale to `n>=9` paired seeds and re-run `significance_report.py` (recommended meta guard: `--meta-check --meta-allow-diff training_guidance --meta-strict`).
 2. Optional Path A (pipeline-only decisiveness, optional): if you still care about the *end-to-end* pipeline delta (`p_guidance_off_*` vs `p2_v2_*`), add the missing seeds (`88`, `99`) to reach `n=9` and re-run `significance_report.py`, but do **not** upgrade training-time causality language from this alone.
 3. Keep causal language bounded until matched-setting evidence is produced; treat current OFF vs ON paired significance as pipeline-level evidence.
 
