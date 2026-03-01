@@ -113,7 +113,21 @@ def to_run_config(args: argparse.Namespace) -> dict:
         "transfer_pretrain_epochs": args.transfer_pretrain_epochs,
         "transfer_finetune_epochs": args.transfer_finetune_epochs,
         "ablation_epochs": args.ablation_epochs,
+        "skip_ablation": args.skip_ablation,
         "robustness_episodes": args.robustness_episodes,
+        "domain_rand": args.domain_rand,
+        "domain_rand_scale": args.domain_rand_scale,
+        "domain_rand_profile": args.domain_rand_profile,
+        "domain_rand_warmup_episodes": args.domain_rand_warmup_episodes,
+        "domain_rand_warmup_epochs": args.domain_rand_warmup_epochs,
+        "domain_rand_scratch_multiplier": args.domain_rand_scratch_multiplier,
+        "domain_rand_source_multiplier": args.domain_rand_source_multiplier,
+        "domain_rand_finetune_multiplier": args.domain_rand_finetune_multiplier,
+        "training_guidance": args.training_guidance,
+        "guidance_blend_ratio": args.guidance_blend_ratio,
+        "policy_noise_std": args.policy_noise_std,
+        "eval_policy_mode": args.eval_policy_mode,
+        "eval_guidance_blend_ratio": args.eval_guidance_blend_ratio,
         "robustness_domain_rand": args.robustness_domain_rand,
         "robustness_domain_rand_scale": args.robustness_domain_rand_scale,
         "robustness_domain_rand_profile": args.robustness_domain_rand_profile,
@@ -398,7 +412,37 @@ def add_common_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--transfer-pretrain-epochs", type=int, default=8)
     parser.add_argument("--transfer-finetune-epochs", type=int, default=8)
     parser.add_argument("--ablation-epochs", type=int, default=8)
+    parser.add_argument("--skip-ablation", action="store_true")
     parser.add_argument("--robustness-episodes", type=int, default=120)
+    parser.add_argument("--domain-rand", action="store_true", help="Enable domain randomization for baseline/transfer.")
+    parser.add_argument("--domain-rand-scale", type=float, default=0.20, help="Relative randomization scale.")
+    parser.add_argument(
+        "--domain-rand-profile",
+        type=str,
+        choices=["full", "conservative"],
+        default="conservative",
+        help="Domain randomization parameter profile.",
+    )
+    parser.add_argument("--domain-rand-warmup-episodes", type=int, default=0)
+    parser.add_argument("--domain-rand-warmup-epochs", type=int, default=0)
+    parser.add_argument("--domain-rand-scratch-multiplier", type=float, default=1.0)
+    parser.add_argument("--domain-rand-source-multiplier", type=float, default=1.0)
+    parser.add_argument("--domain-rand-finetune-multiplier", type=float, default=1.0)
+    parser.add_argument(
+        "--training-guidance",
+        type=str,
+        choices=["model_only", "guided_blend", "guide_only"],
+        default="model_only",
+    )
+    parser.add_argument("--guidance-blend-ratio", type=float, default=0.7)
+    parser.add_argument("--policy-noise-std", type=float, default=0.1)
+    parser.add_argument(
+        "--eval-policy-mode",
+        type=str,
+        choices=["model_only", "guided_blend", "guide_only"],
+        default="model_only",
+    )
+    parser.add_argument("--eval-guidance-blend-ratio", type=float, default=0.7)
     parser.add_argument(
         "--robustness-domain-rand",
         action="store_true",

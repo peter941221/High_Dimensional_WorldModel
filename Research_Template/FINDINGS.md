@@ -758,3 +758,37 @@ Optional Path A status after iteration 2
                                                                       v
                                            [No KPI significant @ alpha 0.05; still inconclusive]
 ```
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 3: Kaggle Matched-A2 Enablement)
+- Mode: execution-enablement + first dispatch (no new significance claim yet).
+- Risk Tier: M
+- Validation actions (PASS unless noted):
+  - `python kaggle_job_manager.py --help` -> PASS (new matched-setting flags present).
+  - `python kaggle_job_manager.py ... prepare` for ON seed55 -> PASS.
+    - Verified `.kaggle_kernel_build/kaggle/run_config.json` includes:
+      - `run_id=p_guidance_matched_on_9seed_s55`
+      - `training_guidance=guided_blend`
+      - `eval_policy_mode=model_only`
+      - domain-rand controls and `skip_ablation=true`
+    - Verified embedded run config in `.kaggle_kernel_build/kaggle/run_kaggle_job.py`.
+  - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s55 push` -> PASS (kernel push success).
+  - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s55 status` -> BLOCKED (`403 Forbidden`).
+  - `kaggle kernels list --mine --page-size 50` -> PASS (kernel `...guidance-on-s55` listed with current timestamp).
+- Evidence updates:
+  - Tooling upgrade artifacts:
+    - `kaggle_job_manager.py`
+    - `kaggle/run_kaggle_job.py`
+    - `kaggle/run_config.example.json`
+  - Prepared runtime config:
+    - `.kaggle_kernel_build/kaggle/run_config.json`
+  - Dispatched kernel:
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s55`
+- Interpretation:
+  - Kaggle path is now technically capable of strict matched-setting guidance-only ON/OFF execution (meta-confound-safe design intent).
+  - This iteration does not yet change causal claim strength because results for new ON seeds are not yet ingested into local paired significance artifacts.
+- Coverage:
+  - Eliminated a prior orchestration gap preventing Kaggle-first A2 execution.
+  - Completed one concrete ON missing-seed dispatch toward `n>=9`.
+- Residual risk:
+  - CLI status polling/output download for the new kernel may be permission-gated (`403`) despite successful push/listing.
+  - Causal decisiveness remains pending completion of ON seeds `55..99` and meta-strict paired report refresh.

@@ -392,3 +392,37 @@ Decision boundary map (locked)
 - Precise next direction:
   - Keep closure artifacts as canonical baseline.
   - If causal decisiveness is required now, execute Optional Path A2: run full matched OFF/ON at `n>=9` paired seeds using `--meta-check --meta-allow-diff training_guidance --meta-strict`, then regenerate significance and closure synthesis.
+
+## Iteration Update (2026-03-01 Researcher Loop Iteration 3: A2 Kaggle Enablement + Seed55 Dispatch)
+- Mode: execution-enablement + dispatch (A2 path advancement).
+- Risk Tier: M
+- Concrete step executed:
+  - Upgraded Kaggle orchestration to support matched-setting guidance causality controls (so Kaggle can run guidance-only matched ON/OFF design):
+    - Added pass-through flags to `kaggle_job_manager.py` and `kaggle/run_kaggle_job.py`:
+      - `--training-guidance`, `--guidance-blend-ratio`, `--policy-noise-std`
+      - `--eval-policy-mode`, `--eval-guidance-blend-ratio`
+      - `--domain-rand`, `--domain-rand-scale`, `--domain-rand-profile`
+      - `--domain-rand-warmup-episodes`, `--domain-rand-warmup-epochs`
+      - `--domain-rand-scratch-multiplier`, `--domain-rand-source-multiplier`, `--domain-rand-finetune-multiplier`
+      - `--skip-ablation` (compute reduction for matched baseline/transfer/robustness path)
+  - Validation run:
+    - `python kaggle_job_manager.py --help` confirms new flags are available.
+    - `python kaggle_job_manager.py ... prepare` produced:
+      - `.kaggle_kernel_build/kaggle/run_config.json` with matched ON seed55 config
+      - embedded run config in `.kaggle_kernel_build/kaggle/run_kaggle_job.py`
+  - A2 dispatch launched:
+    - `python kaggle_job_manager.py --owner peter941221 --slug high-dimensional-worldmodel-guidance-on-s55 push`
+    - Kernel push succeeded: `peter941221/high-dimensional-worldmodel-guidance-on-s55`
+- Execution gate / blocker:
+  - `kaggle kernels status peter941221/high-dimensional-worldmodel-guidance-on-s55` returned `403 Forbidden` in this environment, so CLI status polling is currently blocked.
+  - Independent existence validation passed via `kaggle kernels list --mine --page-size 50` (new kernel appears with current timestamp).
+- Coverage:
+  - Unblocked Kaggle-first execution path for strict matched-setting A2.
+  - Completed first ON missing-seed dispatch (`seed=55`) to remote execution channel.
+- Residual risk:
+  - Status/output collection via Kaggle CLI remains partially blocked by `403` and may require web UI confirmation or permission refresh.
+  - A2 decisiveness still requires completing remaining ON seeds (`66,77,88,99`) and regenerating meta-strict significance.
+- Precise next direction:
+  - Dispatch ON seeds `66/77/88/99` with the same matched config via Kaggle slugs `high-dimensional-worldmodel-guidance-on-s{seed}`.
+  - After outputs land locally, rebuild `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json` and run:
+    - `python experiments/significance_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_significance --out-dir results/analysis_guidance --meta-check --meta-allow-diff training_guidance --meta-strict`

@@ -151,3 +151,27 @@ Last Compressed: 2026-03-01
 - Next-direction lock (precise):
   - Keep canonical closure package unchanged.
   - If stronger causal decisiveness is required, execute Optional Path A2 full matched OFF/ON at `n>=9` paired seeds with meta-strict checks, then regenerate significance and closure synthesis.
+
+## Recent Work (2026-03-01, Researcher Loop Iteration 3)
+- Concrete A2 advancement executed (Kaggle-first):
+  - Added matched-setting pass-through controls to Kaggle tooling:
+    - `kaggle_job_manager.py`
+    - `kaggle/run_kaggle_job.py`
+    - `kaggle/run_config.example.json`
+  - New supported controls include:
+    - `training_guidance`, `eval_policy_mode`, blend/noise knobs
+    - baseline/transfer domain-rand controls + transfer stage multipliers
+    - `skip_ablation` for lean matched A2 runs
+- Validation and dispatch:
+  - `python kaggle_job_manager.py --help` confirms new flags.
+  - Prepared ON seed55 matched bundle:
+    - `.kaggle_kernel_build/kaggle/run_config.json` contains `run_id=p_guidance_matched_on_9seed_s55`, `training_guidance=guided_blend`, `eval_policy_mode=model_only`, `skip_ablation=true`, and matched domain-rand fields.
+  - Pushed kernel successfully:
+    - `peter941221/high-dimensional-worldmodel-guidance-on-s55`
+  - Status polling via manager currently blocked by `403 Forbidden`, but kernel presence is confirmed in `kaggle kernels list --mine`.
+- Locked interpretation:
+  - This iteration upgrades execution infrastructure and launches the first missing ON seed on Kaggle.
+  - No causal-claim upgrade yet (awaiting output ingestion and paired significance refresh).
+- Next-direction lock (precise):
+  - Dispatch ON seeds `66/77/88/99` with the same matched config on Kaggle.
+  - After outputs sync locally, rebuild ON summary and run meta-strict paired significance for `guidance_train_matched_off_vs_on_9seed_significance`.

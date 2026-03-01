@@ -41,7 +41,21 @@ def load_config(extra_candidates: list[Path] | None = None) -> dict:
         "transfer_pretrain_epochs": 8,
         "transfer_finetune_epochs": 8,
         "ablation_epochs": 8,
+        "skip_ablation": False,
         "robustness_episodes": 120,
+        "domain_rand": False,
+        "domain_rand_scale": 0.20,
+        "domain_rand_profile": "conservative",
+        "domain_rand_warmup_episodes": 0,
+        "domain_rand_warmup_epochs": 0,
+        "domain_rand_scratch_multiplier": 1.0,
+        "domain_rand_source_multiplier": 1.0,
+        "domain_rand_finetune_multiplier": 1.0,
+        "training_guidance": "model_only",
+        "guidance_blend_ratio": 0.7,
+        "policy_noise_std": 0.1,
+        "eval_policy_mode": "model_only",
+        "eval_guidance_blend_ratio": 0.7,
         "robustness_domain_rand": False,
         "robustness_domain_rand_scale": 0.20,
         "robustness_domain_rand_profile": "conservative",
@@ -192,9 +206,43 @@ def build_common_args(cfg: dict) -> list[str]:
     return common
 
 
+def build_train_rand_guidance_args(cfg: dict) -> list[str]:
+    args: list[str] = []
+    if to_bool(cfg.get("domain_rand", False)):
+        args.extend(
+            [
+                "--domain-rand",
+                "--domain-rand-scale",
+                str(cfg.get("domain_rand_scale", 0.20)),
+                "--domain-rand-profile",
+                str(cfg.get("domain_rand_profile", "conservative")),
+                "--domain-rand-warmup-episodes",
+                str(cfg.get("domain_rand_warmup_episodes", 0)),
+                "--domain-rand-warmup-epochs",
+                str(cfg.get("domain_rand_warmup_epochs", 0)),
+            ]
+        )
+    args.extend(
+        [
+            "--training-guidance",
+            str(cfg.get("training_guidance", "model_only")),
+            "--guidance-blend-ratio",
+            str(cfg.get("guidance_blend_ratio", 0.7)),
+            "--policy-noise-std",
+            str(cfg.get("policy_noise_std", 0.1)),
+            "--eval-policy-mode",
+            str(cfg.get("eval_policy_mode", "model_only")),
+            "--eval-guidance-blend-ratio",
+            str(cfg.get("eval_guidance_blend_ratio", 0.7)),
+        ]
+    )
+    return args
+
+
 def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
     common = build_common_args(cfg)
     heartbeat = max(int(cfg.get("heartbeat_every", 1)), 1)
+    train_rand_guidance_args = build_train_rand_guidance_args(cfg)
 
     robustness_cmd = [
         sys.executable,
@@ -238,6 +286,7 @@ def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
                 str(cfg["baseline_epochs"]),
                 "--heartbeat-every",
                 str(heartbeat),
+                *train_rand_guidance_args,
             ],
         ),
         (
@@ -252,18 +301,13 @@ def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
                 str(cfg["transfer_finetune_epochs"]),
                 "--heartbeat-every",
                 str(heartbeat),
-            ],
-        ),
-        (
-            "ablation",
-            [
-                sys.executable,
-                "experiments/run_ablation.py",
-                *common,
-                "--epochs",
-                str(cfg["ablation_epochs"]),
-                "--heartbeat-every",
-                str(heartbeat),
+                *train_rand_guidance_args,
+                "--domain-rand-scratch-multiplier",
+                str(cfg.get("domain_rand_scratch_multiplier", 1.0)),
+                "--domain-rand-source-multiplier",
+                str(cfg.get("domain_rand_source_multiplier", 1.0)),
+                "--domain-rand-finetune-multiplier",
+                str(cfg.get("domain_rand_finetune_multiplier", 1.0)),
             ],
         ),
         (
@@ -271,6 +315,22 @@ def build_stage_cmds(cfg: dict) -> list[tuple[str, list[str]]]:
             robustness_cmd,
         ),
     ]
+    if not to_bool(cfg.get("skip_ablation", False)):
+        cmds.insert(
+            2,
+            (
+                "ablation",
+                [
+                    sys.executable,
+                    "experiments/run_ablation.py",
+                    *common,
+                    "--epochs",
+                    str(cfg["ablation_epochs"]),
+                    "--heartbeat-every",
+                    str(heartbeat),
+                ],
+            ),
+        )
 
     if not to_bool(cfg.get("skip_visualize", False)):
         cmds.append(("visualize", [sys.executable, "experiments/visualize.py"]))
