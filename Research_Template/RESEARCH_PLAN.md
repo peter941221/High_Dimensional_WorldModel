@@ -1559,6 +1559,25 @@ Decision boundary map (locked)
   - Statistical power bound remains unchanged at paired n=9; non-significance remains bounded-null evidence, not an equivalence proof.
 - Precise next direction:
   - Keep the closure package frozen; only reopen this thread if an equivalence-focused protocol is explicitly requested (predefined equivalence margin + larger paired n), then execute matched paired ON/OFF runs and formal equivalence analysis.
+
+## Iteration Update (2026-03-02 Researcher Loop Iteration 49: Freeze Continuity + Invariant Revalidation)
+- Mode: freeze-preserving continuity checkpoint (no new Kaggle/local runs by design).
+- Risk Tier: L
+- Concrete next-best step executed:
+  - Local invariant checks on canonical closure artifacts -> PASS:
+    - Research_Template/runtime/state.json
+    - report/director_evidence_closure_final.json
+    - results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json
+    - results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json
+  - Regression tests -> PASS:
+    - pytest -q (50 passed, 1 warning).
+- Why local validation (not Kaggle) this iteration:
+  - No new evidence-generation was required; the work is integrity validation + regression testing only.
+  - Trigger to move back to Kaggle: explicit equivalence-focused protocol request (predefined equivalence margin + paired n>=9) that requires new matched paired ON/OFF executions.
+- Residual risk unchanged:
+  - Matched ON/OFF non-significance at n=9 is not equivalence; an equivalence-grade claim requires an explicit margin + formal equivalence test and typically higher paired n.
+- Precise next direction:
+  - Keep the director-approved closure frozen; only reopen for an equivalence-focused protocol request, then execute matched paired ON/OFF and formal equivalence analysis under the predefined margin.
 ## Iteration Update (2026-03-01 Researcher Loop Iteration 42: Freeze Continuity + Invariant Revalidation)
 - Mode: freeze-preserving continuity checkpoint (no new Kaggle/local runs by design).
 - Risk Tier: L

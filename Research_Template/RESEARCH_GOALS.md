@@ -146,3 +146,8 @@
 ## Iteration Status (2026-03-01, Iteration 48)
 - Research goals remain unchanged.
 - Closure package remains frozen pending any explicit equivalence-focused protocol request (predefined equivalence margin + larger paired n).
+
+## Iteration Status (2026-03-02, Iteration 49)
+- Research goals remain unchanged.
+- Closure package remains frozen (director-approved closure: progress_pct=100, quality_score=0.96).
+- Only reopen evidence-generation if an explicit equivalence-focused protocol is requested (predefined equivalence margin + paired n>=9), then run matched ON/OFF and formal equivalence analysis.

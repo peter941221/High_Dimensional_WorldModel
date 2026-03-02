@@ -1495,6 +1495,27 @@ Iteration 5 recovery map
   - Statistical power bound remains unchanged (`n=9` paired); interpretation remains bounded non-significant, not equivalence.
 - Next direction:
   - Keep closure frozen; reopen only for explicit equivalence-protocol request (predefined equivalence margin + larger paired sample), then run matched paired ON/OFF executions and formal equivalence analysis.
+
+## Iteration 49 - Freeze Continuity Invariant Revalidation (2026-03-02)
+- Risk Tier: L
+- Scope: freeze-preserving continuity checkpoint (no new Kaggle/local experiment runs).
+- Executed checks (local):
+  - Invariant JSON checks -> PASS:
+    - Research_Template/runtime/state.json (progress_pct=100, quality_score=0.96, director_approved_final=true).
+    - report/director_evidence_closure_final.json (claim_to_artifacts non-empty, residual_risks present).
+    - results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json (9 paired seeds).
+    - results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json (meta_check.passed=true; significant KPI count 0 at alpha=0.05).
+  - Regression tests -> PASS:
+    - pytest -q (50 passed, 1 warning).
+- Result:
+  - Director-approved closure remains stable and reproducible; no evidence-generation required under the freeze directive.
+- Why local validation (not Kaggle) this iteration:
+  - Artifact integrity + unit/regression testing do not benefit from Kaggle dispatch.
+  - Trigger to move back to Kaggle: explicit equivalence-focused protocol request with a predefined equivalence margin and paired n>=9 (or higher), followed by formal equivalence analysis.
+- Residual risk:
+  - Non-significance at paired n=9 remains bounded-null evidence (not an equivalence proof); effect sizes below current power may remain.
+- Next direction:
+  - Maintain the closure freeze (quality_score=0.96, progress_pct=100). Only reopen evidence-generation if an equivalence-focused protocol is explicitly requested; then run matched-setting training-time guidance OFF vs ON with meta-strict checks and formal equivalence analysis under the predefined margin.
 ## Iteration 42 - Freeze Continuity Invariant Revalidation (2026-03-01)
 - Risk Tier: L
 - Scope: freeze-preserving continuity checkpoint (no new Kaggle/local experiment runs).
