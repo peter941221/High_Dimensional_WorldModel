@@ -97,7 +97,23 @@ function Write-TraceEvent {
     attempt = if ($Attempt -ge 0) { $Attempt } else { $null }
     message = $Message
   }
-  ($record | ConvertTo-Json -Compress) | Add-Content -Path $TraceFile -Encoding UTF8
+  $jsonLine = ($record | ConvertTo-Json -Compress)
+  $payload = $jsonLine + [Environment]::NewLine
+
+  # Trace logging must never terminate the loop; retry on transient file handle contention.
+  $maxAttempts = 4
+  for ($writeAttempt = 1; $writeAttempt -le $maxAttempts; $writeAttempt++) {
+    try {
+      [System.IO.File]::AppendAllText($TraceFile, $payload, [System.Text.UTF8Encoding]::new($false))
+      return
+    } catch {
+      if ($writeAttempt -ge $maxAttempts) {
+        Write-Warning ("Trace write failed after {0} attempts for {1}: {2}" -f $maxAttempts, $TraceFile, $_.Exception.Message)
+        return
+      }
+      Start-Sleep -Milliseconds (120 * $writeAttempt)
+    }
+  }
 }
 
 function Add-RollingItem {
@@ -337,6 +353,31 @@ function Get-GitStatusMap {
   return $map
 }
 
+function Get-GitHead {
+  param([string]$RepoRoot, [switch]$Short)
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return "" }
+  try {
+    if ($Short) {
+      return [string](& git -C $RepoRoot rev-parse --short HEAD 2>$null).Trim()
+    }
+    return [string](& git -C $RepoRoot rev-parse HEAD 2>$null).Trim()
+  } catch {
+    return ""
+  }
+}
+
+function Get-GitChangedPathsBetween {
+  param([string]$RepoRoot, [string]$From, [string]$To)
+  if ([string]::IsNullOrWhiteSpace($From) -or [string]::IsNullOrWhiteSpace($To)) { return @() }
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return @() }
+  try {
+    $paths = @(& git -C $RepoRoot diff --name-only $From $To 2>$null)
+    return @($paths | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  } catch {
+    return @()
+  }
+}
+
 function Get-GitDeltaPaths {
   param(
     [hashtable]$Before,
@@ -477,6 +518,30 @@ function Invoke-IterationAutoCommit {
 
   $result.reason = "ok"
   return $result
+}
+
+function Test-DocOnlyIteration {
+  param(
+    [string[]]$ChangedPaths,
+    [string[]]$DocPaths,
+    [string[]]$ExcludePrefixes
+  )
+  if ($null -eq $ChangedPaths -or $ChangedPaths.Count -eq 0) { return $false }
+
+  $docSet = @{}
+  foreach ($p in @($DocPaths)) {
+    $n = ([string]$p -replace '\\', '/').TrimStart('/')
+    if ([string]::IsNullOrWhiteSpace($n)) { continue }
+    $docSet[$n] = $true
+  }
+
+  foreach ($raw in @($ChangedPaths)) {
+    $p = ([string]$raw -replace '\\', '/').TrimStart('/')
+    if ([string]::IsNullOrWhiteSpace($p)) { continue }
+    if (Test-PathExcludedByPrefix -RelativePath $p -ExcludePrefixes $ExcludePrefixes) { continue }
+    if (-not $docSet.ContainsKey($p)) { return $false }
+  }
+  return $true
 }
 
 function Is-TemplatePlaceholder {
@@ -1008,6 +1073,7 @@ $templateEvidencePaths = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCf
 $templateRecoverMemoryEachIteration = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "recover_memory_each_iteration") { [bool]$researcherOnlyCfg.recover_memory_each_iteration } else { $true }
 $templateReviewPreviousIteration = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "review_previous_iteration") { [bool]$researcherOnlyCfg.review_previous_iteration } else { $true }
 $templateStrictJsonContract = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "strict_json_contract") { [bool]$researcherOnlyCfg.strict_json_contract } else { $false }
+$templateMaxDocOnlyStreakBeforeForceAction = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "max_doc_only_streak_before_force_action") { [int]$researcherOnlyCfg.max_doc_only_streak_before_force_action } else { 2 }
 $autoCommitCfg = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "auto_commit_each_iteration") { $researcherOnlyCfg.auto_commit_each_iteration } else { $null }
 $templateAutoCommitEnabled = if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "enabled") { [bool]$autoCommitCfg.enabled } else { $false }
 $templateAutoCommitPush = if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "auto_push") { [bool]$autoCommitCfg.auto_push } else { $false }
@@ -1128,6 +1194,8 @@ $state = [ordered]@{
   context_mode = $contextMode
   rolling_context_bytes_est = 0
   context_risk_score = 0.0
+  doc_only_streak = 0
+  last_repo_head = ""
   last_compression_iteration = 0
   compression_count = 0
   active_snapshot_file = ""
@@ -1335,6 +1403,7 @@ Return strict JSON only:
     if ($effectiveAutoCommitEnabled) {
       $gitStatusBeforeIteration = Get-GitStatusMap -RepoRoot $resolvedRepoRoot
     }
+    $repoHeadBeforeIteration = Get-GitHead -RepoRoot $resolvedRepoRoot
     $previousIterationHistory = $null
     if ($state.history.Count -gt 0) {
       $previousIterationHistory = $state.history[$state.history.Count - 1]
@@ -1454,16 +1523,26 @@ Return strict JSON only:
       } else {
         "If JSON is not perfect, continue with best effort; do not stop the task."
       }
-      $iterationGoal = if ($i -eq 1) {
-        "Recover memory/context + execute one concrete step."
-      } else {
-        "Execute the next best step."
-      }
-      $workerPrompt = @"
-You are RESEARCHER in a research CLI loop (researcher-only mode).
-Ultimate goals: $effectiveTask
-Done criteria: $effectiveDoneCriteria
-Iteration: $iterationLabel
+       $iterationGoal = if ($i -eq 1) {
+         "Recover memory/context + execute one concrete step."
+       } else {
+         "Execute the next best step."
+       }
+
+       $docOnlyGuardText = ""
+       $docOnlyStreak = [int]$state.doc_only_streak
+       if ($templateMaxDocOnlyStreakBeforeForceAction -gt 0 -and $docOnlyStreak -ge $templateMaxDocOnlyStreakBeforeForceAction) {
+         $docOnlyGuardText = @"
+- Freeze-checkpoint loop detected: last $docOnlyStreak iteration(s) changed docs only. This iteration MUST produce a non-doc change that advances evidence.
+- Acceptable non-doc changes: new/updated artifacts under `results/` or `report/`, code/config updates that enable the next experiment, or a Kaggle run + synced outputs.
+- Do NOT repeat a continuity-only checkpoint that only edits PLAN/FINDINGS/GOALS/MEMORY.
+"@
+       }
+       $workerPrompt = @"
+ You are RESEARCHER in a research CLI loop (researcher-only mode).
+ Ultimate goals: $effectiveTask
+ Done criteria: $effectiveDoneCriteria
+ Iteration: $iterationLabel
 Iteration goal: $iterationGoal
 Goals doc: $PrdPath
 Plan doc: $DevDocPath
@@ -1477,17 +1556,18 @@ Rolling context packet (JSON):
 $rollingContextJson
 
 Act like a normal Codex coding session in this repo: inspect files, run commands, edit code/docs, and validate where possible.
-Iteration protocol:
-$iterationProtocolText
-- Do not run nested orchestration loops (`Research_native_loop.ps1` / `start_research.bat`).
-- Do not edit files under `Research_Template/runtime/` (loop-managed logs/locks/artifacts).
-- Prefer Kaggle-first for experiment execution when feasible (free, fast, and reproducible); use local runs when Kaggle is not suitable for the current step.
-- If you choose local instead of Kaggle, briefly explain why and what would trigger moving that step to Kaggle.
+ Iteration protocol:
+ $iterationProtocolText
+ - Do not run nested orchestration loops (`Research_native_loop.ps1` / `start_research.bat`).
+ - Do not edit files under `Research_Template/runtime/` (loop-managed logs/locks/artifacts).
+ - Prefer Kaggle-first for experiment execution when feasible (free, fast, and reproducible); use local runs when Kaggle is not suitable for the current step.
+ - If you choose local instead of Kaggle, briefly explain why and what would trigger moving that step to Kaggle.
+ $docOnlyGuardText
 
-Output format:
-- Prefer JSON first and then short markdown.
-- $jsonStrictRule
-Preferred JSON fields:
+ Output format:
+ - Prefer JSON first and then short markdown.
+ - $jsonStrictRule
+ Preferred JSON fields:
 {
   "summary_for_user": "...",
   "actions": ["..."],
@@ -1716,6 +1796,33 @@ Required JSON:
           Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "git_commit" -Status "skipped" -Iteration $i -Message ("reason={0}" -f $autoCommitResult.reason)
         }
       }
+
+      # Guard against infinite "freeze checkpoint" loops that only touch docs.
+      $repoHeadAfterIteration = Get-GitHead -RepoRoot $resolvedRepoRoot
+      $changedPaths = @()
+      if (-not [string]::IsNullOrWhiteSpace($repoHeadBeforeIteration) -and -not [string]::IsNullOrWhiteSpace($repoHeadAfterIteration) -and $repoHeadBeforeIteration -ne $repoHeadAfterIteration) {
+        $changedPaths = Get-GitChangedPathsBetween -RepoRoot $resolvedRepoRoot -From $repoHeadBeforeIteration -To $repoHeadAfterIteration
+      } else {
+        $afterMapForDocOnly = Get-GitStatusMap -RepoRoot $resolvedRepoRoot
+        $changedPaths = Get-GitDeltaPaths -Before $gitStatusBeforeIteration -After $afterMapForDocOnly
+      }
+
+      $docPaths = @()
+      $docPaths += (Resolve-CommitCandidatePaths -RepoRoot $resolvedRepoRoot -CandidatePaths @($PrdPath))
+      $docPaths += (Resolve-CommitCandidatePaths -RepoRoot $resolvedRepoRoot -CandidatePaths @($DevDocPath))
+      $docPaths += (Resolve-CommitCandidatePaths -RepoRoot $resolvedRepoRoot -CandidatePaths @($FindingsPath))
+      $docPaths += (Resolve-CommitCandidatePaths -RepoRoot $resolvedRepoRoot -CandidatePaths @($resolvedMemoryPath))
+      $docPaths = @($docPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { ([string]$_ -replace '\\','/').TrimStart('/') } | Sort-Object -Unique)
+
+      $docOnly = Test-DocOnlyIteration -ChangedPaths $changedPaths -DocPaths $docPaths -ExcludePrefixes $templateAutoCommitExcludePaths
+      if ($docOnly) {
+        $state.doc_only_streak = [int]$state.doc_only_streak + 1
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "doc_only_progress" -Iteration $i -Message ("streak={0}; changed_paths={1}" -f $state.doc_only_streak, (($changedPaths -join ", ")))
+      } else {
+        $state.doc_only_streak = 0
+      }
+      $state.last_repo_head = $repoHeadAfterIteration
+      Save-Json -Obj $state -Path $stateFile
 
       $workerMarkdownFile = Join-Path $runDir ("iter_{0}_researcher.md" -f $i)
       if ($effectiveWriteResearcherIterationMd) {

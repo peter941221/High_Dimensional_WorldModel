@@ -66,6 +66,7 @@
       "recover_memory_each_iteration": false,
       "review_previous_iteration": true,
       "strict_json_contract": false,
+      "max_doc_only_streak_before_force_action": 2,
       "auto_commit_each_iteration": {
         "enabled": true,
         "auto_push": true,
