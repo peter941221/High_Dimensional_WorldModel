@@ -1286,3 +1286,16 @@ Last Compressed: 2026-03-01
   - Closure package remains frozen and internally consistent; non-significance remains bounded-null evidence, not equivalence.
 - Next-direction lock (precise):
   - Maintain the director-approved closure freeze. Only reopen evidence-generation if an equivalence-focused protocol is explicitly requested; then run matched-setting training-time guidance OFF vs ON with meta-strict checks and formal equivalence analysis under the predefined margin.
+
+## Recent Work (2026-03-02, Researcher Loop Iteration 50 / 5-Iteration Cycle 2/5)
+- Concrete next-best step executed (freeze continuity + read-only invariant revalidation):
+  - Revalidated canonical closure invariants (no training; no report regeneration):
+    - Research_Template/runtime/state.json remains `approved` with `progress_pct=100`, `quality_score=0.96`, `director_approved_final=true`.
+    - results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json remains seeded `[11,22,33,44,55,66,77,88,99]` with matched meta unchanged.
+    - results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json remains meta-clean (`meta_check.passed=true`, `unexpected_diff_keys=[]`, significant KPI count `0` at `alpha=0.05`).
+- Why no Kaggle execution this step:
+  - Closure remains frozen by directive; evidence-generation is only reopened under an explicit equivalence-focused protocol request.
+- Locked interpretation:
+  - Non-significance remains bounded-null evidence, not an equivalence proof.
+- Next-direction lock (precise):
+  - Maintain the director-approved closure freeze. Only reopen evidence-generation if an explicit equivalence-focused protocol is requested (predefined equivalence margin + paired `n>=9` or higher), then run matched-setting training-time guidance OFF vs ON with meta-strict checks and perform formal equivalence analysis under the predefined margin.

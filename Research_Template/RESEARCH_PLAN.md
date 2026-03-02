@@ -44,6 +44,8 @@
 - Maintenance-only revalidation (2026-03-01 iteration 1/3):
   - JSON load checks for canonical artifacts
   - Regression: `pytest -q` (`50 passed, 1 warning`)
+- Freeze continuity revalidation (2026-03-02, 5-iteration cycle 2/5):
+  - Read-only invariant check across canonical closure artifacts (no report regeneration, no training)
 
 ## Risks and Mitigations
 - Risk: guidance training-time causality remains inconclusive.
@@ -79,6 +81,16 @@ Matched-setting design (guidance-only ablation):
 - Toggle only: `--training-guidance {model_only vs guided_blend}` (optionally add `guide_only` as a separate third condition, not mixed into ON/OFF).
 
 Matched-setting smoke (optional, 2 seeds; for wiring validation only):
+
+## Equivalence-Focused Protocol (only if explicitly requested; not executed under freeze)
+- Objective: assess whether training-time guidance OFF vs ON is practically equivalent under a **predefined** equivalence margin (per KPI).
+- Design:
+  - Matched-setting ON/OFF runs with meta guard: `--meta-check --meta-allow-diff training_guidance --meta-strict`.
+  - Evaluation locked to `--eval-policy-mode model_only` for both conditions.
+  - Paired design with `n>=9` (prefer higher) using identical seeds across conditions.
+- Analysis:
+  - Perform formal paired equivalence testing (e.g., TOST) on per-seed deltas against the predefined margin.
+  - Declare equivalence only if the test passes for the targeted KPI set under the predefined alpha and multiplicity policy.
 
 ```bash
 # Dry-run (prints planned commands without executing)

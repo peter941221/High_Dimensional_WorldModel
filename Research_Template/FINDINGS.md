@@ -41,6 +41,20 @@
 - Next direction unchanged:
   - Keep repo in closed state; only run Optional Path A if stronger training-time guidance causality is required (start with 2-seed smoke `--dry-run` + `--meta-check`, then scale to `n>=9` paired seeds).
 
+## Iteration Update (2026-03-02, Researcher Loop Iteration 50 / 5-Iteration Cycle 2/5: Freeze Continuity Revalidation)
+- Mode: maintenance-only (director-approved closure remains canonical; no new experiments).
+- Risk Tier: L
+- Validation PASS (read-only invariants):
+  - `Research_Template/runtime/state.json`: `status=approved`, `director_approved_final=true`, `quality_score=0.96`, `progress_pct=100`.
+  - `results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json`: seeds `[11,22,33,44,55,66,77,88,99]` and matched meta unchanged (`training_guidance=guided_blend`, `eval_policy_mode=model_only`, `domain_rand=true`).
+  - `results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json`: `meta_check.passed=true`, `unexpected_diff_keys=[]`, significant KPI count `0` at `alpha=0.05`.
+- Why no Kaggle execution:
+  - Closure is frozen by directive; additional runs are only justified under an explicit equivalence-focused protocol request (predefined margin + formal equivalence analysis).
+- Locked interpretation:
+  - Non-significance in the matched ON/OFF comparison remains bounded-null evidence, not an equivalence proof.
+- Next direction (precise):
+  - Maintain the director-approved closure freeze (progress_pct=100, quality_score=0.96). Only reopen evidence-generation if an explicit equivalence-focused protocol is requested; then run matched-setting training-time guidance OFF vs ON with meta-strict checks and perform formal equivalence analysis under the predefined margin (paired `n>=9` or higher).
+
 ## Iteration Update (2026-03-01 Iteration 1/3 Optional Path A Preflight)
 - Mode: preflight-only (no training executed; canonical closure unchanged).
 - Risk Tier: L
