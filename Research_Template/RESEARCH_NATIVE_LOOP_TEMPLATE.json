@@ -10,6 +10,7 @@
     "codex review",
     "codex resume"
   ],
+  "model": "gpt-5.2-high",
   "inputs": {
     "task": "Complete ultimate research goals with validated evidence and synthesis.",
     "done_criteria": "Research evidence closure with quality_score >= 0.95 and complete executive plus technical findings.",

@@ -871,6 +871,7 @@ function Invoke-CodexExecWithSafety {
     [string]$RunId,
     [bool]$ShowLiveOutput,
     [string]$StepArtifactsDir = "",
+    [string]$Model = "",
     [switch]$DryRun
   )
 
@@ -951,6 +952,10 @@ function Invoke-CodexExecWithSafety {
     $procArgs = @()
     $procArgs += @($CodexLaunchSpec.ArgPrefix)
     $procArgs += "exec"
+    if (-not [string]::IsNullOrWhiteSpace($Model)) {
+      $procArgs += "--model"
+      $procArgs += $Model
+    }
     $procArgs += @($ExtraExecArgs)
     $procArgs += "--color"
     $procArgs += "never"
@@ -1127,6 +1132,9 @@ if ([version]$template.version -lt [version]"1.1.0") {
 if (-not [bool]$template.official_commands_only) {
   throw "Template must enforce official_commands_only=true"
 }
+
+# --- Model config ---
+$templateModel = if ($template.PSObject.Properties.Name -contains "model") { [string]$template.model } else { "" }
 
 $templateDir = Split-Path -Parent $templateFullPath
 $templateRepoRootCandidate = Split-Path -Parent $templateDir
@@ -1425,7 +1433,7 @@ Save-Json -Obj $state -Path $stateFile
 
 Push-Location $resolvedRepoRoot
 try {
-  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "start" -Message ("risk_tier={0}; role_mode={1}; max_iterations={2}; auto_commit={3}; auto_push={4}; nested_exec_args={5}" -f $effectiveRiskTier, $effectiveRoleMode, $maxIterationsLabel, $effectiveAutoCommitEnabled, $effectiveAutoCommitPush, ($nestedExecArgs -join " "))
+  Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "run" -Status "start" -Message ("risk_tier={0}; role_mode={1}; max_iterations={2}; auto_commit={3}; auto_push={4}; model={5}; nested_exec_args={6}" -f $effectiveRiskTier, $effectiveRoleMode, $maxIterationsLabel, $effectiveAutoCommitEnabled, $effectiveAutoCommitPush, $(if ([string]::IsNullOrWhiteSpace($templateModel)) { "(default)" } else { $templateModel }), ($nestedExecArgs -join " "))
   Write-Heartbeat -HeartbeatFile $heartbeatFile -Message "run_id=$runId start"
 
   $bootstrapPrompt = @"
@@ -1448,7 +1456,7 @@ Perform a repo-wide smart scan and return strict JSON:
 }
 "@
   Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "dispatch" -Iteration 0 -Message "Dispatching bootstrap merge prompt."
-  $bootstrapRaw = Invoke-CodexExecWithSafety -Prompt $bootstrapPrompt -StepName "bootstrap_merge" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
+  $bootstrapRaw = Invoke-CodexExecWithSafety -Prompt $bootstrapPrompt -StepName "bootstrap_merge" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -Model $templateModel -DryRun:$DryRun
   $bootstrapFile = Join-Path $runDir "iter_0_bootstrap_merge.txt"
   Set-Content -Path $bootstrapFile -Value $bootstrapRaw -Encoding UTF8
   Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "bootstrap_merge" -Status "artifact_written" -Iteration 0 -Message ("Saved output to {0}" -f $bootstrapFile)
@@ -1526,7 +1534,7 @@ Return strict JSON only:
 }
 "@
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "dispatch" -Iteration 0 -Message "Dispatching director preflight prompt."
-    $commanderRaw = Invoke-CodexExecWithSafety -Prompt $commanderPrompt -StepName "director_preflight" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
+    $commanderRaw = Invoke-CodexExecWithSafety -Prompt $commanderPrompt -StepName "director_preflight" -Iteration 0 -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -Model $templateModel -DryRun:$DryRun
     $commanderFile = Join-Path $runDir "iter_0_director_preflight.txt"
     Set-Content -Path $commanderFile -Value $commanderRaw -Encoding UTF8
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_preflight" -Status "artifact_written" -Iteration 0 -Message ("Saved output to {0}" -f $commanderFile)
@@ -1802,7 +1810,7 @@ Required JSON:
 "@
     }
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "dispatch" -Iteration $i -Message "Dispatching researcher prompt."
-    $workerRaw = Invoke-CodexExecWithSafety -Prompt $workerPrompt -StepName "researcher" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
+    $workerRaw = Invoke-CodexExecWithSafety -Prompt $workerPrompt -StepName "researcher" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -Model $templateModel -DryRun:$DryRun
     $workerFile = Join-Path $runDir ("iter_{0}_researcher.txt" -f $i)
     Set-Content -Path $workerFile -Value $workerRaw -Encoding UTF8
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "researcher" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $workerFile)
@@ -2271,6 +2279,7 @@ Return strict JSON only:
             -RunId $runId `
             -ShowLiveOutput:$effectiveLiveOutput `
             -StepArtifactsDir $runDir `
+            -Model $templateModel `
             -DryRun:$DryRun
 
           # Save artifact
@@ -2405,7 +2414,7 @@ Return strict JSON only:
 }
 "@
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "dispatch" -Iteration $i -Message "Dispatching evaluator prompt."
-    $reviewerRaw = Invoke-CodexExecWithSafety -Prompt $reviewerPrompt -StepName "evaluator" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
+    $reviewerRaw = Invoke-CodexExecWithSafety -Prompt $reviewerPrompt -StepName "evaluator" -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -Model $templateModel -DryRun:$DryRun
     $reviewerFile = Join-Path $runDir ("iter_{0}_evaluator.txt" -f $i)
     Set-Content -Path $reviewerFile -Value $reviewerRaw -Encoding UTF8
     Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "evaluator" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $reviewerFile)
@@ -2702,7 +2711,7 @@ $(($snapshotObj.open_questions | ForEach-Object { "- $_" }) -join [Environment]:
  }
 "@
       Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "dispatch" -Iteration $i -Message ("cadence={0}; mode={1}; reasons={2}" -f $directorCadence, $directorMode, $reasonText)
-      $directorRaw = Invoke-CodexExecWithSafety -Prompt $directorPrompt -StepName ("director_post_" + $directorMode) -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
+      $directorRaw = Invoke-CodexExecWithSafety -Prompt $directorPrompt -StepName ("director_post_" + $directorMode) -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -Model $templateModel -DryRun:$DryRun
       $directorFile = Join-Path $runDir ("iter_{0}_director_{1}.txt" -f $i, $directorMode)
       Set-Content -Path $directorFile -Value $directorRaw -Encoding UTF8
       Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $directorFile)
@@ -2838,6 +2847,7 @@ $(($snapshotObj.open_questions | ForEach-Object { "- $_" }) -join [Environment]:
 - status: $($state.status)
 - risk_tier: $effectiveRiskTier
 - role_mode: $effectiveRoleMode
+- model: $(if ([string]::IsNullOrWhiteSpace($templateModel)) { "(codex default)" } else { $templateModel })
 - execution_flow: $executionModeSummary
 - auto_commit_each_iteration: $effectiveAutoCommitEnabled
 - auto_push_each_commit: $effectiveAutoCommitPush

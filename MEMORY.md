@@ -72,6 +72,7 @@
     - Then rebuild overlap summary/report (`overlap4`) for bookkeeping only; still not decisive by p-floor.
 
 ## Research Loop Notes (Template)
+- Default model: `gpt-5.2-high` (configured in template JSON `"model"` field; passed as `codex exec --model gpt-5.2-high`). All roles (Researcher, Director, Evaluator) use the same model.
 - Default role mode: researcher_only (iteration 1 memory recovery; iteration 2+ review previous artifact).
 - Per-iteration artifacts:
   - machine output: `Research_Template/runtime/runs/<run_id>/iter_<n>_researcher.txt`
