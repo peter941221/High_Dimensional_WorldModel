@@ -1316,3 +1316,24 @@ Last Compressed: 2026-03-01
   - This report is computed from existing paired summaries; Kaggle is only needed if we choose to shrink the CI via additional paired seeds.
 - Next-direction lock (precise):
   - Define domain-meaningful equivalence margins per KPI and re-run with `--margin-abs`; if the chosen margin is tighter than `required_margin_abs`, dispatch additional paired seeds (Kaggle-first) to tighten uncertainty and re-run the report.
+
+## Recent Work (2026-03-02, Researcher Loop Iteration 52 / 5-Iteration Cycle 4/5)
+- Concrete next-best step executed (analysis-only; no training):
+  - Defined episode-grounded, domain-meaningful absolute equivalence margins (per KPI) and re-ran equivalence reports with `--margin-abs` for matched guidance OFF vs ON (paired n=9; CI level 0.90):
+    - Baseline: `m=0.025` (≈ 1/40 episode)
+    - Transfer success: `m=0.0041666667` (≈ 1/(40*6) episode)
+    - Transfer gain: `m=0.0083333333` (≈ 2/(40*6) episodes)
+    - Robustness: `m=0.0083333333` (≈ 1/120 episode)
+  - Generated concrete equivalence-decision artifacts (meta-strict; allow diff `training_guidance`):
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_baseline_m0025.json` (+ `.md`)
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_success_m00041667.json` (+ `.md`)
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00083333.json` (+ `.md`)
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_robust_m00083333.json` (+ `.md`)
+- Validation/evidence lock:
+  - All reports pass meta-strict check and show `equivalent_ci_within_margin=true` for the selected KPIs under the chosen margins.
+- Why no Kaggle execution this step:
+  - This is report-only analysis computed from existing paired summaries; Kaggle is only needed if we require stricter margins than current CIs support.
+- Residual risk:
+  - Equivalence claims are margin-dependent; if stakeholders require tighter margins (notably for `transfer_gain_mean`), additional paired seeds are required to shrink uncertainty.
+- Next-direction lock (precise):
+  - Decide whether these episode-based margins are accepted as the equivalence protocol. If stricter margins are required, dispatch additional paired seeds (Kaggle-first) and rerun equivalence reports.

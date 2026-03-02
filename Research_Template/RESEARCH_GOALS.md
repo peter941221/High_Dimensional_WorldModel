@@ -168,3 +168,14 @@
 - Closure package remains frozen (director-approved closure: progress_pct=100, quality_score=0.96).
 - Next direction:
   - Define domain-meaningful equivalence margins per KPI and re-run the equivalence report with `--margin-abs`; if margin is tighter than the current CI implies, dispatch additional paired seeds (Kaggle-first) to shrink uncertainty.
+
+## Iteration Status (2026-03-02, Iteration 52 / 5-Iteration Cycle 4/5)
+- Research goals remain unchanged.
+- Domain-margin equivalence checks executed (analysis-only; no training) for matched guidance OFF vs ON (paired `n=9`, `ci_level=0.90`):
+  - Baseline margin: `m=0.025` (≈ 1/40 episode)
+  - Transfer-success margin: `m=0.0041666667` (≈ 1/(40*6) episode)
+  - Transfer-gain margin: `m=0.0083333333` (≈ 2/(40*6) episodes)
+  - Robustness margin: `m=0.0083333333` (≈ 1/120 episode)
+- Equivalence-within-margin holds under the selected margins (see `report/*equiv_*.json` artifacts).
+- Next direction:
+  - Decide whether these episode-based margins are the accepted equivalence protocol; if stricter margins are required (especially on `transfer_gain_mean`), add paired seeds (Kaggle-first) to shrink the CI and rerun equivalence.

@@ -49,6 +49,20 @@
 - Equivalence-margin report generation (2026-03-02, 5-iteration cycle 3/5):
   - `python experiments/equivalence_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_equivalence_margin --out-dir report --meta-check --meta-allow-diff training_guidance --meta-strict`
   - Evidence: `report/guidance_train_matched_off_vs_on_9seed_equivalence_margin.json`
+- Domain-margin equivalence checks (2026-03-02, 5-iteration cycle 4/5):
+  - Baseline (`m=0.025`):
+    - `python experiments/equivalence_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_equiv_baseline_m0025 --out-dir report --kpi-keys baseline_success_dim3 baseline_success_dim4 --margin-abs 0.025 --meta-check --meta-allow-diff training_guidance --meta-strict`
+  - Transfer success (`m=0.0041666667`):
+    - `python experiments/equivalence_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_equiv_transfer_success_m00041667 --out-dir report --kpi-keys transfer_success_mean --margin-abs 0.004166666666666667 --meta-check --meta-allow-diff training_guidance --meta-strict`
+  - Transfer gain (`m=0.0083333333`):
+    - `python experiments/equivalence_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00083333 --out-dir report --kpi-keys transfer_gain_mean --margin-abs 0.008333333333333333 --meta-check --meta-allow-diff training_guidance --meta-strict`
+  - Robustness (`m=0.0083333333`):
+    - `python experiments/equivalence_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_equiv_robust_m00083333 --out-dir report --kpi-keys robust_easy robust_medium robust_hard --margin-abs 0.008333333333333333 --meta-check --meta-allow-diff training_guidance --meta-strict`
+  - Evidence:
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_baseline_m0025.json`
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_success_m00041667.json`
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00083333.json`
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_robust_m00083333.json`
 
 ## Risks and Mitigations
 - Risk: guidance training-time causality remains inconclusive.

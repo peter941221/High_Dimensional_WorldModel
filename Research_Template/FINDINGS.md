@@ -76,6 +76,27 @@
 - Next direction (precise):
   - Define domain-meaningful equivalence margins per KPI (absolute scale), then re-run the report with `--margin-abs` for a concrete equivalence decision; if the chosen margin is tighter than `required_margin_abs`, dispatch additional paired seeds (Kaggle-first) to shrink the CI.
 
+## Iteration Update (2026-03-02, Researcher Loop Iteration 52 / 5-Iteration Cycle 4/5: Domain-Margin Equivalence Decisions)
+- Mode: analysis-only (no training; director-approved closure unchanged).
+- Risk Tier: M
+- Domain-meaningful absolute equivalence margins (per KPI):
+  - Baseline (`baseline_success_dim3`, `baseline_success_dim4`): `m=0.025` (≈ 1 episode out of 40)
+  - Transfer success mean (`transfer_success_mean`): `m=0.0041666667` (≈ 1 episode out of 40 on 1 of 6 transfer tasks: `1/(40*6)`)
+  - Transfer gain mean (`transfer_gain_mean`): `m=0.0083333333` (≈ 2 episodes total across 6×40 transfer evaluations: `2/(40*6)`)
+  - Robustness (`robust_easy`, `robust_medium`, `robust_hard`): `m=0.0083333333` (≈ 1 episode out of 120)
+- Evidence generated (equivalence checks under the domain margins; `ci_level=0.90`):
+  - `report/guidance_train_matched_off_vs_on_9seed_equiv_baseline_m0025.json` (+ `.md`)
+  - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_success_m00041667.json` (+ `.md`)
+  - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00083333.json` (+ `.md`)
+  - `report/guidance_train_matched_off_vs_on_9seed_equiv_robust_m00083333.json` (+ `.md`)
+- Validation PASS:
+  - Each report executed with `--meta-check --meta-allow-diff training_guidance --meta-strict` and `equivalent_ci_within_margin=true` for all included KPIs.
+- Interpretation:
+  - Under these domain margins, the paired OFF vs ON (n=9) results are CI-equivalent for baseline, transfer success, transfer gain, and robustness (at `ci_level=0.90`).
+  - If a stricter transfer-gain margin is required (e.g., `m=0.0041666667`), the current CI implies more paired seeds would be needed (Kaggle-first) to shrink uncertainty.
+- Next direction (precise):
+  - Decide whether the above episode-based margins are acceptable as the equivalence protocol for “training-time guidance OFF vs ON” (matched setting). If stricter margins are required for any KPI, schedule additional paired seeds (Kaggle-first) and rerun the equivalence reports.
+
 ## Iteration Update (2026-03-01 Iteration 1/3 Optional Path A Preflight)
 - Mode: preflight-only (no training executed; canonical closure unchanged).
 - Risk Tier: L

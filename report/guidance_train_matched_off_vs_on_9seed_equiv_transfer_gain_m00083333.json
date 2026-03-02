@@ -1,0 +1,70 @@
+{
+  "report_name": "guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00083333",
+  "a_prefix": "p_guidance_matched_off_9seed",
+  "b_prefix": "p_guidance_matched_on_9seed",
+  "a_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\p_guidance_matched_off_9seed\\p0_summary.json",
+  "b_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\p_guidance_matched_on_9seed\\p0_summary.json",
+  "seeds": [
+    11,
+    22,
+    33,
+    44,
+    55,
+    66,
+    77,
+    88,
+    99
+  ],
+  "method": "paired_bootstrap_mean_ci",
+  "ci_level": 0.9,
+  "bootstrap_samples": 10000,
+  "bootstrap_seed": 12345,
+  "margin_abs": 0.00833333333333333,
+  "rows": [
+    {
+      "kpi": "transfer_gain_mean",
+      "n": 9,
+      "a_mean": -0.0037037037037037043,
+      "b_mean": -0.005555555555555557,
+      "delta_mean": -0.001851851851851852,
+      "delta_std": 0.008617828920826987,
+      "cohens_dz": -0.21488612374010135,
+      "ci_level": 0.9,
+      "ci_low": -0.006481481481481482,
+      "ci_high": 0.002314814814814815,
+      "required_margin_abs": 0.006481481481481482,
+      "per_seed_deltas": [
+        0.0,
+        0.008333333333333333,
+        -0.020833333333333336,
+        0.008333333333333333,
+        -0.004166666666666667,
+        0.0,
+        0.0,
+        -0.004166666666666667,
+        -0.004166666666666667
+      ],
+      "margin_abs": 0.00833333333333333,
+      "equivalent_ci_within_margin": true
+    }
+  ],
+  "notes": [
+    "This report does not claim equivalence unless a domain-meaningful margin is defined and CI falls within it.",
+    "CI is estimated via bootstrap of the paired per-seed deltas (deterministic seed)."
+  ],
+  "meta_check": {
+    "enabled": true,
+    "allowed_diff_keys": [
+      "training_guidance"
+    ],
+    "diffs": [
+      {
+        "key": "training_guidance",
+        "a": "model_only",
+        "b": "guided_blend"
+      }
+    ],
+    "unexpected_diff_keys": [],
+    "passed": true
+  }
+}
