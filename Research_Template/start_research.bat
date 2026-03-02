@@ -23,8 +23,8 @@ if "%HAS_MAX_ITER%"=="0" (
 )
 set "DEFAULT_APPROVAL_MODE_ARGS="
 if "%HAS_APPROVAL_MODE%"=="0" (
-  REM Default behavior for starter: keep running even after approval until user stops it.
-  set "DEFAULT_APPROVAL_MODE_ARGS=-ContinueAfterApproval"
+  REM Default behavior for starter: stop after approval to prevent infinite freeze loops.
+  set "DEFAULT_APPROVAL_MODE_ARGS=-StopOnApproval"
 )
 set "DEFAULT_ROLE_MODE_ARGS="
 if "%HAS_ROLE_MODE%"=="0" (
@@ -66,7 +66,7 @@ if "%HAS_MAX_ITER%"=="1" (
 if "%HAS_APPROVAL_MODE%"=="1" (
   echo [start_research] Approval stop mode explicitly set by user args.
 ) else (
-  echo [start_research] Approval mode default = continue after approval.
+  echo [start_research] Approval mode default = stop on approval.
 )
 if "%HAS_ROLE_MODE%"=="1" (
   echo [start_research] RoleMode explicitly set by user args.

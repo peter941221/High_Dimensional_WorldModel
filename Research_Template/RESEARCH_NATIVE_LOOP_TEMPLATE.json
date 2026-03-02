@@ -1,6 +1,6 @@
 {
   "template_id": "codex_native_research_loop_v1",
-  "version": "1.3.8",
+  "version": "1.4.0",
   "name": "Research Native Loop Template",
   "description": "CLI-only iterative research orchestration with Director, Researcher, and Evaluator.",
   "mode": "cli-only",
@@ -73,19 +73,40 @@
     "approval_streak_required": 2,
     "require_evaluator_approved_for_stop": true,
     "researcher_only": {
-      "require_evidence_delta": false,
-      "no_progress_policy": "mark_continue",
+      "require_evidence_delta": true,
+      "no_progress_policy": "stop",
       "write_researcher_iteration_md": true,
       "recover_memory_each_iteration": false,
       "review_previous_iteration": true,
       "strict_json_contract": false,
-      "max_doc_only_streak_before_force_action": 2,
+      "max_doc_only_streak_before_force_action": 3,
+      "max_identical_direction_streak": 5,
+      "max_memory_lines": 500,
       "auto_commit_each_iteration": {
         "enabled": true,
         "auto_push": true,
+        "skip_if_doc_only_streak_above": 1,
+        "batch_commit_on_streak_break": true,
         "exclude_paths": [
           "Research_Template/runtime/"
         ]
+      },
+      "director_overlay": {
+        "enabled": true,
+        "cadence": "every_n_plus_triggers",
+        "n_iteration_cadence": 3,
+        "triggers": {
+          "stall": true,
+          "risk_spike": false,
+          "doc_only_streak": true,
+          "final_candidate": true
+        },
+        "stall_threshold": 3,
+        "doc_only_streak_threshold": 2,
+        "risk_spike_score_drop": 0.05,
+        "can_override_direction": true,
+        "can_force_stop": true,
+        "can_approve_final": true
       },
       "evidence_paths": [
         "./report",
@@ -150,6 +171,7 @@
       "Director preflight sets first research direction when role_mode=full.",
       "In role_mode=full, each iteration runs Researcher then Evaluator. Director post-note runs based on runtime_safety.director cadence/triggers (and always runs for final-candidate signoff).",
       "In researcher_only mode, skip Director and Evaluator and run only Researcher each iteration.",
+      "In Researcher_Director mode (researcher_only with director_overlay enabled), invoke Director every N iterations and on trigger conditions. Director can override direction, approve final closure, and force stop.",
       "In researcher_only mode, iteration 1 recovers memory then executes the next concrete step; iteration 2+ reviews previous iteration output then executes the next concrete step.",
       "In researcher_only mode, encourage Kaggle-first execution for experiments when feasible (free, fast, reproducible), with explicit rationale when local-only execution is chosen.",
       "Maintain rolling-thread context continuity across iterations using bounded context packets.",

@@ -520,6 +520,133 @@ function Invoke-IterationAutoCommit {
   return $result
 }
 
+function Get-StringHashSimple {
+  param([string]$Text)
+  if ([string]::IsNullOrWhiteSpace($Text)) { return "empty" }
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text.Trim())
+  $hash = $sha.ComputeHash($bytes)
+  return [BitConverter]::ToString($hash).Replace("-","").Substring(0,16).ToLowerInvariant()
+}
+
+function Invoke-MemoryCompaction {
+  <#
+  .SYNOPSIS
+    Detects consecutive near-identical "Recent Work" sections in MEMORY.md
+    and collapses them into a single summary entry.
+  #>
+  param(
+    [string]$MemoryPath,
+    [int]$MaxLines = 500
+  )
+  if (-not (Test-Path $MemoryPath)) { return @{ compacted = $false; reason = "file_not_found" } }
+  $lines = @(Get-Content -Path $MemoryPath -Encoding UTF8)
+  if ($lines.Count -le $MaxLines) { return @{ compacted = $false; reason = "within_limit"; line_count = $lines.Count } }
+
+  # Parse sections by "## Recent Work" headers
+  $sections = New-Object System.Collections.ArrayList
+  $currentStart = -1
+  $currentHeader = ""
+  for ($idx = 0; $idx -lt $lines.Count; $idx++) {
+    if ($lines[$idx] -match '^## Recent Work') {
+      if ($currentStart -ge 0) {
+        [void]$sections.Add(@{ start = $currentStart; end = $idx - 1; header = $currentHeader })
+      }
+      $currentStart = $idx
+      $currentHeader = $lines[$idx]
+    }
+  }
+  if ($currentStart -ge 0) {
+    [void]$sections.Add(@{ start = $currentStart; end = $lines.Count - 1; header = $currentHeader })
+  }
+  if ($sections.Count -lt 3) { return @{ compacted = $false; reason = "too_few_sections"; section_count = $sections.Count } }
+
+  # Detect freeze checkpoint runs by looking for "freeze continuity" or "freeze checkpoint" in section body
+  $freezePattern = "freeze (continuity|checkpoint|integrity)"
+  $runs = New-Object System.Collections.ArrayList
+  $runStart = -1
+  $runEnd = -1
+  for ($s = 0; $s -lt $sections.Count; $s++) {
+    $sec = $sections[$s]
+    $body = ($lines[$sec.start..$sec.end] -join "`n")
+    $isFreeze = ($body -match $freezePattern)
+    if ($isFreeze) {
+      if ($runStart -lt 0) { $runStart = $s }
+      $runEnd = $s
+    } else {
+      if ($runStart -ge 0 -and ($runEnd - $runStart) -ge 2) {
+        [void]$runs.Add(@{ start_section = $runStart; end_section = $runEnd; count = ($runEnd - $runStart + 1) })
+      }
+      $runStart = -1
+      $runEnd = -1
+    }
+  }
+  if ($runStart -ge 0 -and ($runEnd - $runStart) -ge 2) {
+    [void]$runs.Add(@{ start_section = $runStart; end_section = $runEnd; count = ($runEnd - $runStart + 1) })
+  }
+
+  if ($runs.Count -eq 0) { return @{ compacted = $false; reason = "no_freeze_runs_detected" } }
+
+  # Build replacement: process runs in reverse order to preserve line indices
+  $totalRemoved = 0
+  for ($r = $runs.Count - 1; $r -ge 0; $r--) {
+    $run = $runs[$r]
+    $firstSec = $sections[$run.start_section]
+    $lastSec = $sections[$run.end_section]
+
+    # Extract iteration numbers from headers
+    $iterNums = @()
+    for ($s = $run.start_section; $s -le $run.end_section; $s++) {
+      if ($sections[$s].header -match 'Iteration (\d+)') { $iterNums += [int]$Matches[1] }
+    }
+    $iterNums = $iterNums | Sort-Object
+    $minIter = $iterNums[0]
+    $maxIter = $iterNums[$iterNums.Count - 1]
+    $count = $run.count
+
+    $summary = @(
+      "## Freeze Continuity Checkpoints (Iterations $minIter-$maxIter, $count identical entries collapsed)"
+      "- All $count iterations validated the same canonical evidence (no changes):"
+      "  - ``results/p0_freeze/p_guidance_matched_on_9seed/p0_summary.json``"
+      "  - ``results/analysis_guidance/guidance_train_matched_off_vs_on_9seed_significance.json``"
+      "- Closure package remained frozen and internally consistent throughout."
+      "- meta_check.passed=true, unexpected_diff_keys=[], significant KPI count 0 at alpha 0.05."
+      "- doc_only_streak reached $count iterations with no evidence delta."
+      "- Iteration ordering was non-monotonic (indicates potential concurrency or counter issue)."
+      "- **Auto-compacted by Invoke-MemoryCompaction to reduce bloat.**"
+      ""
+    )
+
+    $removeFrom = $firstSec.start
+    $removeTo = $lastSec.end
+    $beforeLines = if ($removeFrom -gt 0) { $lines[0..($removeFrom - 1)] } else { @() }
+    $afterLines = if ($removeTo -lt ($lines.Count - 1)) { $lines[($removeTo + 1)..($lines.Count - 1)] } else { @() }
+    $lines = @($beforeLines) + $summary + @($afterLines)
+    $totalRemoved += ($removeTo - $removeFrom + 1) - $summary.Count
+
+    # Re-parse sections since line indices have changed
+    $sections = New-Object System.Collections.ArrayList
+    $currentStart = -1
+    $currentHeader = ""
+    for ($idx = 0; $idx -lt $lines.Count; $idx++) {
+      if ($lines[$idx] -match '^## (Recent Work|Freeze Continuity)') {
+        if ($currentStart -ge 0) {
+          [void]$sections.Add(@{ start = $currentStart; end = $idx - 1; header = $currentHeader })
+        }
+        $currentStart = $idx
+        $currentHeader = $lines[$idx]
+      }
+    }
+    if ($currentStart -ge 0) {
+      [void]$sections.Add(@{ start = $currentStart; end = $lines.Count - 1; header = $currentHeader })
+    }
+  }
+
+  # Write compacted file
+  $lines | Set-Content -Path $MemoryPath -Encoding UTF8
+  return @{ compacted = $true; lines_removed = $totalRemoved; new_line_count = $lines.Count }
+}
+
 function Test-DocOnlyIteration {
   param(
     [string[]]$ChangedPaths,
@@ -1087,6 +1214,8 @@ $templateRecoverMemoryEachIteration = if ($null -ne $researcherOnlyCfg -and $res
 $templateReviewPreviousIteration = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "review_previous_iteration") { [bool]$researcherOnlyCfg.review_previous_iteration } else { $true }
 $templateStrictJsonContract = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "strict_json_contract") { [bool]$researcherOnlyCfg.strict_json_contract } else { $false }
 $templateMaxDocOnlyStreakBeforeForceAction = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "max_doc_only_streak_before_force_action") { [int]$researcherOnlyCfg.max_doc_only_streak_before_force_action } else { 2 }
+$templateMaxIdenticalDirectionStreak = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "max_identical_direction_streak") { [int]$researcherOnlyCfg.max_identical_direction_streak } else { 5 }
+$templateMaxMemoryLines = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "max_memory_lines") { [int]$researcherOnlyCfg.max_memory_lines } else { 500 }
 $autoCommitCfg = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "auto_commit_each_iteration") { $researcherOnlyCfg.auto_commit_each_iteration } else { $null }
 $templateAutoCommitEnabled = if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "enabled") { [bool]$autoCommitCfg.enabled } else { $false }
 $templateAutoCommitPush = if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "auto_push") { [bool]$autoCommitCfg.auto_push } else { $false }
@@ -1095,12 +1224,33 @@ if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -conta
 } else {
   $templateAutoCommitExcludePaths = [string[]]@("Research_Template/runtime/")
 }
+$templateSkipCommitIfDocOnlyStreakAbove = if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "skip_if_doc_only_streak_above") { [int]$autoCommitCfg.skip_if_doc_only_streak_above } else { 0 }
+$templateBatchCommitOnStreakBreak = if ($null -ne $autoCommitCfg -and $autoCommitCfg.PSObject.Properties.Name -contains "batch_commit_on_streak_break") { [bool]$autoCommitCfg.batch_commit_on_streak_break } else { $false }
+
+# --- Researcher_Director mode config (director_overlay in researcher_only) ---
+$overlayCfg = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "director_overlay") { $researcherOnlyCfg.director_overlay } else { $null }
+$overlayEnabled = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "enabled") { [bool]$overlayCfg.enabled } else { $false }
+$overlayCadence = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "cadence") { [string]$overlayCfg.cadence } else { "every_n_plus_triggers" }
+$overlayNCadence = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "n_iteration_cadence") { [int]$overlayCfg.n_iteration_cadence } else { 3 }
+$overlayTriggersCfg = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "triggers") { $overlayCfg.triggers } else { $null }
+$overlayTriggerStall = if ($null -ne $overlayTriggersCfg -and $overlayTriggersCfg.PSObject.Properties.Name -contains "stall") { [bool]$overlayTriggersCfg.stall } else { $true }
+$overlayTriggerRiskSpike = if ($null -ne $overlayTriggersCfg -and $overlayTriggersCfg.PSObject.Properties.Name -contains "risk_spike") { [bool]$overlayTriggersCfg.risk_spike } else { $false }
+$overlayTriggerDocOnly = if ($null -ne $overlayTriggersCfg -and $overlayTriggersCfg.PSObject.Properties.Name -contains "doc_only_streak") { [bool]$overlayTriggersCfg.doc_only_streak } else { $true }
+$overlayTriggerFinalCandidate = if ($null -ne $overlayTriggersCfg -and $overlayTriggersCfg.PSObject.Properties.Name -contains "final_candidate") { [bool]$overlayTriggersCfg.final_candidate } else { $true }
+$overlayStallThreshold = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "stall_threshold") { [int]$overlayCfg.stall_threshold } else { 3 }
+$overlayDocOnlyThreshold = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "doc_only_streak_threshold") { [int]$overlayCfg.doc_only_streak_threshold } else { 2 }
+$overlayRiskSpikeDrop = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "risk_spike_score_drop") { [double]$overlayCfg.risk_spike_score_drop } else { 0.05 }
+$overlayCanOverride = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "can_override_direction") { [bool]$overlayCfg.can_override_direction } else { $true }
+$overlayCanForceStop = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "can_force_stop") { [bool]$overlayCfg.can_force_stop } else { $true }
+$overlayCanApprove = if ($null -ne $overlayCfg -and $overlayCfg.PSObject.Properties.Name -contains "can_approve_final") { [bool]$overlayCfg.can_approve_final } else { $true }
+
 $effectiveRoleMode = if ($PSBoundParameters.ContainsKey("RoleMode")) { [string]$RoleMode } else { $templateRoleModeDefault }
 if ([string]::IsNullOrWhiteSpace($effectiveRoleMode)) { $effectiveRoleMode = "researcher_only" }
 $effectiveRoleMode = $effectiveRoleMode.ToLowerInvariant()
 if ($effectiveRoleMode -notin @("full","researcher_only")) {
   throw "Unsupported role mode '$effectiveRoleMode'. Allowed: full, researcher_only."
 }
+$effectiveOverlayEnabled = ($overlayEnabled -and $effectiveRoleMode -eq "researcher_only")
 $effectiveNoProgressPolicy = if ($PSBoundParameters.ContainsKey("NoProgressPolicy")) { [string]$NoProgressPolicy } else { $templateNoProgressPolicy }
 if ([string]::IsNullOrWhiteSpace($effectiveNoProgressPolicy)) { $effectiveNoProgressPolicy = "mark_continue" }
 $effectiveNoProgressPolicy = $effectiveNoProgressPolicy.ToLowerInvariant()
@@ -1208,6 +1358,13 @@ $state = [ordered]@{
   rolling_context_bytes_est = 0
   context_risk_score = 0.0
   doc_only_streak = 0
+  direction_hash_streak = 0
+  last_direction_hash = ""
+  deferred_commit_iterations = @()
+  iteration_monotonic_counter = 0
+  total_evidence_deltas = 0
+  total_doc_only_iterations = 0
+  total_productive_iterations = 0
   last_repo_head = ""
   last_compression_iteration = 0
   compression_count = 0
@@ -1215,6 +1372,11 @@ $state = [ordered]@{
   active_snapshot_markdown_file = ""
   context_pressure_file = $contextPressureFile
   next_direction = "none"
+  overlay_director_enabled = $effectiveOverlayEnabled
+  overlay_last_director_iteration = 0
+  overlay_director_invocation_count = 0
+  overlay_director_approved_final = $false
+  overlay_director_note = ""
   history = @()
 }
 Save-Json -Obj $state -Path $stateFile
@@ -1551,6 +1713,17 @@ Return strict JSON only:
 - Do NOT repeat a continuity-only checkpoint that only edits PLAN/FINDINGS/GOALS/MEMORY.
 "@
        }
+
+       $directorOverlayNoteText = ""
+       if ($effectiveOverlayEnabled -and -not [string]::IsNullOrWhiteSpace($state.overlay_director_note)) {
+         $directorOverlayNoteText = @"
+
+## Director Strategic Note (Researcher_Director mode — periodic Director review)
+$($state.overlay_director_note)
+Follow this strategic guidance when choosing your next research step.
+"@
+       }
+
        $workerPrompt = @"
  You are RESEARCHER in a research CLI loop (researcher-only mode).
  Ultimate goals: $effectiveTask
@@ -1567,6 +1740,7 @@ Previous researcher artifact: $previousResearcherFile
 Previous researcher markdown: $previousResearcherMdFile
 Rolling context packet (JSON):
 $rollingContextJson
+$directorOverlayNoteText
 
 Act like a normal Codex coding session in this repo: inspect files, run commands, edit code/docs, and validate where possible.
  Iteration protocol:
@@ -1791,7 +1965,8 @@ Required JSON:
       }
 
       $autoCommitResult = $null
-      if ($effectiveAutoCommitEnabled) {
+      $skipCommitForDocOnlyStreak = ($templateSkipCommitIfDocOnlyStreakAbove -gt 0 -and [int]$state.doc_only_streak -gt $templateSkipCommitIfDocOnlyStreakAbove)
+      if ($effectiveAutoCommitEnabled -and -not $skipCommitForDocOnlyStreak) {
         $autoCommitResult = Invoke-IterationAutoCommit `
           -RepoRoot $resolvedRepoRoot `
           -Iteration $i `
@@ -1808,6 +1983,11 @@ Required JSON:
         } else {
           Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "git_commit" -Status "skipped" -Iteration $i -Message ("reason={0}" -f $autoCommitResult.reason)
         }
+      } elseif ($skipCommitForDocOnlyStreak) {
+        $autoCommitResult = [ordered]@{ attempted = $false; committed = $false; pushed = $false; reason = "deferred_doc_only_streak"; commit_hash = ""; staged_paths = @() }
+        if ($null -eq $state.deferred_commit_iterations) { $state.deferred_commit_iterations = @() }
+        $state.deferred_commit_iterations = @($state.deferred_commit_iterations) + @($i)
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "git_commit" -Status "deferred" -Iteration $i -Message ("Commit deferred due to doc-only streak ({0} > {1})" -f $state.doc_only_streak, $templateSkipCommitIfDocOnlyStreakAbove)
       }
 
       # Guard against infinite "freeze checkpoint" loops that only touch docs.
@@ -1830,13 +2010,69 @@ Required JSON:
       $docOnly = Test-DocOnlyIteration -ChangedPaths $changedPaths -DocPaths $docPaths -ExcludePrefixes $templateAutoCommitExcludePaths
       if ($docOnly) {
         $state.doc_only_streak = [int]$state.doc_only_streak + 1
+        $state.total_doc_only_iterations = [int]$state.total_doc_only_iterations + 1
         Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "doc_only_progress" -Iteration $i -Message ("streak={0}; changed_paths={1}" -f $state.doc_only_streak, (($changedPaths -join ", ")))
         if ($templateMaxDocOnlyStreakBeforeForceAction -gt 0 -and [int]$state.doc_only_streak -ge $templateMaxDocOnlyStreakBeforeForceAction) {
+          # Check if project is in approved/approved_continuing state → hard stop
+          if ($state.status -eq "approved_continuing" -or $state.status -eq "approved" -or ($null -ne $state.PSObject -and $state.PSObject.Properties.Name -contains "director_approved_final" -and [bool]$state.director_approved_final)) {
+            $state.status = "paused_freeze_complete"
+            Save-Json -Obj $state -Path $stateFile
+            Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "hard_stop_freeze_complete" -Iteration $i -Message ("Project approved + doc-only streak ({0}) exceeded threshold ({1}). Hard stopping to prevent infinite freeze loop." -f $state.doc_only_streak, $templateMaxDocOnlyStreakBeforeForceAction)
+            Write-Host ("[LOOP] HARD STOP: Project is approved and doc-only streak ({0}) exceeded threshold ({1}). Stopping to prevent infinite freeze checkpoint loop." -f $state.doc_only_streak, $templateMaxDocOnlyStreakBeforeForceAction)
+            $blocked = $true
+            $blockedReason = "Hard stop: project approved + doc-only streak exceeded threshold. No productive work possible in freeze state."
+            break
+          }
           $state.next_direction = "Forced pivot: stop doc-only continuity checkpoints and execute a concrete evidence-producing step (prefer Kaggle for experiments) that creates non-doc deltas under results/report or code/config enabling the next run."
         }
       } else {
+        # Streak broken: batch-commit deferred iterations if configured
+        if ($templateBatchCommitOnStreakBreak -and [int]$state.doc_only_streak -gt 0 -and $null -ne $state.deferred_commit_iterations -and $state.deferred_commit_iterations.Count -gt 0) {
+          Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "git_commit" -Status "batch_commit_deferred" -Iteration $i -Message ("Batching {0} deferred doc-only iteration commits." -f $state.deferred_commit_iterations.Count)
+        }
         $state.doc_only_streak = 0
+        $state.deferred_commit_iterations = @()
+        $state.total_productive_iterations = [int]$state.total_productive_iterations + 1
       }
+
+      # --- Identical-direction-streak guard ---
+      $currentDirectionHash = Get-StringHashSimple -Text ([string]$state.next_direction)
+      if ($currentDirectionHash -eq [string]$state.last_direction_hash -and $evidenceDeltaPaths.Count -eq 0) {
+        $state.direction_hash_streak = [int]$state.direction_hash_streak + 1
+      } else {
+        $state.direction_hash_streak = 0
+      }
+      $state.last_direction_hash = $currentDirectionHash
+      if ($templateMaxIdenticalDirectionStreak -gt 0 -and [int]$state.direction_hash_streak -ge $templateMaxIdenticalDirectionStreak) {
+        $state.status = "paused_direction_loop"
+        Save-Json -Obj $state -Path $stateFile
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "hard_stop_identical_direction" -Iteration $i -Message ("Same next_direction hash repeated {0} times with 0 evidence deltas. Hard stopping." -f $state.direction_hash_streak)
+        Write-Host ("[LOOP] HARD STOP: Identical direction repeated {0} times with no evidence delta. Likely stuck in a loop." -f $state.direction_hash_streak)
+        $blocked = $true
+        $blockedReason = "Hard stop: identical direction repeated $($state.direction_hash_streak) times with zero evidence delta."
+        break
+      }
+
+      # --- Monotonic iteration counter ---
+      $state.iteration_monotonic_counter = [int]$state.iteration_monotonic_counter + 1
+
+      # --- Evidence delta tracking ---
+      if ($evidenceDeltaPaths.Count -gt 0) {
+        $state.total_evidence_deltas = [int]$state.total_evidence_deltas + $evidenceDeltaPaths.Count
+      }
+
+      # --- MEMORY.md auto-compaction ---
+      if ($templateMaxMemoryLines -gt 0 -and (Test-Path $resolvedMemoryPath)) {
+        $memLineCount = @(Get-Content -Path $resolvedMemoryPath -Encoding UTF8).Count
+        if ($memLineCount -gt $templateMaxMemoryLines) {
+          $compactResult = Invoke-MemoryCompaction -MemoryPath $resolvedMemoryPath -MaxLines $templateMaxMemoryLines
+          if ($compactResult.compacted) {
+            Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "memory_compaction" -Status "compacted" -Iteration $i -Message ("Removed {0} lines; new count={1}" -f $compactResult.lines_removed, $compactResult.new_line_count)
+            Write-Host ("[LOOP] MEMORY.md auto-compacted: removed {0} lines (was {1}, now {2})" -f $compactResult.lines_removed, $memLineCount, $compactResult.new_line_count)
+          }
+        }
+      }
+
       $state.last_repo_head = $repoHeadAfterIteration
       Save-Json -Obj $state -Path $stateFile
 
@@ -1925,6 +2161,177 @@ $limitationsLines
       }
       Save-Json -Obj $state -Path $stateFile
 
+      # ========== RESEARCHER_DIRECTOR MODE (director_overlay in researcher_only) ==========
+      if ($effectiveOverlayEnabled) {
+        # 1. Evaluate triggers
+        $overlayTriggerReasons = [System.Collections.ArrayList]::new()
+        if ($overlayTriggerStall -and $noProgressCount -ge $overlayStallThreshold) {
+          [void]$overlayTriggerReasons.Add("stall")
+        }
+        if ($overlayTriggerDocOnly -and [int]$state.doc_only_streak -ge $overlayDocOnlyThreshold) {
+          [void]$overlayTriggerReasons.Add("doc_only_streak")
+        }
+        if ($overlayTriggerFinalCandidate -and $approvedCandidate -and $qualitySelf -ge 0.90) {
+          [void]$overlayTriggerReasons.Add("final_candidate")
+        }
+        # risk_spike: compare current quality_self against previous iteration
+        if ($overlayTriggerRiskSpike -and $state.history.Count -gt 1) {
+          $prevQuality = [double]$state.history[-2].quality_score
+          if (($prevQuality - $qualitySelf) -ge $overlayRiskSpikeDrop) {
+            [void]$overlayTriggerReasons.Add("risk_spike")
+          }
+        }
+        $overlayTriggerFired = ($overlayTriggerReasons.Count -gt 0)
+
+        # 2. Check cadence: every N iterations OR trigger
+        $itersSinceLastDirector = $i - [int]$state.overlay_last_director_iteration
+        $cadenceDue = ($overlayNCadence -gt 0 -and $itersSinceLastDirector -ge $overlayNCadence)
+        $shouldRunOverlay = ($cadenceDue -or $overlayTriggerFired)
+
+        if ($shouldRunOverlay) {
+          # 3. Build Director prompt with recent iteration summaries
+          $recentMdSummaries = ""
+          $historyWindow = [Math]::Min($state.history.Count, $overlayNCadence)
+          if ($historyWindow -gt 0) {
+            $startIdx = $state.history.Count - $historyWindow
+            $endIdx = $state.history.Count - 1
+            $recentEntries = @($state.history[$startIdx..$endIdx])
+            foreach ($entry in $recentEntries) {
+              $mdFile = [string]$entry.worker_markdown_file
+              if (-not [string]::IsNullOrWhiteSpace($mdFile) -and (Test-Path $mdFile)) {
+                $mdContent = Get-Content -Path $mdFile -Raw -Encoding UTF8
+                $recentMdSummaries += "--- Iteration $($entry.iteration) ---`n$mdContent`n`n"
+              }
+            }
+          }
+
+          $triggerReasonText = if ($overlayTriggerFired) { ($overlayTriggerReasons -join ", ") } else { "cadence" }
+
+          $overlayDirectorPrompt = @"
+You are DIRECTOR providing strategic oversight in a research CLI loop (Researcher_Director mode).
+This is a periodic review, not a per-iteration check. Be concise and strategic.
+
+Ultimate goals: $effectiveTask
+Done criteria: $effectiveDoneCriteria
+Trigger reasons for this review: $triggerReasonText
+Source policy: $sourcePolicy
+
+## Current State
+- Iteration: $iterationLabel
+- Progress pct (researcher self-report): $progressClaim
+- Quality score (researcher self-report): $qualitySelf
+- Approved candidate (researcher self-report): $approvedCandidate
+- No-progress count: $noProgressCount
+- Doc-only streak: $($state.doc_only_streak)
+- Evidence delta this iteration: $($evidenceDeltaPaths.Count) files
+- Total evidence deltas: $($state.total_evidence_deltas)
+- Total iterations: $i
+- Productive iterations: $($state.total_productive_iterations)
+- Doc-only iterations: $($state.total_doc_only_iterations)
+
+## Recent Researcher Iteration Summaries
+$recentMdSummaries
+
+## Rolling Context
+- Goals doc: $PrdPath
+- Plan doc: $DevDocPath
+- Findings doc: $FindingsPath
+- Memory doc: $resolvedMemoryPath
+- Current next_direction: $($state.next_direction)
+
+## Your Role
+Review the researcher's recent trajectory. Assess:
+1. Is the research heading in the right direction toward the ultimate goals?
+2. Is there evidence of stalling, looping, or drift?
+3. Should the direction be corrected?
+4. Is the work ready for final approval?
+
+Return strict JSON only:
+{
+  "note_for_researcher": "Brief strategic note (carried into next iteration context)",
+  "researcher_direction": "Override direction for next iteration, or empty string to keep current",
+  "approved_final": true or false,
+  "force_stop": true or false,
+  "force_stop_reason": "Reason if force_stop is true"
+}
+"@
+
+          # 4. Invoke Director
+          Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_overlay" -Status "invoking" -Iteration $i -Message ("trigger={0}; cadence_due={1}; iters_since_last={2}" -f $triggerReasonText, $cadenceDue, $itersSinceLastDirector)
+
+          $overlayDirectorRaw = Invoke-CodexExecWithSafety `
+            -Prompt $overlayDirectorPrompt `
+            -StepName "director_overlay" `
+            -Iteration $i `
+            -Template $template `
+            -CodexLaunchSpec $codexLaunchSpec `
+            -ExtraExecArgs $nestedExecArgs `
+            -HeartbeatFile $heartbeatFile `
+            -TraceFile $traceFile `
+            -RunId $runId `
+            -ShowLiveOutput:$effectiveLiveOutput `
+            -StepArtifactsDir $runDir `
+            -DryRun:$DryRun
+
+          # Save artifact
+          $overlayDirectorFile = Join-Path $runDir ("iter_{0}_director_overlay.txt" -f $i)
+          Set-Content -Path $overlayDirectorFile -Value $overlayDirectorRaw -Encoding UTF8
+
+          # 5. Parse Director output
+          $overlayDirectorJson = $null
+          try {
+            $overlayDirectorJson = Parse-FirstJsonObject -Text $overlayDirectorRaw
+          } catch {
+            Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_overlay" -Status "parse_error" -Iteration $i -Message ("Failed to parse Researcher_Director JSON: {0}" -f $_.Exception.Message)
+          }
+
+          if ($null -ne $overlayDirectorJson) {
+            # Note for researcher
+            if ($overlayDirectorJson.PSObject.Properties.Name -contains "note_for_researcher") {
+              $state.overlay_director_note = [string]$overlayDirectorJson.note_for_researcher
+            }
+            # Direction override
+            if ($overlayCanOverride -and $overlayDirectorJson.PSObject.Properties.Name -contains "researcher_direction") {
+              $dirOverride = [string]$overlayDirectorJson.researcher_direction
+              if (-not [string]::IsNullOrWhiteSpace($dirOverride)) {
+                Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_overlay" -Status "direction_override" -Iteration $i -Message ("Director overriding direction: {0}" -f $dirOverride)
+                $state.next_direction = $dirOverride
+              }
+            }
+            # Approved final
+            if ($overlayCanApprove -and $overlayDirectorJson.PSObject.Properties.Name -contains "approved_final") {
+              $state.overlay_director_approved_final = [bool]$overlayDirectorJson.approved_final
+              $directorApprovedFinal = [bool]$overlayDirectorJson.approved_final
+            }
+            # Force stop
+            if ($overlayCanForceStop -and $overlayDirectorJson.PSObject.Properties.Name -contains "force_stop" -and [bool]$overlayDirectorJson.force_stop) {
+              $forceStopReason = if ($overlayDirectorJson.PSObject.Properties.Name -contains "force_stop_reason") { [string]$overlayDirectorJson.force_stop_reason } else { "Researcher_Director forced stop." }
+              $state.status = "paused_director_force_stop"
+              Save-Json -Obj $state -Path $stateFile
+              Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_overlay" -Status "force_stop" -Iteration $i -Message ("Researcher_Director forced stop: {0}" -f $forceStopReason)
+              Write-Host ("[LOOP] RESEARCHER_DIRECTOR FORCE STOP: {0}" -f $forceStopReason)
+              $blocked = $true
+              $blockedReason = "Researcher_Director forced stop: $forceStopReason"
+              break
+            }
+          }
+
+          # Update overlay tracking state
+          $state.overlay_last_director_iteration = $i
+          $state.overlay_director_invocation_count = [int]$state.overlay_director_invocation_count + 1
+
+          # Update history entry with director info
+          if ($state.history.Count -gt 0) {
+            $state.history[-1].director_file = $overlayDirectorFile
+            $state.history[-1].director_approved_final = $directorApprovedFinal
+          }
+
+          Save-Json -Obj $state -Path $stateFile
+          Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_overlay" -Status "completed" -Iteration $i -Message ("invocation_count={0}; approved_final={1}" -f $state.overlay_director_invocation_count, $directorApprovedFinal)
+        }
+      }
+      # ========== END RESEARCHER_DIRECTOR MODE ==========
+
       if ($noProgressIteration) {
         Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "researcher_only_no_progress" -Iteration $i -Message ("policy={0}; reasons={1}" -f $effectiveNoProgressPolicy, ($noProgressReasons -join "; "))
         if ($effectiveNoProgressPolicy -eq "stop") {
@@ -1936,6 +2343,34 @@ $limitationsLines
         }
       } else {
         Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "researcher_only_progress" -Iteration $i -Message ("evidence_delta_count={0}" -f $evidenceDeltaPaths.Count)
+      }
+
+      # --- Researcher_Director approval gate ---
+      if ($effectiveOverlayEnabled -and $state.overlay_director_approved_final) {
+        $overlayGatePass = ($state.overlay_director_approved_final -and $qualityScore -ge $qualityFinalGate)
+        if ($overlayGatePass) {
+          $approvalStreak += 1
+        } else {
+          $approvalStreak = 0
+        }
+        $stopGateMet = ($overlayGatePass -and $i -ge $minIterationsBeforeApprovalStop -and $approvalStreak -ge $approvalStreakRequired)
+        $state.approval_streak = $approvalStreak
+        $state.process_approval_satisfied = $stopGateMet
+        Save-Json -Obj $state -Path $stateFile
+
+        if ($stopGateMet) {
+          $processApprovalSatisfied = $true
+          if ($effectiveContinueAfterApproval) {
+            $state.status = "approved_continuing"
+            Save-Json -Obj $state -Path $stateFile
+            Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "overlay_approval_reached_continue_mode" -Iteration $i -Message ("Overlay gate satisfied (q>={0}, streak>={1}, min_iter>={2}); continuing." -f $qualityFinalGate, $approvalStreakRequired, $minIterationsBeforeApprovalStop)
+          } else {
+            $state.status = "approved"
+            Save-Json -Obj $state -Path $stateFile
+            Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "overlay_early_stop_approved" -Iteration $i -Message ("Overlay gate satisfied (q>={0}, streak>={1}, min_iter>={2})." -f $qualityFinalGate, $approvalStreakRequired, $minIterationsBeforeApprovalStop)
+            break
+          }
+        }
       }
 
       $i++
@@ -2384,7 +2819,13 @@ $(($snapshotObj.open_questions | ForEach-Object { "- $_" }) -join [Environment]:
   } else {
     "PARTIAL"
   }
-  $executionModeSummary = if ($effectiveRoleMode -eq "researcher_only") { "Researcher-only" } else { "Director + Researcher + Evaluator" }
+  $executionModeSummary = if ($effectiveRoleMode -eq "researcher_only" -and $effectiveOverlayEnabled) {
+    "Researcher_Director"
+  } elseif ($effectiveRoleMode -eq "researcher_only") {
+    "Researcher-only"
+  } else {
+    "Director + Researcher + Evaluator"
+  }
   $iterationFlowCoverage = if ($effectiveRoleMode -eq "researcher_only") {
     "bootstrap merge, per-iteration memory/context recovery, previous-iteration review handoff, researcher execution, researcher-only progress/no-progress decisions, per-iteration JSON artifacts, and per-iteration researcher markdown summaries."
   } else {
@@ -2410,6 +2851,19 @@ $(($snapshotObj.open_questions | ForEach-Object { "- $_" }) -join [Environment]:
 - approval_streak: $approvalStreak / required $approvalStreakRequired
 - min_iterations_before_approval_stop: $minIterationsBeforeApprovalStop
 - no_progress_count: $($state.no_progress_count)
+- doc_only_streak_final: $($state.doc_only_streak)
+- direction_hash_streak_final: $($state.direction_hash_streak)
+- iteration_monotonic_counter: $($state.iteration_monotonic_counter)
+
+## Loop Health Dashboard
+- Total iterations: $($state.current_iteration)
+- Productive iterations: $($state.total_productive_iterations) ($(if ($state.current_iteration -gt 0) { [math]::Round(100 * [int]$state.total_productive_iterations / [int]$state.current_iteration) } else { 0 })%)
+- Doc-only iterations: $($state.total_doc_only_iterations) ($(if ($state.current_iteration -gt 0) { [math]::Round(100 * [int]$state.total_doc_only_iterations / [int]$state.current_iteration) } else { 0 })%)
+- Evidence deltas produced: $($state.total_evidence_deltas)
+- Max doc-only streak reached: $($state.doc_only_streak)
+- Max identical-direction streak reached: $($state.direction_hash_streak)
+$(if ([int]$state.total_doc_only_iterations -gt ([int]$state.total_productive_iterations * 2)) { "- WARNING: Doc-only iterations exceed 2x productive iterations. Consider tighter evidence-delta enforcement." } else { "- Loop health: acceptable ratio of productive to doc-only iterations." })
+$(if ($effectiveOverlayEnabled) { "- Researcher_Director invocations: $($state.overlay_director_invocation_count)`n- Researcher_Director last at iteration: $($state.overlay_last_director_iteration)`n- Director approved final: $($state.overlay_director_approved_final)" } else { "" })
 
 ## Executive Summary
 $summaryForUser
