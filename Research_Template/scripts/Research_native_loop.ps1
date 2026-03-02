@@ -1818,6 +1818,9 @@ Required JSON:
       if ($docOnly) {
         $state.doc_only_streak = [int]$state.doc_only_streak + 1
         Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "iteration" -Status "doc_only_progress" -Iteration $i -Message ("streak={0}; changed_paths={1}" -f $state.doc_only_streak, (($changedPaths -join ", ")))
+        if ($templateMaxDocOnlyStreakBeforeForceAction -gt 0 -and [int]$state.doc_only_streak -ge $templateMaxDocOnlyStreakBeforeForceAction) {
+          $state.next_direction = "Forced pivot: stop doc-only continuity checkpoints and execute a concrete evidence-producing step (prefer Kaggle for experiments) that creates non-doc deltas under results/report or code/config enabling the next run."
+        }
       } else {
         $state.doc_only_streak = 0
       }
