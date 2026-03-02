@@ -54,6 +54,19 @@
     "heartbeat_interval_sec": 15,
     "live_output_poll_ms": 800,
     "console_status_interval_sec": 8,
+    "director": {
+      "cadence": "on_triggers",
+      "override_policy": "on_triggers",
+      "doc_only_streak_trigger": 2,
+      "triggers": {
+        "stall": true,
+        "risk_spike": true,
+        "doc_only_streak": true,
+        "final_candidate": true,
+        "milestones": false,
+        "quality_0_90": false
+      }
+    },
     "role_mode_default": "researcher_only",
     "continue_after_approval": false,
     "min_iterations_before_approval_stop": 3,
@@ -135,7 +148,7 @@
       "Run bootstrap merge analysis before first research iteration.",
       "Reuse completed prior work only after confidence-based verification.",
       "Director preflight sets first research direction when role_mode=full.",
-      "Each iteration runs Researcher then Evaluator then Director post-note when role_mode=full.",
+      "In role_mode=full, each iteration runs Researcher then Evaluator. Director post-note runs based on runtime_safety.director cadence/triggers (and always runs for final-candidate signoff).",
       "In researcher_only mode, skip Director and Evaluator and run only Researcher each iteration.",
       "In researcher_only mode, iteration 1 recovers memory then executes the next concrete step; iteration 2+ reviews previous iteration output then executes the next concrete step.",
       "In researcher_only mode, encourage Kaggle-first execution for experiments when feasible (free, fast, reproducible), with explicit rationale when local-only execution is chosen.",

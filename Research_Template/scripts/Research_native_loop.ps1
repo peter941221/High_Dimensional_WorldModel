@@ -1066,6 +1066,19 @@ $compressionForcedRefresh = if ($null -ne $compressionCfg -and $compressionCfg.P
 $sourcePolicy = if ($template.inputs.PSObject.Properties.Name -contains "source_policy") { [string]$template.inputs.source_policy } else { "Primary-source-first, flexible for high-signal secondary sources." }
 $templateRoleModeDefault = if ($template.runtime_safety.PSObject.Properties.Name -contains "role_mode_default") { [string]$template.runtime_safety.role_mode_default } else { "researcher_only" }
 $researcherOnlyCfg = if ($template.runtime_safety.PSObject.Properties.Name -contains "researcher_only") { $template.runtime_safety.researcher_only } else { $null }
+$directorCfg = if ($template.runtime_safety.PSObject.Properties.Name -contains "director") { $template.runtime_safety.director } else { $null }
+$directorCadence = if ($null -ne $directorCfg -and $directorCfg.PSObject.Properties.Name -contains "cadence") { [string]$directorCfg.cadence } else { "every_iteration" }
+$directorOverridePolicy = if ($null -ne $directorCfg -and $directorCfg.PSObject.Properties.Name -contains "override_policy") { [string]$directorCfg.override_policy } else { "evaluator_tie_break" }
+$directorDocOnlyStreakTrigger = if ($null -ne $directorCfg -and $directorCfg.PSObject.Properties.Name -contains "doc_only_streak_trigger") { [int]$directorCfg.doc_only_streak_trigger } else { 2 }
+$directorTriggersCfg = if ($null -ne $directorCfg -and $directorCfg.PSObject.Properties.Name -contains "triggers") { $directorCfg.triggers } else { $null }
+$directorTriggerStall = if ($null -ne $directorTriggersCfg -and $directorTriggersCfg.PSObject.Properties.Name -contains "stall") { [bool]$directorTriggersCfg.stall } else { $true }
+$directorTriggerRiskSpike = if ($null -ne $directorTriggersCfg -and $directorTriggersCfg.PSObject.Properties.Name -contains "risk_spike") { [bool]$directorTriggersCfg.risk_spike } else { $true }
+$directorTriggerDocOnly = if ($null -ne $directorTriggersCfg -and $directorTriggersCfg.PSObject.Properties.Name -contains "doc_only_streak") { [bool]$directorTriggersCfg.doc_only_streak } else { $false }
+$directorTriggerFinalCandidate = if ($null -ne $directorTriggersCfg -and $directorTriggersCfg.PSObject.Properties.Name -contains "final_candidate") { [bool]$directorTriggersCfg.final_candidate } else { $true }
+$directorTriggerMilestones = if ($null -ne $directorTriggersCfg -and $directorTriggersCfg.PSObject.Properties.Name -contains "milestones") { [bool]$directorTriggersCfg.milestones } else { $true }
+$directorTriggerQuality090 = if ($null -ne $directorTriggersCfg -and $directorTriggersCfg.PSObject.Properties.Name -contains "quality_0_90") { [bool]$directorTriggersCfg.quality_0_90 } else { $true }
+$directorCadence = $directorCadence.ToLowerInvariant()
+$directorOverridePolicy = $directorOverridePolicy.ToLowerInvariant()
 $templateNoProgressPolicy = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "no_progress_policy") { [string]$researcherOnlyCfg.no_progress_policy } else { "mark_continue" }
 $templateRequireEvidenceDelta = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "require_evidence_delta") { [bool]$researcherOnlyCfg.require_evidence_delta } else { $true }
 $templateWriteResearcherIterationMd = if ($null -ne $researcherOnlyCfg -and $researcherOnlyCfg.PSObject.Properties.Name -contains "write_researcher_iteration_md") { [bool]$researcherOnlyCfg.write_researcher_iteration_md } else { $true }
@@ -1400,7 +1413,7 @@ Return strict JSON only:
     Save-Json -Obj $state -Path $stateFile
     $previousDirection = [string]$state.next_direction
     $gitStatusBeforeIteration = @{}
-    if ($effectiveAutoCommitEnabled) {
+    if ($effectiveAutoCommitEnabled -or ($effectiveRoleMode -eq "full" -and $directorCadence -eq "on_triggers" -and $directorTriggerDocOnly)) {
       $gitStatusBeforeIteration = Get-GitStatusMap -RepoRoot $resolvedRepoRoot
     }
     $repoHeadBeforeIteration = Get-GitHead -RepoRoot $resolvedRepoRoot
@@ -2167,70 +2180,133 @@ $(($snapshotObj.open_questions | ForEach-Object { "- $_" }) -join [Environment]:
       $burstRemaining = $burstIterations
       Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_burst" -Status "start" -Iteration $i -Message "Adaptive burst started due to risk spike."
     }
-    $directorMode = if (($milestonesCrossedNow.Count -gt 0) -or $quality090Triggered -or $stallTriggered -or ($burstRemaining -gt 0)) { "full" } else { "light" }
-
-    $directorPrompt = @"
-You are DIRECTOR in a research CLI loop.
-Mode: $directorMode
-Ultimate goals: $effectiveTask
-Done criteria: $effectiveDoneCriteria
-Iteration: $iterationLabel
-Quality score: $qualityScore
-Progress pct: $progressPct
-Evaluator risk level: $riskLevel
-Evaluator summary: $summaryForUser
-Evaluator direction: $evaluatorDirection
-Residual risk: $residualRisk
-Rolling context packet (JSON):
-$rollingContextJson
-Context pressure:
-- estimated_chars: $rollingContextSizeEstimate
-- context_risk_score: $contextRiskScore
-- compression_enabled: $contextCompressionEnabled
-- compression_decision_this_iteration: $enforceCompression
-- compression_reason: $compressionReasonText
-Goals doc: $PrdPath
-Plan doc: $DevDocPath
-Findings doc: $FindingsPath
-
-Post-iteration note only. Keep compact and actionable.
-Return strict JSON only:
-{
-  "mode": "light|full",
-  "note_for_researcher": "...",
-  "researcher_direction": "...",
-  "approved_final": true|false,
-  "plan_change_summary": "..."
-}
-"@
-    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "dispatch" -Iteration $i -Message ("Dispatching director post note mode={0}" -f $directorMode)
-    $directorRaw = Invoke-CodexExecWithSafety -Prompt $directorPrompt -StepName ("director_post_" + $directorMode) -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
-    $directorFile = Join-Path $runDir ("iter_{0}_director_{1}.txt" -f $i, $directorMode)
-    Set-Content -Path $directorFile -Value $directorRaw -Encoding UTF8
-    Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $directorFile)
-    $lastSuccessfulStep = "director_post_iter_$i"
-
+    # Director cadence control (in full mode): optionally skip Director unless triggers fire.
+    $directorApprovedFinal = $false
+    $directorFile = ""
     $directorDirection = ""
-    try {
-      $directorJson = Parse-FirstJsonObject -Text $directorRaw
-      if ($directorJson.PSObject.Properties.Name -contains "note_for_researcher") { $directorNote = [string]$directorJson.note_for_researcher }
-      if ($directorJson.PSObject.Properties.Name -contains "researcher_direction") { $directorDirection = [string]$directorJson.researcher_direction }
-      if ($directorJson.PSObject.Properties.Name -contains "approved_final") { $directorApprovedFinal = [bool]$directorJson.approved_final }
-    } catch {
-      $directorNote = "Director parse fallback: keep evaluator direction and close evidence gaps."
+    $directorMode = "light"
+
+    # Update doc-only streak (optional trigger input).
+    if ($directorCadence -eq "on_triggers" -and $directorTriggerDocOnly) {
+      $afterMapForDocOnly = Get-GitStatusMap -RepoRoot $resolvedRepoRoot
+      $changedPaths = Get-GitDeltaPaths -Before $gitStatusBeforeIteration -After $afterMapForDocOnly
+      $docPaths = @()
+      $docPaths += (Resolve-CommitCandidatePaths -RepoRoot $resolvedRepoRoot -CandidatePaths @($PrdPath))
+      $docPaths += (Resolve-CommitCandidatePaths -RepoRoot $resolvedRepoRoot -CandidatePaths @($DevDocPath))
+      $docPaths += (Resolve-CommitCandidatePaths -RepoRoot $resolvedRepoRoot -CandidatePaths @($FindingsPath))
+      $docPaths += (Resolve-CommitCandidatePaths -RepoRoot $resolvedRepoRoot -CandidatePaths @($resolvedMemoryPath))
+      $docPaths = @($docPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { ([string]$_ -replace '\\','/').TrimStart('/') } | Sort-Object -Unique)
+      $docOnly = Test-DocOnlyIteration -ChangedPaths $changedPaths -DocPaths $docPaths -ExcludePrefixes $templateAutoCommitExcludePaths
+      if ($docOnly) {
+        $state.doc_only_streak = [int]$state.doc_only_streak + 1
+      } else {
+        $state.doc_only_streak = 0
+      }
+      Save-Json -Obj $state -Path $stateFile
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($evaluatorDirection)) {
-      if (-not [string]::IsNullOrWhiteSpace($directorDirection) -and $directorDirection -ne $evaluatorDirection) {
-        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "direction_resolution" -Status "evaluator_tie_break" -Iteration $i -Message "Evaluator direction selected over director direction."
+    $finalCandidateTriggered = ($approved -and $qualityScore -ge $qualityFinalGate)
+    $milestoneTriggered = ($milestonesCrossedNow.Count -gt 0)
+    $docOnlyTriggered = ($directorTriggerDocOnly -and [int]$state.doc_only_streak -ge $directorDocOnlyStreakTrigger)
+
+    $triggerReasons = New-Object System.Collections.ArrayList
+    if ($directorTriggerStall -and $stallTriggered) { [void]$triggerReasons.Add("stall") }
+    if ($directorTriggerRiskSpike -and $spikeTriggered) { [void]$triggerReasons.Add("risk_spike") }
+    if ($directorTriggerDocOnly -and $docOnlyTriggered) { [void]$triggerReasons.Add("doc_only") }
+    if ($directorTriggerFinalCandidate -and $finalCandidateTriggered) { [void]$triggerReasons.Add("final_candidate") }
+    if ($directorTriggerMilestones -and $milestoneTriggered) { [void]$triggerReasons.Add("milestone") }
+    if ($directorTriggerQuality090 -and $quality090Triggered) { [void]$triggerReasons.Add("quality_0_90") }
+
+    $directorTriggerFired = ($triggerReasons.Count -gt 0)
+    $shouldRunDirector = $true
+    if ($directorCadence -eq "on_triggers") {
+      $shouldRunDirector = ($directorTriggerFired -or ($burstRemaining -gt 0))
+    }
+
+    if ($shouldRunDirector) {
+      $directorMode = if ($directorCadence -eq "on_triggers") {
+        "full"
+      } else {
+        if (($milestonesCrossedNow.Count -gt 0) -or $quality090Triggered -or $stallTriggered -or ($burstRemaining -gt 0)) { "full" } else { "light" }
       }
+      $reasonText = if ($triggerReasons.Count -gt 0) { ($triggerReasons -join ",") } else { "burst" }
+
+      $directorPrompt = @"
+ You are DIRECTOR in a research CLI loop.
+ Mode: $directorMode
+ Trigger reasons: $reasonText
+ Ultimate goals: $effectiveTask
+ Done criteria: $effectiveDoneCriteria
+ Iteration: $iterationLabel
+ Quality score: $qualityScore
+ Progress pct: $progressPct
+ Evaluator risk level: $riskLevel
+ Evaluator summary: $summaryForUser
+ Evaluator direction: $evaluatorDirection
+ Residual risk: $residualRisk
+ Rolling context packet (JSON):
+ $rollingContextJson
+ Context pressure:
+ - estimated_chars: $rollingContextSizeEstimate
+ - context_risk_score: $contextRiskScore
+ - compression_enabled: $contextCompressionEnabled
+ - compression_decision_this_iteration: $enforceCompression
+ - compression_reason: $compressionReasonText
+ Goals doc: $PrdPath
+ Plan doc: $DevDocPath
+ Findings doc: $FindingsPath
+ 
+ Post-iteration note only. Keep compact and actionable.
+ Return strict JSON only:
+ {
+   "mode": "light|full",
+   "note_for_researcher": "...",
+   "researcher_direction": "...",
+   "approved_final": true|false,
+   "plan_change_summary": "..."
+ }
+"@
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "dispatch" -Iteration $i -Message ("cadence={0}; mode={1}; reasons={2}" -f $directorCadence, $directorMode, $reasonText)
+      $directorRaw = Invoke-CodexExecWithSafety -Prompt $directorPrompt -StepName ("director_post_" + $directorMode) -Iteration $i -Template $template -CodexLaunchSpec $codexLaunchSpec -ExtraExecArgs $nestedExecArgs -HeartbeatFile $heartbeatFile -TraceFile $traceFile -RunId $runId -ShowLiveOutput:$effectiveLiveOutput -StepArtifactsDir $runDir -DryRun:$DryRun
+      $directorFile = Join-Path $runDir ("iter_{0}_director_{1}.txt" -f $i, $directorMode)
+      Set-Content -Path $directorFile -Value $directorRaw -Encoding UTF8
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "artifact_written" -Iteration $i -Message ("Saved output to {0}" -f $directorFile)
+      $lastSuccessfulStep = "director_post_iter_$i"
+
+      try {
+        $directorJson = Parse-FirstJsonObject -Text $directorRaw
+        if ($directorJson.PSObject.Properties.Name -contains "note_for_researcher") { $directorNote = [string]$directorJson.note_for_researcher }
+        if ($directorJson.PSObject.Properties.Name -contains "researcher_direction") { $directorDirection = [string]$directorJson.researcher_direction }
+        if ($directorJson.PSObject.Properties.Name -contains "approved_final") { $directorApprovedFinal = [bool]$directorJson.approved_final }
+      } catch {
+        $directorNote = "Director parse fallback: keep evaluator direction and close evidence gaps."
+      }
+
+      if (($directorMode -eq "full") -and $burstRemaining -gt 0) {
+        $burstRemaining -= 1
+      }
+    } else {
+      Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "director_post" -Status "skipped" -Iteration $i -Message ("cadence={0}; reasons=none" -f $directorCadence)
+      $directorNote = "Director skipped (no triggers)."
+    }
+
+    # Direction resolution:
+    # Default: evaluator direction (when present). Director may override only per policy.
+    if (-not [string]::IsNullOrWhiteSpace($evaluatorDirection)) {
       $state.next_direction = $evaluatorDirection
     } elseif (-not [string]::IsNullOrWhiteSpace($directorDirection)) {
       $state.next_direction = $directorDirection
     }
 
-    if (($directorMode -eq "full") -and $burstRemaining -gt 0) {
-      $burstRemaining -= 1
+    $allowDirectorOverride = $false
+    if ($directorOverridePolicy -eq "always") { $allowDirectorOverride = $true }
+    if ($directorOverridePolicy -eq "on_triggers" -and $directorTriggerFired) { $allowDirectorOverride = $true }
+
+    if ($allowDirectorOverride -and -not [string]::IsNullOrWhiteSpace($directorDirection)) {
+      if (-not [string]::IsNullOrWhiteSpace($state.next_direction) -and $state.next_direction -ne $directorDirection) {
+        Write-TraceEvent -TraceFile $traceFile -RunId $runId -Step "direction_resolution" -Status "director_override" -Iteration $i -Message ("policy={0}; from={1}; to={2}" -f $directorOverridePolicy, $state.next_direction, $directorDirection)
+      }
+      $state.next_direction = $directorDirection
     }
 
     $state.history += [ordered]@{
