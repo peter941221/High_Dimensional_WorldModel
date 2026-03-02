@@ -1337,3 +1337,23 @@ Last Compressed: 2026-03-01
   - Equivalence claims are margin-dependent; if stakeholders require tighter margins (notably for `transfer_gain_mean`), additional paired seeds are required to shrink uncertainty.
 - Next-direction lock (precise):
   - Decide whether these episode-based margins are accepted as the equivalence protocol. If stricter margins are required, dispatch additional paired seeds (Kaggle-first) and rerun equivalence reports.
+
+## Recent Work (2026-03-02, Researcher Loop Iteration 53 / 5-Iteration Cycle 5/5)
+- Concrete next-best step executed (analysis-only; no training):
+  - Strict-margin sensitivity check for the matched guidance OFF vs ON equivalence protocol:
+    - KPI: `transfer_gain_mean`
+    - Strict margin tested: `m=1/(40*6)=0.0041666667`
+  - Generated strict-margin equivalence artifact (meta-strict; allow diff `training_guidance`):
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00041667.json` (+ `.md`)
+- Key result (paired n=9; `ci_level=0.90`):
+  - Strict-margin equivalence fails CI-within-margin (`equivalent_ci_within_margin=false`) for `transfer_gain_mean`.
+  - CI-implied `required_margin_abs=0.0064814815` exceeds the strict margin `0.0041666667`.
+- Validation:
+  - `pytest -q` (53 passed, 1 warning).
+- Why no Kaggle execution this step:
+  - This is analysis-only; Kaggle is only needed if we decide to shrink the CI by adding paired seeds.
+- Residual risk:
+  - If stakeholders require the strict transfer-gain margin, the current paired n=9 sample is not sufficient to claim equivalence at that bound.
+- Next-direction lock (precise):
+  - Stakeholder decision: accept `m=0.0083333333` for `transfer_gain_mean` as the equivalence protocol, or require `m=0.0041666667`.
+  - If strict margin is required: dispatch additional paired seeds (Kaggle-first), rebuild paired summaries, and rerun equivalence reports until the strict bound holds.

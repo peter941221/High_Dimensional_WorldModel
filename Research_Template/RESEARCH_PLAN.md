@@ -63,6 +63,11 @@
     - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_success_m00041667.json`
     - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00083333.json`
     - `report/guidance_train_matched_off_vs_on_9seed_equiv_robust_m00083333.json`
+- Strict-margin sensitivity check (2026-03-02, 5-iteration cycle 5/5):
+  - Transfer gain strict margin (`m=0.0041666667`):
+    - `python experiments/equivalence_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00041667 --out-dir report --kpi-keys transfer_gain_mean --margin-abs 0.004166666666666667 --meta-check --meta-allow-diff training_guidance --meta-strict`
+  - Evidence:
+    - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00041667.json`
 
 ## Risks and Mitigations
 - Risk: guidance training-time causality remains inconclusive.

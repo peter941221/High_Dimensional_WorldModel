@@ -179,3 +179,13 @@
 - Equivalence-within-margin holds under the selected margins (see `report/*equiv_*.json` artifacts).
 - Next direction:
   - Decide whether these episode-based margins are the accepted equivalence protocol; if stricter margins are required (especially on `transfer_gain_mean`), add paired seeds (Kaggle-first) to shrink the CI and rerun equivalence.
+
+## Iteration Status (2026-03-02, Iteration 53 / 5-Iteration Cycle 5/5)
+- Research goals remain unchanged.
+- Strict-margin sensitivity check executed (analysis-only; no training) for matched guidance OFF vs ON (paired `n=9`, `ci_level=0.90`):
+  - Transfer-gain strict margin: `m=0.0041666667` (≈ 1/(40*6) episode) for `transfer_gain_mean`.
+- Result:
+  - The strict-margin transfer-gain equivalence check fails CI-within-margin (`equivalent_ci_within_margin=false`) under the current paired `n=9` uncertainty.
+- Next direction:
+  - Stakeholder decision: accept `m=0.0083333333` for `transfer_gain_mean` as the equivalence protocol, or require `m=0.0041666667`.
+  - If strict margin is required: dispatch additional paired seeds (Kaggle-first) to shrink the CI, rebuild summaries, and rerun equivalence reports until the strict bound holds.

@@ -97,6 +97,27 @@
 - Next direction (precise):
   - Decide whether the above episode-based margins are acceptable as the equivalence protocol for “training-time guidance OFF vs ON” (matched setting). If stricter margins are required for any KPI, schedule additional paired seeds (Kaggle-first) and rerun the equivalence reports.
 
+## Iteration Update (2026-03-02, Researcher Loop Iteration 53 / 5-Iteration Cycle 5/5: Strict-Margin Sensitivity Check for Transfer Gain)
+- Mode: analysis-only (no training; director-approved closure unchanged).
+- Risk Tier: M
+- Sensitivity question:
+  - If stakeholders require a stricter, episode-grounded equivalence margin for `transfer_gain_mean` of `m=1/(40*6)=0.0041666667` (instead of `m=2/(40*6)=0.0083333333`), does matched guidance OFF vs ON still pass CI-within-margin equivalence?
+- Evidence generated (strict margin; `ci_level=0.90`):
+  - `report/guidance_train_matched_off_vs_on_9seed_equiv_transfer_gain_m00041667.json` (+ `.md`)
+- Result (paired `n=9`):
+  - `equivalent_ci_within_margin=false` for `transfer_gain_mean`.
+  - Observed delta CI (OFF -> ON): `ci_low=-0.0064814815`, `ci_high=0.0023148148`.
+  - CI-implied `required_margin_abs=0.0064814815` > strict margin `0.0041666667`.
+- Validation PASS:
+  - Report executed with `--meta-check --meta-allow-diff training_guidance --meta-strict` (`meta_check.passed=true`).
+  - Regression test: `pytest -q` (`53 passed, 1 warning`).
+- Interpretation:
+  - Under the stricter `transfer_gain_mean` margin, current uncertainty is too large to assert within-margin equivalence at `ci_level=0.90`.
+  - This does not imply a meaningful difference; it means equivalence is margin-dependent and currently unproven at the stricter bound.
+- Next direction (precise):
+  - Stakeholder decision: accept `m=0.0083333333` for `transfer_gain_mean` as the equivalence protocol, or require `m=0.0041666667`.
+  - If strict margin is required: dispatch additional paired seeds (Kaggle-first), rebuild the paired summaries, and rerun the equivalence reports until the `transfer_gain_mean` CI falls within `±0.0041666667` (keeping meta-guards strict).
+
 ## Iteration Update (2026-03-01 Iteration 1/3 Optional Path A Preflight)
 - Mode: preflight-only (no training executed; canonical closure unchanged).
 - Risk Tier: L
