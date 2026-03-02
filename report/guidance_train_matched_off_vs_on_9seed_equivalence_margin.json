@@ -1,0 +1,212 @@
+{
+  "report_name": "guidance_train_matched_off_vs_on_9seed_equivalence_margin",
+  "a_prefix": "p_guidance_matched_off_9seed",
+  "b_prefix": "p_guidance_matched_on_9seed",
+  "a_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\p_guidance_matched_off_9seed\\p0_summary.json",
+  "b_path": "C:\\AI Projects\\Fun Stuff\\High_Dimensional_WorldModel\\results\\p0_freeze\\p_guidance_matched_on_9seed\\p0_summary.json",
+  "seeds": [
+    11,
+    22,
+    33,
+    44,
+    55,
+    66,
+    77,
+    88,
+    99
+  ],
+  "method": "paired_bootstrap_mean_ci",
+  "ci_level": 0.9,
+  "bootstrap_samples": 10000,
+  "bootstrap_seed": 12345,
+  "margin_abs": null,
+  "rows": [
+    {
+      "kpi": "baseline_success_dim3",
+      "n": 9,
+      "a_mean": 0.008333333333333335,
+      "b_mean": 0.002777777777777778,
+      "delta_mean": -0.005555555555555556,
+      "delta_std": 0.01666666666666667,
+      "cohens_dz": -0.33333333333333326,
+      "ci_level": 0.9,
+      "ci_low": -0.013888888888888888,
+      "ci_high": 0.002777777777777778,
+      "required_margin_abs": 0.013888888888888888,
+      "per_seed_deltas": [
+        0.0,
+        -0.025,
+        0.0,
+        0.0,
+        -0.025,
+        0.025,
+        -0.025,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "kpi": "baseline_success_dim4",
+      "n": 9,
+      "a_mean": 0.0,
+      "b_mean": 0.0,
+      "delta_mean": 0.0,
+      "delta_std": 0.0,
+      "cohens_dz": 0.0,
+      "ci_level": 0.9,
+      "ci_low": 0.0,
+      "ci_high": 0.0,
+      "required_margin_abs": 0.0,
+      "per_seed_deltas": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "kpi": "transfer_success_mean",
+      "n": 9,
+      "a_mean": 0.001851851851851852,
+      "b_mean": 0.002777777777777778,
+      "delta_mean": 0.0009259259259259265,
+      "delta_std": 0.005007710104811096,
+      "cohens_dz": 0.18490006540840984,
+      "ci_level": 0.9,
+      "ci_low": -0.001388888888888889,
+      "ci_high": 0.003703703703703704,
+      "required_margin_abs": 0.003703703703703704,
+      "per_seed_deltas": [
+        0.0,
+        0.008333333333333333,
+        0.004166666666666667,
+        0.008333333333333333,
+        -0.004166666666666667,
+        0.0,
+        0.0,
+        -0.004166666666666667,
+        -0.004166666666666667
+      ]
+    },
+    {
+      "kpi": "transfer_gain_mean",
+      "n": 9,
+      "a_mean": -0.0037037037037037043,
+      "b_mean": -0.005555555555555557,
+      "delta_mean": -0.001851851851851852,
+      "delta_std": 0.008617828920826987,
+      "cohens_dz": -0.21488612374010135,
+      "ci_level": 0.9,
+      "ci_low": -0.006481481481481482,
+      "ci_high": 0.002314814814814815,
+      "required_margin_abs": 0.006481481481481482,
+      "per_seed_deltas": [
+        0.0,
+        0.008333333333333333,
+        -0.020833333333333336,
+        0.008333333333333333,
+        -0.004166666666666667,
+        0.0,
+        0.0,
+        -0.004166666666666667,
+        -0.004166666666666667
+      ]
+    },
+    {
+      "kpi": "robust_easy",
+      "n": 9,
+      "a_mean": 0.7333333333333333,
+      "b_mean": 0.7333333333333333,
+      "delta_mean": 0.0,
+      "delta_std": 0.0,
+      "cohens_dz": 0.0,
+      "ci_level": 0.9,
+      "ci_low": 0.0,
+      "ci_high": 0.0,
+      "required_margin_abs": 0.0,
+      "per_seed_deltas": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "kpi": "robust_medium",
+      "n": 9,
+      "a_mean": 0.24166666666666664,
+      "b_mean": 0.24166666666666664,
+      "delta_mean": 0.0,
+      "delta_std": 0.0,
+      "cohens_dz": 0.0,
+      "ci_level": 0.9,
+      "ci_low": 0.0,
+      "ci_high": 0.0,
+      "required_margin_abs": 0.0,
+      "per_seed_deltas": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "kpi": "robust_hard",
+      "n": 9,
+      "a_mean": 0.16666666666666666,
+      "b_mean": 0.16666666666666666,
+      "delta_mean": 0.0,
+      "delta_std": 0.0,
+      "cohens_dz": 0.0,
+      "ci_level": 0.9,
+      "ci_low": 0.0,
+      "ci_high": 0.0,
+      "required_margin_abs": 0.0,
+      "per_seed_deltas": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "notes": [
+    "This report does not claim equivalence unless a domain-meaningful margin is defined and CI falls within it.",
+    "CI is estimated via bootstrap of the paired per-seed deltas (deterministic seed)."
+  ],
+  "meta_check": {
+    "enabled": true,
+    "allowed_diff_keys": [
+      "training_guidance"
+    ],
+    "diffs": [
+      {
+        "key": "training_guidance",
+        "a": "model_only",
+        "b": "guided_blend"
+      }
+    ],
+    "unexpected_diff_keys": [],
+    "passed": true
+  }
+}

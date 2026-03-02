@@ -1299,3 +1299,20 @@ Last Compressed: 2026-03-01
   - Non-significance remains bounded-null evidence, not an equivalence proof.
 - Next-direction lock (precise):
   - Maintain the director-approved closure freeze. Only reopen evidence-generation if an explicit equivalence-focused protocol is requested (predefined equivalence margin + paired `n>=9` or higher), then run matched-setting training-time guidance OFF vs ON with meta-strict checks and perform formal equivalence analysis under the predefined margin.
+
+## Recent Work (2026-03-02, Researcher Loop Iteration 51 / 5-Iteration Cycle 3/5)
+- Concrete next-best step executed (analysis-only evidence delta; no training):
+  - Added equivalence-oriented reporting tool: `experiments/equivalence_report.py` (bootstrap CI over paired per-seed deltas + minimal required absolute margin for CI-based equivalence).
+  - Generated new paired OFF vs ON artifact (meta-strict; allow diff `training_guidance`):
+    - report/guidance_train_matched_off_vs_on_9seed_equivalence_margin.json
+    - report/guidance_train_matched_off_vs_on_9seed_equivalence_margin.md
+- Key numbers (ci_level=0.90; required_margin_abs):
+  - transfer_success_mean: 0.0037037037
+  - transfer_gain_mean: 0.0064814815
+  - baseline_success_dim3: 0.0138888889
+- Validation:
+  - pytest -q (53 passed, 1 warning).
+- Why no Kaggle execution this step:
+  - This report is computed from existing paired summaries; Kaggle is only needed if we choose to shrink the CI via additional paired seeds.
+- Next-direction lock (precise):
+  - Define domain-meaningful equivalence margins per KPI and re-run with `--margin-abs`; if the chosen margin is tighter than `required_margin_abs`, dispatch additional paired seeds (Kaggle-first) to tighten uncertainty and re-run the report.

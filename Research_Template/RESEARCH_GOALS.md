@@ -159,3 +159,12 @@
   - Matched 9-seed ON summary meta unchanged (`training_guidance=guided_blend`, `eval_policy_mode=model_only`, `domain_rand=true`).
   - Matched OFF vs ON 9-seed significance remains meta-clean (`meta_check.passed=true`, `unexpected_diff_keys=[]`) with `0` significant KPIs at `alpha=0.05`.
 - Closure package remains frozen; only reopen evidence-generation if an explicit equivalence-focused protocol is requested (predefined equivalence margin + paired n>=9 or higher), then run matched ON/OFF and formal equivalence analysis.
+
+## Iteration Status (2026-03-02, Iteration 51 / 5-Iteration Cycle 3/5)
+- Research goals remain unchanged.
+- New evidence artifact generated (analysis-only; no training):
+  - `report/guidance_train_matched_off_vs_on_9seed_equivalence_margin.json`
+  - `report/guidance_train_matched_off_vs_on_9seed_equivalence_margin.md`
+- Closure package remains frozen (director-approved closure: progress_pct=100, quality_score=0.96).
+- Next direction:
+  - Define domain-meaningful equivalence margins per KPI and re-run the equivalence report with `--margin-abs`; if margin is tighter than the current CI implies, dispatch additional paired seeds (Kaggle-first) to shrink uncertainty.

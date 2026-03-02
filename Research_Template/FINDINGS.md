@@ -55,6 +55,27 @@
 - Next direction (precise):
   - Maintain the director-approved closure freeze (progress_pct=100, quality_score=0.96). Only reopen evidence-generation if an explicit equivalence-focused protocol is requested; then run matched-setting training-time guidance OFF vs ON with meta-strict checks and perform formal equivalence analysis under the predefined margin (paired `n>=9` or higher).
 
+## Iteration Update (2026-03-02, Researcher Loop Iteration 51 / 5-Iteration Cycle 3/5: Equivalence-Margin Report Generation)
+- Mode: analysis-only (no training; director-approved closure unchanged).
+- Risk Tier: M
+- Evidence generated (new, non-training):
+  - `report/guidance_train_matched_off_vs_on_9seed_equivalence_margin.json`
+  - `report/guidance_train_matched_off_vs_on_9seed_equivalence_margin.md`
+- Validation PASS:
+  - `python experiments/equivalence_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_equivalence_margin --out-dir report --meta-check --meta-allow-diff training_guidance --meta-strict`
+  - Regression test: `pytest -q` (`53 passed, 1 warning`).
+- Key output (CI-based required margins; `ci_level=0.90`):
+  - `transfer_success_mean`: `required_margin_abs=0.0037037037`
+  - `transfer_gain_mean`: `required_margin_abs=0.0064814815`
+  - `baseline_success_dim3`: `required_margin_abs=0.0138888889`
+  - Robustness KPIs: `required_margin_abs=0.0` (identical values in the paired summaries)
+- Interpretation:
+  - This does not assert equivalence; it quantifies the minimal absolute equivalence margin that would be required for CI-within-margin equivalence at this CI level.
+- Why no Kaggle execution:
+  - This step is purely report generation from existing paired 9-seed summaries; Kaggle is only needed if we choose to tighten the CI via additional paired seeds.
+- Next direction (precise):
+  - Define domain-meaningful equivalence margins per KPI (absolute scale), then re-run the report with `--margin-abs` for a concrete equivalence decision; if the chosen margin is tighter than `required_margin_abs`, dispatch additional paired seeds (Kaggle-first) to shrink the CI.
+
 ## Iteration Update (2026-03-01 Iteration 1/3 Optional Path A Preflight)
 - Mode: preflight-only (no training executed; canonical closure unchanged).
 - Risk Tier: L

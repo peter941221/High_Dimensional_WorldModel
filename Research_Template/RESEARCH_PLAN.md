@@ -46,6 +46,9 @@
   - Regression: `pytest -q` (`50 passed, 1 warning`)
 - Freeze continuity revalidation (2026-03-02, 5-iteration cycle 2/5):
   - Read-only invariant check across canonical closure artifacts (no report regeneration, no training)
+- Equivalence-margin report generation (2026-03-02, 5-iteration cycle 3/5):
+  - `python experiments/equivalence_report.py --a-prefix p_guidance_matched_off_9seed --b-prefix p_guidance_matched_on_9seed --report-name guidance_train_matched_off_vs_on_9seed_equivalence_margin --out-dir report --meta-check --meta-allow-diff training_guidance --meta-strict`
+  - Evidence: `report/guidance_train_matched_off_vs_on_9seed_equivalence_margin.json`
 
 ## Risks and Mitigations
 - Risk: guidance training-time causality remains inconclusive.
